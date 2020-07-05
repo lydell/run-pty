@@ -43,7 +43,7 @@ Separate the commands with a character of choice:
 Note: All arguments are strings and passed as-is – no shell script execution.
 `.trim();
 
-function drawDashboard(commands) {
+function drawDashboard(commands, width) {
   const lines = commands.map((command) => [
     colorette.bgWhite(
       colorette.black(colorette.bold(` ${command.label || " "} `))
@@ -59,10 +59,7 @@ function drawDashboard(commands) {
 
   const finalLines = lines
     .map(([label, status, name]) =>
-      truncate(
-        [label, padEnd(status, widestStatus), name].join("  "),
-        process.stdout.columns
-      )
+      truncate([label, padEnd(status, widestStatus), name].join("  "), width)
     )
     .join("\n");
 
@@ -106,10 +103,14 @@ function statusText(status) {
   }
 }
 
+function removeColor(string) {
+  // eslint-disable-next-line no-control-regex
+  return string.replace(/\x1b\[\d+m/g, "");
+}
+
 function truncate(string, maxLength) {
-  return string.length <= maxLength
-    ? string
-    : `${string.slice(0, maxLength - 1)}…`;
+  const diff = removeColor(string).length - maxLength;
+  return diff <= 0 ? string : `${string.slice(0, -(diff + 2))}…`;
 }
 
 function padEnd(string, maxLength) {
@@ -255,7 +256,7 @@ function runCommands(rawCommands) {
   const switchToDashboard = () => {
     current = { tag: "Dashboard" };
     console.clear();
-    console.log(drawDashboard(commands));
+    console.log(drawDashboard(commands, process.stdout.columns));
   };
 
   const switchToCommand = (index) => {
