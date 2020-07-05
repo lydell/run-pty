@@ -4,12 +4,34 @@ const colorette = require("colorette");
 const pty = require("node-pty");
 const readline = require("readline");
 
+const keys = {
+  kill: "ctrl+c",
+  restart: "return",
+  dashboard: "ctrl+z",
+};
+
 const labels = "123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function summarizeLabels(commands) {
+  return commands.length === 1
+    ? "1     "
+    : commands.length <= 9
+    ? `1-${commands.length}   `
+    : commands.length === 10
+    ? `1-9/a `
+    : `1-9/a-${commands[commands.length - 1].label}`;
+}
+
+const runningIndicator = "🟢";
+
+const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
+
+const shortcut = (s) => colorette.blue(colorette.bold(s));
 
 const help = `
 Run several commands concurrently.
-Show output for one command at a time – switch via ctrl+z.
-Kill all at once with ctrl+c.
+Show output for one command at a time – switch via ${shortcut(keys.dashboard)}.
+Kill all at once with ${shortcut(keys.kill)}.
 
 Examples:
 
@@ -19,39 +41,6 @@ run-pty @ ./compile.bash --root / @ ./report_progress.bash --unit % @ ping local
 
 Note: A command is a file followed by arguments – not shell script code.
 `.trim();
-
-const runningIndicator = "🟢";
-
-const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
-
-function firstHistoryLine(name) {
-  return `${runningIndicator} ${name}\n`;
-}
-
-// Newlines at start/end are wanted here.
-function exitText(commandName, exitCode) {
-  return `
-${exitIndicator(exitCode)} ${commandName}
-exit ${exitCode}
-
-Press Enter to restart.
-Press ctrl+z to go to the dashboard.
-Press ctrl+c to exit all.
-`;
-}
-
-function statusText(status) {
-  switch (status.tag) {
-    case "Running":
-      return `${runningIndicator} pid ${status.terminal.pid}`;
-
-    case "Exit":
-      return `${exitIndicator(status.exitCode)} exit ${status.exitCode}`;
-
-    default:
-      throw new Error("Unknown command status", status);
-  }
-}
 
 function drawDashboard(commands) {
   const lines = commands.map((command) => [
@@ -77,9 +66,39 @@ function drawDashboard(commands) {
   return `
 ${finalLines}
 
-Press the digit/letter of a command to switch to it.
-Press ctrl+c to exit all.
+${shortcut(summarizeLabels(commands))} switch command
+${shortcut(keys.kill)} exit current/all
+${shortcut(keys.dashboard)} this dashboard
 `.trim();
+}
+
+function firstHistoryLine(name) {
+  return `${runningIndicator} ${name}\n`;
+}
+
+// Newlines at start/end are wanted here.
+function exitText(commandName, exitCode) {
+  return `
+${exitIndicator(exitCode)} ${commandName}
+exit ${exitCode}
+
+${shortcut(keys.restart)} restart
+${shortcut(keys.kill)} exit all
+${shortcut(keys.dashboard)} dashboard
+`;
+}
+
+function statusText(status) {
+  switch (status.tag) {
+    case "Running":
+      return `${runningIndicator} pid ${status.terminal.pid}`;
+
+    case "Exit":
+      return `${exitIndicator(status.exitCode)} exit ${status.exitCode}`;
+
+    default:
+      throw new Error("Unknown command status", status);
+  }
 }
 
 function truncate(string, maxLength) {
@@ -316,11 +335,11 @@ function onKeypress(
       switch (command.status.tag) {
         case "Running":
           switch (keypressString) {
-            case "ctrl+c":
+            case keys.kill:
               command.status.terminal.kill();
               break;
 
-            case "ctrl+z":
+            case keys.dashboard:
               switchToDashboard();
               break;
           }
@@ -328,15 +347,15 @@ function onKeypress(
 
         case "Exit":
           switch (keypressString) {
-            case "ctrl+c":
+            case keys.kill:
               killAll();
               break;
 
-            case "ctrl+z":
+            case keys.dashboard:
               switchToDashboard();
               break;
 
-            case "return":
+            case keys.restart:
               command.start();
               command.history.unshift("\n");
               for (const data of command.history) {
@@ -354,7 +373,7 @@ function onKeypress(
 
     case "Dashboard":
       switch (keypressString) {
-        case "ctrl+c":
+        case keys.kill:
           killAll();
           break;
 
