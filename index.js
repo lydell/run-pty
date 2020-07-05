@@ -4,34 +4,26 @@ const colorette = require("colorette");
 const pty = require("node-pty");
 const readline = require("readline");
 
-const keys = {
+const KEYS = {
   kill: "ctrl+c",
   restart: "return",
   dashboard: "ctrl+z",
 };
 
-const labels = "123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-function summarizeLabels(commands) {
-  return commands.length === 1
-    ? "1     "
-    : commands.length <= 9
-    ? `1-${commands.length}   `
-    : commands.length === 10
-    ? `1-9/a `
-    : `1-9/a-${commands[commands.length - 1].label}`;
-}
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+const LABEL_GROUPS = ["123456789", ALPHABET, ALPHABET.toUpperCase()];
+const ALL_LABELS = LABEL_GROUPS.join("");
 
 const runningIndicator = "🟢";
 
 const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 
-const shortcut = (s) => colorette.blue(colorette.bold(s));
+const shortcut = (string) => colorette.blue(colorette.bold(string));
 
 const help = `
 Run several commands concurrently.
-Show output for one command at a time – switch via ${shortcut(keys.dashboard)}.
-Kill all at once with ${shortcut(keys.kill)}.
+Show output for one command at a time – switch via ${shortcut(KEYS.dashboard)}.
+Kill all at once with ${shortcut(KEYS.kill)}.
 
 Examples:
 
@@ -63,12 +55,14 @@ function drawDashboard(commands) {
     )
     .join("\n");
 
+  const label = summarizeLabels(commands.map((command) => command.label));
+
   return `
 ${finalLines}
 
-${shortcut(summarizeLabels(commands))} switch command
-${shortcut(keys.kill)} exit current/all
-${shortcut(keys.dashboard)} this dashboard
+${shortcut(padEnd(label, KEYS.kill.length))} switch command
+${shortcut(KEYS.kill)} exit current/all
+${shortcut(KEYS.dashboard)} this dashboard
 `.trim();
 }
 
@@ -82,9 +76,9 @@ function exitText(commandName, exitCode) {
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
-${shortcut(keys.restart)} restart
-${shortcut(keys.kill)} exit all
-${shortcut(keys.dashboard)} dashboard
+${shortcut(KEYS.restart)} restart
+${shortcut(KEYS.kill)} exit all
+${shortcut(KEYS.dashboard)} dashboard
 `;
 }
 
@@ -127,6 +121,27 @@ function commandToPresentationName(command) {
 function keypressToString(keypress) {
   const name = keypress.name || keypress.sequence || "unknown";
   return keypress.ctrl ? `ctrl+${name}` : name;
+}
+
+function summarizeLabels(labels) {
+  const numLabels = labels.length;
+  return LABEL_GROUPS.map((group, index) => {
+    const previousLength = LABEL_GROUPS.slice(0, index).reduce(
+      (sum, previousGroup) => sum + previousGroup.length,
+      0
+    );
+    const currentLength = previousLength + group.length;
+    return numLabels > previousLength
+      ? numLabels < currentLength
+        ? group.slice(0, numLabels - previousLength)
+        : group
+      : undefined;
+  })
+    .filter(Boolean)
+    .map((group) =>
+      group.length === 1 ? group[0] : `${group[0]}-${group[group.length - 1]}`
+    )
+    .join("/");
 }
 
 function parseArgs(args) {
@@ -253,7 +268,7 @@ function runCommands(rawCommands) {
   const commands = rawCommands.map(
     ([file, ...args], index) =>
       new Command({
-        label: labels[index] || "",
+        label: ALL_LABELS[index] || "",
         file,
         args,
         onData: (data) => {
@@ -335,11 +350,11 @@ function onKeypress(
       switch (command.status.tag) {
         case "Running":
           switch (keypressString) {
-            case keys.kill:
+            case KEYS.kill:
               command.status.terminal.kill();
               break;
 
-            case keys.dashboard:
+            case KEYS.dashboard:
               switchToDashboard();
               break;
           }
@@ -347,15 +362,15 @@ function onKeypress(
 
         case "Exit":
           switch (keypressString) {
-            case keys.kill:
+            case KEYS.kill:
               killAll();
               break;
 
-            case keys.dashboard:
+            case KEYS.dashboard:
               switchToDashboard();
               break;
 
-            case keys.restart:
+            case KEYS.restart:
               command.start();
               command.history.unshift("\n");
               for (const data of command.history) {
@@ -373,7 +388,7 @@ function onKeypress(
 
     case "Dashboard":
       switch (keypressString) {
-        case keys.kill:
+        case KEYS.kill:
           killAll();
           break;
 
