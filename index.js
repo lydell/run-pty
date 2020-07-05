@@ -166,8 +166,11 @@ function parseArgs(args) {
   if (/^[\w-]*$/.test(delimiter)) {
     return {
       tag: "Error",
-      message:
-        "The first argument is the delimiter to use between commands.\nIt must not be empty or a-z/0-9/underscores/dashes only.\nMaybe try % as delimiter?",
+      message: [
+        "The first argument is the delimiter to use between commands.",
+        "It must not be empty or a-z/0-9/underscores/dashes only.",
+        "Maybe try % as delimiter?",
+      ].join("\n"),
     };
   }
 
