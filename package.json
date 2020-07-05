@@ -1,5 +1,29 @@
 {
-  "private": true,
+  "name": "run-pty",
+  "version": "1.0.0",
+  "author": "Simon Lydell",
+  "license": "MIT",
+  "description": "Run several commands concurrently. Show output for one command at a time. Kill all at once.",
+  "repository": "lydell/run-pty",
+  "type": "commonjs",
+  "exports": {},
+  "bin": "./run-pty.js",
+  "files": [
+    "run-pty.js"
+  ],
+  "keywords": [
+    "cli",
+    "command line",
+    "concurrently",
+    "multiple",
+    "node-pty",
+    "pty",
+    "run",
+    "screen",
+    "terminal",
+    "tmux",
+    "xterm"
+  ],
   "dependencies": {
     "colorette": "^1.2.1",
     "node-pty": "^0.9.0"
