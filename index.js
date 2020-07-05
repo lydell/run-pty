@@ -3,35 +3,16 @@ const readline = require("readline");
 
 const help = `
 Run several commands concurrently.
-Show output for one command at a time.
+Show output for one command at a time – switch via ctrl+z.
 Kill all at once with ctrl+c.
 
-USAGE:
+Examples:
 
-run-pty [OPTIONS] COMMANDS...
+run-pty % npm start % make watch % some_command arg1 arg2 arg3
 
-OPTIONS:
+run-pty @ ./compile.bash --root / @ ./report_progress.bash --unit % @ ping localhost
 
--h, --help                 Print this message.
--k, --key KEY              Key to press to go from a command output to the dashboard.
-                           Defaults to "tab".
-                           Omit KEY to interactively press the key you want and print its name.
--d, --delimiter STRING     Delimiter to use between commands.
-
-EXAMPLES:
-
-Run two commands:
-run-pty npm start % make watch
-
-Interactively find a dashboard key:
-run-pty --key
-
-Use a custom key and delimiter:
-run-pty -k return -d / command1 / command2 a b / command3 123
-
-NOTES:
-
-A command is a file followed by arguments – not shell script.
+Note: A command is a file followed by arguments – not shell script code.
 `.trim();
 
 function run() {
@@ -41,14 +22,6 @@ function run() {
     case "Help":
       console.log(help);
       process.exit(0);
-      break;
-
-    case "TryKeys":
-      console.log(
-        `Press the key you would like to use with ${parseResult.arg}!`
-      );
-      console.log("Press ctrl+c to exit.");
-      tryKeys();
       break;
 
     case "Parsed":
@@ -71,67 +44,31 @@ function run() {
 }
 
 function parseArgs(args) {
-  if (args.length === 0) {
+  if (args.length === 0 || args[0] === "-h" || args[0] === "--help") {
     return { tag: "Help" };
   }
 
-  let dashboardKey = "tab";
-  let delimiter = "%";
-  let seenDelimiter = false;
+  const delimiter = args[0];
+
+  if (/^[\w-]*$/.test(delimiter)) {
+    return {
+      tag: "Error",
+      message:
+        "The first argument is the delimiter to use between commands.\nIt must not be empty or 0-9/a-z/underscores/dashes only.\nMaybe try % as delimiter?",
+    };
+  }
+
   let command = [];
   const commands = [];
-  const lastIndex = args.length - 1;
 
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index];
-
-    if (seenDelimiter) {
-      if (arg === delimiter) {
-        if (command.length > 0) {
-          commands.push(command);
-          command = [];
-        }
-      } else {
-        command.push(arg);
+  for (const arg of args) {
+    if (arg === delimiter) {
+      if (command.length > 0) {
+        commands.push(command);
+        command = [];
       }
     } else {
-      switch (arg) {
-        case delimiter:
-          seenDelimiter = true;
-          break;
-
-        case "-h":
-        case "--help":
-          return { tag: "Help" };
-
-        case "-k":
-        case "--key":
-          if (index === lastIndex) {
-            return { tag: "TryKeys", arg };
-          }
-          index++;
-          dashboardKey = args[index];
-          break;
-
-        case "-d":
-        case "--delimiter":
-          if (index === lastIndex) {
-            return {
-              tag: "Error",
-              message: `${arg} must be followed by your desired delimiter.`,
-            };
-          }
-          index++;
-          delimiter = args[index];
-          break;
-
-        default:
-          if (arg.startsWith("-")) {
-            return { tag: "Error", message: `Unknown argument: ${arg}` };
-          } else {
-            seenDelimiter = true;
-          }
-      }
+      command.push(arg);
     }
   }
 
@@ -148,7 +85,6 @@ function parseArgs(args) {
 
   return {
     tag: "Parsed",
-    dashboardKey,
     commands,
   };
 }
@@ -159,26 +95,10 @@ function setupStdin() {
   readline.emitKeypressEvents(process.stdin);
 }
 
-function tryKeys() {
-  setupStdin();
-  process.stdin.on("keypress", (_, keypress) => {
-    if (keypress.ctrl && keypress.name == "c") {
-      process.exit(0);
-    } else {
-      console.log(keypressToString(keypress));
-    }
-  });
-}
-
-function keypressToString(keypress) {
-  const name = keypress.name || keypress.sequence || "unknown";
-  return keypress.ctrl ? `ctrl+${name}` : name;
-}
-
 function commandToPresentationName(command) {
   return command
     .map((part) =>
-      /^[\w-]+$/.test(part) ? part : `'${part.replace(/'/g, `'"'"'`)}'`
+      /^[\w-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
     )
     .join(" ");
 }
