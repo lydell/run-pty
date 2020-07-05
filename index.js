@@ -36,7 +36,9 @@ Note: A command is a file followed by arguments – not shell script code.
 
 function drawDashboard(commands) {
   const lines = commands.map((command) => [
-    colorette.bgWhite(colorette.black(colorette.bold(` ${command.label} `))),
+    colorette.bgWhite(
+      colorette.black(colorette.bold(` ${command.label || " "} `))
+    ),
     statusText(command.status),
     command.name,
   ]);
