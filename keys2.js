@@ -1,9 +1,9 @@
 let readline = require("readline");
 
-readline.emitKeypressEvents(process.stdin);
-
 process.stdin.setRawMode(true);
 process.stdin.setEncoding("utf8");
+readline.emitKeypressEvents(process.stdin);
+
 process.stdin.on("data", (data) => {
   console.log("data", JSON.stringify(data));
 });
