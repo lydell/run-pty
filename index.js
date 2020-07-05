@@ -253,6 +253,12 @@ class Command {
 function runCommands(rawCommands) {
   let current = { tag: "Dashboard" };
 
+  const printHistory = (command) => {
+    for (const data of command.history) {
+      process.stdout.write(data);
+    }
+  };
+
   const switchToDashboard = () => {
     current = { tag: "Dashboard" };
     console.clear();
@@ -263,9 +269,7 @@ function runCommands(rawCommands) {
     const command = commands[index];
     current = { tag: "Command", index };
     console.clear();
-    for (const data of command.history) {
-      process.stdout.write(data);
-    }
+    printHistory(command);
   };
 
   const killAll = () => {
@@ -335,7 +339,8 @@ function runCommands(rawCommands) {
       commands,
       switchToDashboard,
       switchToCommand,
-      killAll
+      killAll,
+      printHistory
     );
   });
 
@@ -352,7 +357,8 @@ function onKeypress(
   commands,
   switchToDashboard,
   switchToCommand,
-  killAll
+  killAll,
+  printHistory
 ) {
   const keypressString = keypressToString(keypress);
 
@@ -385,9 +391,7 @@ function onKeypress(
             case KEYS.restart:
               command.start();
               command.history.unshift("\n");
-              for (const data of command.history) {
-                process.stdout.write(data);
-              }
+              printHistory(command);
               break;
           }
           break;
