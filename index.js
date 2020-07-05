@@ -1,5 +1,6 @@
 "use strict";
 
+const colorette = require("colorette");
 const pty = require("node-pty");
 const readline = require("readline");
 
@@ -53,15 +54,28 @@ function statusText(status) {
 }
 
 function drawDashboard(commands) {
-  const lines = commands.map((command) =>
-    truncate(
-      [command.label, statusText(command.status), command.name].join("  "),
-      process.stdout.columns
-    )
+  const lines = commands.map((command) => [
+    colorette.bgWhite(colorette.black(colorette.bold(` ${command.label} `))),
+    statusText(command.status),
+    command.name,
+  ]);
+
+  const widestStatus = Math.max(
+    0,
+    ...lines.map(([, status]) => Array.from(status).length)
   );
 
+  const finalLines = lines
+    .map(([label, status, name]) =>
+      truncate(
+        [label, padEnd(status, widestStatus), name].join("  "),
+        process.stdout.columns
+      )
+    )
+    .join("\n");
+
   return `
-${lines.join("\n")}
+${finalLines}
 
 Press the digit/letter of a command to switch to it.
 Press ctrl+c to exit all.
@@ -72,6 +86,15 @@ function truncate(string, maxLength) {
   return string.length <= maxLength
     ? string
     : `${string.slice(0, maxLength - 1)}…`;
+}
+
+function padEnd(string, maxLength) {
+  const chars = Array.from(string);
+  return chars
+    .concat(
+      Array.from({ length: Math.max(0, maxLength - chars.length) }, () => " ")
+    )
+    .join("");
 }
 
 function commandToPresentationName(command) {
