@@ -429,6 +429,13 @@ function onKeypress(
 }
 
 function run() {
+  if (!process.stdin.isTTY) {
+    console.error(
+      "run-pty must be connected to a terminal (“is TTY”) to run properly."
+    );
+    process.exit(1);
+  }
+
   const parseResult = parseArgs(process.argv.slice(2));
 
   switch (parseResult.tag) {
