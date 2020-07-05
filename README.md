@@ -33,6 +33,8 @@ ctrl+z this dashboard
 
 `npm install --save-dev run-pty`
 
+`npx run-pty --help`
+
 ## Credits
 
 - [microsoft/node-pty] does all the heavy lifting of running the commands.
