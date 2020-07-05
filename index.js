@@ -243,20 +243,11 @@ function runCommands(rawCommands) {
           }
         },
         onExit: (exitCode) => {
-          switch (current.tag) {
-            case "Command": {
-              const command = commands[current.index];
-              command.log(exitText(command.name, exitCode));
-              break;
-            }
-
-            case "Dashboard":
-              // Redraw dashboard.
-              switchToDashboard();
-              break;
-
-            default:
-              throw new Error("Unknown current", current);
+          const command = commands[index];
+          command.log(exitText(command.name, exitCode));
+          if (current.tag === "Dashboard") {
+            // Redraw dashboard.
+            switchToDashboard();
           }
         },
       })
