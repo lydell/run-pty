@@ -20,18 +20,27 @@ const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 
 const shortcut = (string) => colorette.blue(colorette.bold(string));
 
+const runPty = shortcut("run-pty");
+const pc = colorette.gray("%");
+const at = colorette.gray("@");
+
 const help = `
 Run several commands concurrently.
-Show output for one command at a time – switch via ${shortcut(KEYS.dashboard)}.
-Kill all at once with ${shortcut(KEYS.kill)}.
+Show output for one command at a time.
+Kill all at once.
 
-Examples:
+    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} switch command
+    ${shortcut(KEYS.dashboard)} dashboard
+    ${shortcut(KEYS.kill)} exit current/all
+    ${shortcut(KEYS.restart)} restart exited command
 
-run-pty % npm start % make watch % some_command arg1 arg2 arg3
+Separate the commands with a character of choice:
 
-run-pty @ ./compile.bash --root / @ ./report_progress.bash --unit % @ ping localhost
+    ${runPty} ${pc} npm start ${pc} make watch ${pc} some_command arg1 arg2 arg3
 
-Note: A command is a file followed by arguments – not shell script code.
+    ${runPty} ${at} ./report_progress.bash --root / --unit % ${at} ping localhost
+
+Note: All arguments are strings and passed as-is – no shell script execution.
 `.trim();
 
 function drawDashboard(commands) {
