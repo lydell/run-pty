@@ -24,4 +24,13 @@ module.exports = {
     eqeqeq: "error",
     strict: "error",
   },
+  overrides: [
+    {
+      files: "*.test.js",
+      extends: ["plugin:jest/recommended"],
+      env: {
+        "jest/globals": true,
+      },
+    },
+  ],
 };

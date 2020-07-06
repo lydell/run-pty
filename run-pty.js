@@ -462,4 +462,18 @@ function run() {
   }
 }
 
-run();
+if (require.main === module) {
+  run();
+}
+
+module.exports = {
+  __forTests: {
+    ALL_LABELS,
+    commandToPresentationName,
+    drawDashboard,
+    exitText,
+    help,
+    parseArgs,
+    summarizeLabels,
+  },
+};
