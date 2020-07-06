@@ -1,5 +1,7 @@
 "use strict";
 
+const colorette = require("colorette");
+
 const {
   __forTests: {
     ALL_LABELS,
@@ -16,6 +18,9 @@ function replaceColor(string) {
   // eslint-disable-next-line no-control-regex
   return string.replace(/\x1b\[\d+m/g, "|");
 }
+
+// Force colors in CI.
+colorette.options.enabled = true;
 
 // Make snapshots easier to read.
 // Before: `"\\"string\\""`
