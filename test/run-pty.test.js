@@ -41,7 +41,7 @@ describe("help", () => {
           ||1-9/a-z/A-Z|| switch command
           ||ctrl+z|| dashboard
           ||ctrl+c|| exit current/all
-          ||return|| restart exited command
+          ||enter || restart exited command
 
       Separate the commands with a character of choice:
 
@@ -251,7 +251,7 @@ describe("exit text", () => {
       ⚪ npm start
       exit 0
 
-      ||return|| restart
+      ||enter || restart
       ||ctrl+c|| exit all
       ||ctrl+z|| dashboard
 
@@ -264,7 +264,7 @@ describe("exit text", () => {
       🔴 false
       exit 1
 
-      ||return|| restart
+      ||enter || restart
       ||ctrl+c|| exit all
       ||ctrl+z|| dashboard
 

@@ -4,12 +4,17 @@
 
 const colorette = require("colorette");
 const pty = require("node-pty");
-const readline = require("readline");
 
 const KEYS = {
   kill: "ctrl+c",
-  restart: "return",
+  restart: "enter ", // Extra space for alignment.
   dashboard: "ctrl+z",
+};
+
+const KEY_CODES = {
+  kill: "\x03",
+  restart: "\r",
+  dashboard: "\x1a",
 };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
@@ -130,11 +135,6 @@ function commandToPresentationName(command) {
       /^[\w./-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
     )
     .join(" ");
-}
-
-function keypressToString(keypress) {
-  const name = keypress.name || keypress.sequence || "unknown";
-  return keypress.ctrl ? `ctrl+${name}` : name;
 }
 
 function summarizeLabels(labels) {
@@ -326,20 +326,10 @@ function runCommands(rawCommands) {
 
   process.stdin.setRawMode(true);
   process.stdin.setEncoding("utf8");
-  readline.emitKeypressEvents(process.stdin);
 
   process.stdin.on("data", (data) => {
-    if (
-      current.tag === "Command" &&
-      commands[current.index].status.tag === "Running"
-    ) {
-      commands[current.index].status.terminal.write(data);
-    }
-  });
-
-  process.stdin.on("keypress", (_, keypress) => {
-    onKeypress(
-      keypress,
+    onStdin(
+      data,
       current,
       commands,
       switchToDashboard,
@@ -356,8 +346,8 @@ function runCommands(rawCommands) {
   }
 }
 
-function onKeypress(
-  keypress,
+function onStdin(
+  data,
   current,
   commands,
   switchToDashboard,
@@ -365,35 +355,37 @@ function onKeypress(
   killAll,
   printHistory
 ) {
-  const keypressString = keypressToString(keypress);
-
   switch (current.tag) {
     case "Command": {
       const command = commands[current.index];
       switch (command.status.tag) {
         case "Running":
-          switch (keypressString) {
-            case KEYS.kill:
+          switch (data) {
+            case KEY_CODES.kill:
               command.status.terminal.kill();
               break;
 
-            case KEYS.dashboard:
+            case KEY_CODES.dashboard:
               switchToDashboard();
+              break;
+
+            default:
+              command.status.terminal.write(data);
               break;
           }
           break;
 
         case "Exit":
-          switch (keypressString) {
-            case KEYS.kill:
+          switch (data) {
+            case KEY_CODES.kill:
               killAll();
               break;
 
-            case KEYS.dashboard:
+            case KEY_CODES.dashboard:
               switchToDashboard();
               break;
 
-            case KEYS.restart:
+            case KEY_CODES.restart:
               command.start();
               command.history.unshift("\n");
               printHistory(command);
@@ -408,14 +400,14 @@ function onKeypress(
     }
 
     case "Dashboard":
-      switch (keypressString) {
-        case KEYS.kill:
+      switch (data) {
+        case KEY_CODES.kill:
           killAll();
           break;
 
         default: {
           const commandIndex = commands.findIndex(
-            (command) => command.label === keypressString
+            (command) => command.label === data
           );
           if (commandIndex !== -1) {
             switchToCommand(commandIndex);
