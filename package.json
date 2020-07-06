@@ -36,6 +36,7 @@
   },
   "scripts": {
     "start": "node run-pty.js % cat % false % echo hello world % ping localhost",
-    "test": "prettier --check . && eslint . && jest"
+    "test": "prettier --check . && eslint . && jest",
+    "prepublishOnly": "npm test"
   }
 }
