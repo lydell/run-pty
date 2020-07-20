@@ -4,6 +4,7 @@
 
 const colorette = require("colorette");
 const pty = require("node-pty");
+const readline = require("readline");
 
 const KEYS = {
   kill: "ctrl+c",
@@ -23,6 +24,8 @@ const ALL_LABELS = LABEL_GROUPS.join("");
 
 const runningIndicator = "🟢";
 
+const killingIndicator = "⭕";
+
 const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 
 const shortcut = (string) => colorette.blue(colorette.bold(string));
@@ -36,10 +39,10 @@ Run several commands concurrently.
 Show output for one command at a time.
 Kill all at once.
 
-    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} switch command
+    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} focus command
     ${shortcut(KEYS.dashboard)} dashboard
-    ${shortcut(KEYS.kill)} exit current/all
-    ${shortcut(KEYS.restart)} restart exited command
+    ${shortcut(KEYS.kill)} kill focused/all
+    ${shortcut(KEYS.restart)} restart killed/exited command
 
 Separate the commands with a character of choice:
 
@@ -51,6 +54,10 @@ Note: All arguments are strings and passed as-is – no shell script execution.
 `.trim();
 
 function drawDashboard(commands, width) {
+  const hasKilling = commands.some(
+    (command) => command.status.tag === "Killing"
+  );
+
   const lines = commands.map((command) => [
     colorette.bgWhite(
       colorette.black(colorette.bold(` ${command.label || " "} `))
@@ -75,9 +82,8 @@ function drawDashboard(commands, width) {
   return `
 ${finalLines}
 
-${shortcut(padEnd(label, KEYS.kill.length))} switch command
-${shortcut(KEYS.kill)} exit current/all
-${shortcut(KEYS.dashboard)} this dashboard
+${shortcut(padEnd(label, KEYS.kill.length))} focus command
+${shortcut(KEYS.kill)} ${hasKilling ? "force kill all" : "kill all"}
 `.trim();
 }
 
@@ -85,15 +91,41 @@ function firstHistoryLine(name) {
   return `${runningIndicator} ${name}\n`;
 }
 
-// Newlines at start/end are wanted here.
+// Newlines at the end are wanted here.
+const startText = `
+${shortcut(KEYS.kill)} kill
+${shortcut(KEYS.dashboard)} dashboard
+
+`.trimStart();
+
+const killingShortcuts = `
+${shortcut(KEYS.kill)} force kill
+${shortcut(KEYS.dashboard)} dashboard
+`.trim();
+
+// Newlines at the start/end are wanted here.
+function killingText(commandName) {
+  return `
+${killingIndicator} ${commandName}
+killing…
+
+${killingShortcuts}
+`;
+}
+
+const exitShortcuts = `
+${shortcut(KEYS.restart)} restart
+${shortcut(KEYS.kill)} kill all
+${shortcut(KEYS.dashboard)} dashboard
+`.trim();
+
+// Newlines at the start/end are wanted here.
 function exitText(commandName, exitCode) {
   return `
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
-${shortcut(KEYS.restart)} restart
-${shortcut(KEYS.kill)} exit all
-${shortcut(KEYS.dashboard)} dashboard
+${exitShortcuts}
 `;
 }
 
@@ -102,11 +134,14 @@ function statusText(status) {
     case "Running":
       return `${runningIndicator} pid ${status.terminal.pid}`;
 
+    case "Killing":
+      return `${killingIndicator} pid ${status.terminal.pid}`;
+
     case "Exit":
       return `${exitIndicator(status.exitCode)} exit ${status.exitCode}`;
 
     default:
-      throw new Error("Unknown command status", status);
+      throw new Error(`Unknown command status: ${status.tag}`);
   }
 }
 
@@ -221,9 +256,9 @@ class Command {
   }
 
   start() {
-    if (this.status.tag === "Running") {
+    if (this.status.tag !== "Exit") {
       throw new Error(
-        `pty already running with pid ${this.status.terminal.pid} for: ${this.name}`
+        `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.name}`
       );
     }
 
@@ -242,11 +277,38 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
+      const previousStatus = this.status.tag;
       this.status = { tag: "Exit", exitCode };
-      this.onExit(exitCode);
+      this.onExit(exitCode, previousStatus);
     });
 
     this.status = { tag: "Running", terminal };
+  }
+
+  kill() {
+    // node-pty does not support kill signals on Windows.
+    // This is the same check that node-pty uses.
+    const isWindows = process.platform === "win32";
+
+    // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
+    switch (this.status.tag) {
+      case "Running":
+        this.status = { tag: "Killing", terminal: this.status.terminal };
+        this.status.terminal.kill(isWindows ? undefined : "SIGTERM");
+        break;
+
+      case "Killing":
+        this.status.terminal.kill(isWindows ? undefined : "SIGKILL");
+        break;
+
+      case "Exit":
+        throw new Error(
+          `Cannot kill pty with pid ${this.status.terminal.pid} because already exited for: ${this.name}`
+        );
+
+      default:
+        throw new Error(`Unknown command status ${this.status.tag}`);
+    }
   }
 
   log(data) {
@@ -258,7 +320,8 @@ class Command {
 function runCommands(rawCommands) {
   let current = { tag: "Dashboard" };
 
-  const printHistory = (command) => {
+  const printHistoryAndStartText = (command) => {
+    process.stdout.write(startText);
     for (const data of command.history) {
       process.stdout.write(data);
     }
@@ -274,16 +337,22 @@ function runCommands(rawCommands) {
     const command = commands[index];
     current = { tag: "Command", index };
     console.clear();
-    printHistory(command);
+    printHistoryAndStartText(command);
   };
 
   const killAll = () => {
-    for (const command of commands) {
-      if (command.status.tag === "Running") {
-        command.status.terminal.kill();
+    if (commands.every((command) => command.status.tag === "Exit")) {
+      process.exit(0);
+    } else {
+      for (const command of commands) {
+        if (command.status.tag !== "Exit") {
+          if (command.status.tag === "Running") {
+            command.log(killingText(command.name));
+          }
+          command.kill();
+        }
       }
     }
-    process.exit(0);
   };
 
   const commands = rawCommands.map(
@@ -297,12 +366,33 @@ function runCommands(rawCommands) {
             process.stdout.write(data);
           }
         },
-        onExit: (exitCode) => {
+        onExit: (exitCode, previousStatus) => {
           const command = commands[index];
+          if (
+            // TODO: Better check?
+            command.history[command.history.length - 1] ===
+            killingText(command.name)
+          ) {
+            // TODO: This won’t work if it exits in the background.
+            readline.moveCursor(
+              process.stdout,
+              0,
+              -killingText(command.name).split("\n").length + 1
+            );
+            readline.clearScreenDown(process.stdout);
+          }
           command.log(exitText(command.name, exitCode));
           if (current.tag === "Dashboard") {
             // Redraw dashboard.
             switchToDashboard();
+            if (
+              // TODO: If ctrl+c on every command and one is slow to exit
+              // one has time to go back to dashboard. Then everything shouldn’t close?
+              previousStatus === "Killing" &&
+              commands.every((command2) => command2.status.tag === "Exit")
+            ) {
+              process.exit(0);
+            }
           }
         },
       })
@@ -335,7 +425,7 @@ function runCommands(rawCommands) {
       switchToDashboard,
       switchToCommand,
       killAll,
-      printHistory
+      printHistoryAndStartText
     );
   });
 
@@ -353,7 +443,7 @@ function onStdin(
   switchToDashboard,
   switchToCommand,
   killAll,
-  printHistory
+  printHistoryAndStartText
 ) {
   switch (current.tag) {
     case "Command": {
@@ -362,7 +452,8 @@ function onStdin(
         case "Running":
           switch (data) {
             case KEY_CODES.kill:
-              command.status.terminal.kill();
+              command.kill();
+              command.log(killingText(command.name));
               break;
 
             case KEY_CODES.dashboard:
@@ -371,6 +462,18 @@ function onStdin(
 
             default:
               command.status.terminal.write(data);
+              break;
+          }
+          break;
+
+        case "Killing":
+          switch (data) {
+            case KEY_CODES.kill:
+              command.kill();
+              break;
+
+            case KEY_CODES.dashboard:
+              switchToDashboard();
               break;
           }
           break;
@@ -387,14 +490,19 @@ function onStdin(
 
             case KEY_CODES.restart:
               command.start();
-              command.history.unshift("\n");
-              printHistory(command);
+              readline.moveCursor(
+                process.stdout,
+                0,
+                -exitShortcuts.split("\n").length
+              );
+              readline.clearScreenDown(process.stdout);
+              printHistoryAndStartText(command);
               break;
           }
           break;
 
         default:
-          throw new Error("Unknown command status", command);
+          throw new Error(`Unknown command status: ${command.status.tag}`);
       }
       break;
     }
@@ -418,7 +526,7 @@ function onStdin(
       break;
 
     default:
-      throw new Error("Unknown current", current);
+      throw new Error(`Unknown current state: ${current.tag}`);
   }
 }
 
