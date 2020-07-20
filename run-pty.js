@@ -350,13 +350,14 @@ function runCommands(rawCommands) {
 
   const killAll = () => {
     attemptedKillAll = true;
-    if (commands.every((command) => command.status.tag === "Exit")) {
+    const notExited = commands.filter(
+      (command) => command.status.tag !== "Exit"
+    );
+    if (notExited.length === 0) {
       process.exit(0);
     } else {
-      for (const command of commands) {
-        if (command.status.tag !== "Exit") {
-          command.kill();
-        }
+      for (const command of notExited) {
+        command.kill();
       }
     }
   };
