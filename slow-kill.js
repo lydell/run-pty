@@ -1,10 +1,15 @@
 "use strict";
 
+const timeout = Number(process.argv[2]) || 3000;
+const message = process.argv[3] || "";
+
 process.on("SIGTERM", () => {
-  console.log("Shutting down…");
+  if (message !== "") {
+    console.log(message);
+  }
   setTimeout(() => {
     process.exit(0);
-  }, 3000);
+  }, timeout);
 });
 
 console.log("Slow kill.");

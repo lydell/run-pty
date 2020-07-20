@@ -35,7 +35,7 @@
     "prettier": "2.0.5"
   },
   "scripts": {
-    "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node test-keys.js % node signals.js % node slow-kill.js",
+    "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\"",
     "test": "prettier --check . && eslint . && jest",
     "prepublishOnly": "npm test"
   }

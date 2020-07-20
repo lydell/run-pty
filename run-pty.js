@@ -54,9 +54,13 @@ Note: All arguments are strings and passed as-is – no shell script execution.
 `.trim();
 
 function drawDashboard(commands, width) {
-  const hasKilling = commands.some(
+  const killAllLabel = commands.some(
     (command) => command.status.tag === "Killing"
-  );
+  )
+    ? "force kill all"
+    : commands.every((command) => command.status.tag === "Exit")
+    ? "exit"
+    : "kill all";
 
   const lines = commands.map((command) => [
     colorette.bgWhite(
@@ -83,7 +87,7 @@ function drawDashboard(commands, width) {
 ${finalLines}
 
 ${shortcut(padEnd(label, KEYS.kill.length))} focus command
-${shortcut(KEYS.kill)} ${hasKilling ? "force kill all" : "kill all"}
+${shortcut(KEYS.kill)} ${killAllLabel}
 `.trim();
 }
 
@@ -98,34 +102,37 @@ ${shortcut(KEYS.dashboard)} dashboard
 
 `.trimStart();
 
-const killingShortcuts = `
-${shortcut(KEYS.kill)} force kill
-${shortcut(KEYS.dashboard)} dashboard
-`.trim();
-
 // Newlines at the start/end are wanted here.
 function killingText(commandName) {
   return `
 ${killingIndicator} ${commandName}
 killing…
 
-${killingShortcuts}
+${shortcut(KEYS.kill)} force kill
+${shortcut(KEYS.dashboard)} dashboard
 `;
 }
 
-const exitShortcuts = `
+function exitShortcuts(commands) {
+  const killAllLabel = commands.every(
+    (command) => command.status.tag === "Exit"
+  )
+    ? "exit"
+    : "kill all";
+  return `
 ${shortcut(KEYS.restart)} restart
-${shortcut(KEYS.kill)} kill all
+${shortcut(KEYS.kill)} ${killAllLabel}
 ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
+}
 
 // Newlines at the start/end are wanted here.
-function exitText(commandName, exitCode) {
+function exitText(commands, commandName, exitCode) {
   return `
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
-${exitShortcuts}
+${exitShortcuts(commands)}
 `;
 }
 
@@ -277,9 +284,8 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
-      const previousStatus = this.status.tag;
       this.status = { tag: "Exit", exitCode };
-      this.onExit(exitCode, previousStatus);
+      this.onExit(exitCode);
     });
 
     this.status = { tag: "Running", terminal };
@@ -294,6 +300,7 @@ class Command {
     switch (this.status.tag) {
       case "Running":
         this.status = { tag: "Killing", terminal: this.status.terminal };
+        this.log(killingText(this.name));
         this.status.terminal.kill(isWindows ? undefined : "SIGTERM");
         break;
 
@@ -319,6 +326,7 @@ class Command {
 
 function runCommands(rawCommands) {
   let current = { tag: "Dashboard" };
+  let attemptedKillAll = false;
 
   const printHistoryAndStartText = (command) => {
     process.stdout.write(startText);
@@ -341,14 +349,12 @@ function runCommands(rawCommands) {
   };
 
   const killAll = () => {
+    attemptedKillAll = true;
     if (commands.every((command) => command.status.tag === "Exit")) {
       process.exit(0);
     } else {
       for (const command of commands) {
         if (command.status.tag !== "Exit") {
-          if (command.status.tag === "Running") {
-            command.log(killingText(command.name));
-          }
           command.kill();
         }
       }
@@ -366,29 +372,36 @@ function runCommands(rawCommands) {
             process.stdout.write(data);
           }
         },
-        onExit: (exitCode, previousStatus) => {
+        onExit: (exitCode) => {
           const command = commands[index];
+
+          // Remove killing text.
           if (
             // TODO: Better check?
             command.history[command.history.length - 1] ===
             killingText(command.name)
           ) {
-            // TODO: This won’t work if it exits in the background.
-            readline.moveCursor(
-              process.stdout,
-              0,
-              -killingText(command.name).split("\n").length + 1
-            );
-            readline.clearScreenDown(process.stdout);
+            if (current.tag === "Command" && current.index === index) {
+              readline.moveCursor(
+                process.stdout,
+                0,
+                -killingText(command.name).split("\n").length + 1
+              );
+              readline.clearScreenDown(process.stdout);
+            } else {
+              command.history.pop();
+            }
           }
-          command.log(exitText(command.name, exitCode));
+
+          command.log(exitText(commands, command.name, exitCode));
+
           if (current.tag === "Dashboard") {
             // Redraw dashboard.
             switchToDashboard();
+
+            // Exit the whole program if all commands are killed.
             if (
-              // TODO: If ctrl+c on every command and one is slow to exit
-              // one has time to go back to dashboard. Then everything shouldn’t close?
-              previousStatus === "Killing" &&
+              attemptedKillAll &&
               commands.every((command2) => command2.status.tag === "Exit")
             ) {
               process.exit(0);
@@ -453,7 +466,6 @@ function onStdin(
           switch (data) {
             case KEY_CODES.kill:
               command.kill();
-              command.log(killingText(command.name));
               break;
 
             case KEY_CODES.dashboard:
@@ -493,7 +505,7 @@ function onStdin(
               readline.moveCursor(
                 process.stdout,
                 0,
-                -exitShortcuts.split("\n").length
+                -exitShortcuts(commands).split("\n").length
               );
               readline.clearScreenDown(process.stdout);
               printHistoryAndStartText(command);
@@ -511,6 +523,8 @@ function onStdin(
       switch (data) {
         case KEY_CODES.kill:
           killAll();
+          // Redraw dashboard.
+          switchToDashboard();
           break;
 
         default: {
