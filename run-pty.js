@@ -412,14 +412,14 @@ function runCommands(rawCommands) {
           if (current.tag === "Dashboard") {
             // Redraw dashboard.
             switchToDashboard();
+          }
 
-            // Exit the whole program if all commands are killed.
-            if (
-              attemptedKillAll &&
-              commands.every((command2) => command2.status.tag === "Exit")
-            ) {
-              process.exit(0);
-            }
+          // Exit the whole program if all commands are killed.
+          if (
+            attemptedKillAll &&
+            commands.every((command2) => command2.status.tag === "Exit")
+          ) {
+            process.exit(0);
           }
         },
       })
