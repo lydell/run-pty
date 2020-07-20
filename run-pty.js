@@ -503,14 +503,8 @@ function onStdin(
           switch (data) {
             case KEY_CODES.kill:
               killAll();
-              // Update exit shortcuts.
-              readline.moveCursor(
-                process.stdout,
-                0,
-                -exitShortcuts(commands).split("\n").length
-              );
-              readline.clearScreenDown(process.stdout);
-              process.stdout.write(`${exitShortcuts(commands)}\n`);
+              // So you can see how killing other commands go:
+              switchToDashboard();
               break;
 
             case KEY_CODES.dashboard:
