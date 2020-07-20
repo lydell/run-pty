@@ -284,8 +284,11 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
+      const lastIsKillingText =
+        this.status.tag === "Killing" &&
+        this.history.length === this.status.historyLengthWhenStartedKilling;
       this.status = { tag: "Exit", exitCode };
-      this.onExit(exitCode);
+      this.onExit(exitCode, lastIsKillingText);
     });
 
     this.status = { tag: "Running", terminal };
@@ -299,8 +302,12 @@ class Command {
     // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     switch (this.status.tag) {
       case "Running":
-        this.status = { tag: "Killing", terminal: this.status.terminal };
         this.log(killingText(this.name));
+        this.status = {
+          tag: "Killing",
+          terminal: this.status.terminal,
+          historyLengthWhenStartedKilling: this.history.length,
+        };
         this.status.terminal.kill(isWindows ? undefined : "SIGTERM");
         break;
 
@@ -373,15 +380,12 @@ function runCommands(rawCommands) {
             process.stdout.write(data);
           }
         },
-        onExit: (exitCode) => {
+        onExit: (exitCode, lastIsKillingText) => {
           const command = commands[index];
 
           // Remove killing text.
-          if (
-            // TODO: Better check?
-            command.history[command.history.length - 1] ===
-            killingText(command.name)
-          ) {
+          if (lastIsKillingText) {
+            command.history.pop();
             if (current.tag === "Command" && current.index === index) {
               readline.moveCursor(
                 process.stdout,
@@ -389,8 +393,6 @@ function runCommands(rawCommands) {
                 -killingText(command.name).split("\n").length + 1
               );
               readline.clearScreenDown(process.stdout);
-            } else {
-              command.history.pop();
             }
           }
 
