@@ -53,15 +53,15 @@ Separate the commands with a character of choice:
 Note: All arguments are strings and passed as-is – no shell script execution.
 `.trim();
 
-function drawDashboard(commands, width) {
-  const killAllLabel = commands.some(
-    (command) => command.status.tag === "Killing"
-  )
+function killAllLabel(commands) {
+  return commands.some((command) => command.status.tag === "Killing")
     ? "force kill all"
     : commands.every((command) => command.status.tag === "Exit")
     ? "exit"
     : "kill all";
+}
 
+function drawDashboard(commands, width) {
   const lines = commands.map((command) => [
     colorette.bgWhite(
       colorette.black(colorette.bold(` ${command.label || " "} `))
@@ -87,7 +87,7 @@ function drawDashboard(commands, width) {
 ${finalLines}
 
 ${shortcut(padEnd(label, KEYS.kill.length))} focus command
-${shortcut(KEYS.kill)} ${killAllLabel}
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 `.trim();
 }
 
@@ -114,14 +114,9 @@ ${shortcut(KEYS.dashboard)} dashboard
 }
 
 function exitShortcuts(commands) {
-  const killAllLabel = commands.every(
-    (command) => command.status.tag === "Exit"
-  )
-    ? "exit"
-    : "kill all";
   return `
 ${shortcut(KEYS.restart)} restart
-${shortcut(KEYS.kill)} ${killAllLabel}
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
 }
@@ -508,6 +503,14 @@ function onStdin(
           switch (data) {
             case KEY_CODES.kill:
               killAll();
+              // Update exit shortcuts.
+              readline.moveCursor(
+                process.stdout,
+                0,
+                -exitShortcuts(commands).split("\n").length
+              );
+              readline.clearScreenDown(process.stdout);
+              process.stdout.write(`${exitShortcuts(commands)}\n`);
               break;
 
             case KEY_CODES.dashboard:
