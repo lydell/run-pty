@@ -3,7 +3,7 @@
 const timeout = Number(process.argv[2]) || 3000;
 const message = process.argv[3] || "";
 
-const signals = ["SIGHUP", "SIGTERM"];
+const signals = ["SIGHUP", "SIGINT", "SIGTERM"];
 
 for (const signal of signals) {
   process.on(signal, () => {
