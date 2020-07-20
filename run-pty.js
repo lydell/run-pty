@@ -308,11 +308,22 @@ class Command {
           terminal: this.status.terminal,
           historyLengthWhenStartedKilling: this.history.length,
         };
-        this.status.terminal.kill(isWindows ? undefined : "SIGTERM");
+        if (isWindows) {
+          this.status.terminal.kill();
+        } else {
+          // SIGHUP causes a silent exit for `npm run`.
+          this.status.terminal.kill("SIGHUP");
+          // SIGTERM is needed for some programs (but is noisy for `npm run`).
+          this.status.terminal.kill("SIGTERM");
+        }
         break;
 
       case "Killing":
-        this.status.terminal.kill(isWindows ? undefined : "SIGKILL");
+        if (isWindows) {
+          this.status.terminal.kill();
+        } else {
+          this.status.terminal.kill("SIGKILL");
+        }
         break;
 
       case "Exit":
