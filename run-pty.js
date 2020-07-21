@@ -113,21 +113,15 @@ ${shortcut(KEYS.dashboard)} dashboard
 `;
 }
 
-function exitShortcuts(commands) {
-  return `
-${shortcut(KEYS.restart)} restart
-${shortcut(KEYS.kill)} ${killAllLabel(commands)}
-${shortcut(KEYS.dashboard)} dashboard
-`.trim();
-}
-
 // Newlines at the start/end are wanted here.
 function exitText(commands, commandName, exitCode) {
   return `
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
-${exitShortcuts(commands)}
+${shortcut(KEYS.restart)} restart
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
+${shortcut(KEYS.dashboard)} dashboard
 `;
 }
 
@@ -516,12 +510,7 @@ function onStdin(
 
             case KEY_CODES.restart:
               command.start();
-              readline.moveCursor(
-                process.stdout,
-                0,
-                -exitShortcuts(commands).split("\n").length
-              );
-              readline.clearScreenDown(process.stdout);
+              console.clear();
               printHistoryAndStartText(command);
               break;
           }
