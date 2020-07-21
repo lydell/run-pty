@@ -367,7 +367,10 @@ function runCommands(rawCommands) {
       (command) => command.status.tag !== "Exit"
     );
     if (notExited.length === 0) {
-      process.exit(0);
+      // Wait a little before exiting so we have time to redraw once more.
+      setImmediate(() => {
+        process.exit(0);
+      });
     } else {
       for (const command of notExited) {
         command.kill();
