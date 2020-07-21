@@ -448,6 +448,15 @@ function runCommands(rawCommands) {
     );
   });
 
+  // Clean up all commands if someone tries to kill run-pty.
+  for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+    process.on(signal, () => {
+      killAll();
+      // So you can see how killing other commands go:
+      switchToDashboard();
+    });
+  }
+
   if (commands.length === 1) {
     switchToCommand(0);
   } else {
