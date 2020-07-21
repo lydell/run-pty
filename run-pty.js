@@ -370,6 +370,8 @@ function runCommands(rawCommands) {
         command.kill();
       }
     }
+    // So you can see how killing other commands go:
+    switchToDashboard();
   };
 
   const commands = rawCommands.map(
@@ -452,8 +454,6 @@ function runCommands(rawCommands) {
   for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
     process.on(signal, () => {
       killAll();
-      // So you can see how killing other commands go:
-      switchToDashboard();
     });
   }
 
@@ -509,8 +509,6 @@ function onStdin(
           switch (data) {
             case KEY_CODES.kill:
               killAll();
-              // So you can see how killing other commands go:
-              switchToDashboard();
               break;
 
             case KEY_CODES.dashboard:
@@ -535,8 +533,6 @@ function onStdin(
       switch (data) {
         case KEY_CODES.kill:
           killAll();
-          // Redraw dashboard.
-          switchToDashboard();
           break;
 
         default: {
