@@ -22,6 +22,10 @@ const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 const LABEL_GROUPS = ["123456789", ALPHABET, ALPHABET.toUpperCase()];
 const ALL_LABELS = LABEL_GROUPS.join("");
 
+// node-pty does not support kill signals on Windows.
+// This is the same check that node-pty uses.
+const isWindows = process.platform === "win32";
+
 const runningIndicator = "🟢";
 
 const killingIndicator = "⭕";
@@ -284,10 +288,6 @@ class Command {
   }
 
   kill() {
-    // node-pty does not support kill signals on Windows.
-    // This is the same check that node-pty uses.
-    const isWindows = process.platform === "win32";
-
     // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     switch (this.status.tag) {
       case "Running":
@@ -454,6 +454,23 @@ function runCommands(rawCommands) {
   for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
     process.on(signal, () => {
       killAll();
+    });
+  }
+
+  // Don’t leave running processes behind in case of an unexpected error.
+  for (const event of ["uncaughtException", "unhandledRejection"]) {
+    process.on(event, (error) => {
+      console.error(error);
+      for (const command of commands) {
+        if (command.status.tag !== "Exit") {
+          if (isWindows) {
+            command.status.terminal.kill();
+          } else {
+            command.status.terminal.kill("SIGKILL");
+          }
+        }
+      }
+      process.exit(1);
     });
   }
 
