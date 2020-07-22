@@ -118,12 +118,12 @@ function firstHistoryLine(name) {
   return `${runningIndicator} ${name}\n`;
 }
 
-// Newlines at the end are wanted here.
-const startText = `
+// Newlines at the start/end are wanted here.
+const runningText = `
 ${shortcut(KEYS.kill)} kill
 ${shortcut(KEYS.dashboard)} dashboard
 
-`.trimStart();
+`;
 
 // Newlines at the start/end are wanted here.
 function killingText(commandName) {
@@ -363,10 +363,17 @@ function runCommands(rawCommands) {
 
   const printHistoryAndStartText = (command) => {
     process.stdout.write(
-      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR + startText
+      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR
     );
     for (const data of command.history) {
       process.stdout.write(data);
+    }
+    if (
+      command.status.tag === "Running" &&
+      command.history.length > 0 &&
+      command.history[command.history.length - 1].endsWith("\n")
+    ) {
+      process.stdout.write(RESET_COLOR + runningText);
     }
   };
 
