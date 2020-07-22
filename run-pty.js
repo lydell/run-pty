@@ -4,7 +4,6 @@
 
 const colorette = require("colorette");
 const pty = require("node-pty");
-const readline = require("readline");
 
 // node-pty does not support kill signals on Windows.
 // This is the same check that node-pty uses.
@@ -32,6 +31,8 @@ const DISABLE_ALTERNATE_SCREEN = "\u001B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\u001B[?2004l";
 const RESET_COLOR = "\u001B[0m";
 const CLEAR = IS_WINDOWS ? "\u001B[2J\u001B[0f" : "\u001B[2J\u001B[3J\u001B[H";
+const CLEAR_DOWN = "\u001B[0J";
+const MOVE_CURSOR_UP = (dy) => `\u001B[${dy}A`;
 
 const runningIndicator = "🟢";
 
@@ -409,12 +410,11 @@ function runCommands(rawCommands) {
           if (lastIsKillingText) {
             command.history.pop();
             if (current.tag === "Command" && current.index === index) {
-              readline.moveCursor(
-                process.stdout,
-                0,
-                -killingText(command.name).split("\n").length + 1
+              process.stdout.write(
+                MOVE_CURSOR_UP(
+                  killingText(command.name).split("\n").length - 1
+                ) + CLEAR_DOWN
               );
-              readline.clearScreenDown(process.stdout);
             }
           }
 
