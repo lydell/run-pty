@@ -9,6 +9,11 @@ const pty = require("node-pty");
 // This is the same check that node-pty uses.
 const IS_WINDOWS = process.platform === "win32";
 
+const MAX_HISTORY = (() => {
+  const env = process.env.RUN_PTY_MAX_HISTORY;
+  return /^\d+$/.test(env) ? Number(env) : 10000;
+})();
+
 const KEYS = {
   kill: "ctrl+c",
   restart: "enter ", // Extra space for alignment.
@@ -284,7 +289,7 @@ class Command {
     });
 
     const disposeOnData = terminal.onData((data) => {
-      this.history.push(data);
+      this.pushHistory(data);
       this.onData(data);
     });
 
@@ -340,8 +345,15 @@ class Command {
   }
 
   log(data) {
-    this.history.push(data);
+    this.pushHistory(data);
     this.onData(data);
+  }
+
+  pushHistory(data) {
+    if (this.history.length > MAX_HISTORY) {
+      this.history.shift();
+    }
+    this.history.push(data);
   }
 }
 
