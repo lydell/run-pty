@@ -6,6 +6,10 @@ const colorette = require("colorette");
 const pty = require("node-pty");
 const readline = require("readline");
 
+// node-pty does not support kill signals on Windows.
+// This is the same check that node-pty uses.
+const IS_WINDOWS = process.platform === "win32";
+
 const KEYS = {
   kill: "ctrl+c",
   restart: "enter ", // Extra space for alignment.
@@ -22,15 +26,21 @@ const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 const LABEL_GROUPS = ["123456789", ALPHABET, ALPHABET.toUpperCase()];
 const ALL_LABELS = LABEL_GROUPS.join("");
 
-// node-pty does not support kill signals on Windows.
-// This is the same check that node-pty uses.
-const isWindows = process.platform === "win32";
+const HIDE_CURSOR = "\u001B[?25l";
+const SHOW_CURSOR = "\u001B[?25h";
+const DISABLE_ALTERNATE_SCREEN = "\u001B[?1049l";
+const DISABLE_BRACKETED_PASTE_MODE = "\u001B[?2004l";
+const RESET_COLOR = "\u001B[0m";
+const CLEAR = IS_WINDOWS ? "\u001B[2J\u001B[0f" : "\u001B[2J\u001B[3J\u001B[H";
 
 const runningIndicator = "🟢";
 
 const killingIndicator = "⭕";
 
 const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
+
+const box = (string) =>
+  colorette.bgWhite(colorette.black(colorette.bold(string)));
 
 const shortcut = (string) => colorette.blue(colorette.bold(string));
 
@@ -65,11 +75,10 @@ function killAllLabel(commands) {
     : "kill all";
 }
 
-function drawDashboard(commands, width) {
+// Newlines at the end are wanted here.
+function drawDashboard(commands, width, attemptedKillAll) {
   const lines = commands.map((command) => [
-    colorette.bgWhite(
-      colorette.black(colorette.bold(` ${command.label || " "} `))
-    ),
+    box(` ${command.label || " "} `),
     statusText(command.status),
     command.name,
   ]);
@@ -87,12 +96,16 @@ function drawDashboard(commands, width) {
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
+  if (attemptedKillAll) {
+    return `${finalLines}\n`;
+  }
+
   return `
 ${finalLines}
 
 ${shortcut(padEnd(label, KEYS.kill.length))} focus command
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
-`.trim();
+`.trimStart();
 }
 
 function firstHistoryLine(name) {
@@ -291,13 +304,13 @@ class Command {
     // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     switch (this.status.tag) {
       case "Running":
-        this.log(killingText(this.name));
+        this.log(SHOW_CURSOR + RESET_COLOR + killingText(this.name));
         this.status = {
           tag: "Killing",
           terminal: this.status.terminal,
           historyLengthWhenStartedKilling: this.history.length,
         };
-        if (isWindows) {
+        if (IS_WINDOWS) {
           this.status.terminal.kill();
         } else {
           // SIGHUP causes a silent exit for `npm run`.
@@ -308,7 +321,7 @@ class Command {
         break;
 
       case "Killing":
-        if (isWindows) {
+        if (IS_WINDOWS) {
           this.status.terminal.kill();
         } else {
           this.status.terminal.kill("SIGKILL");
@@ -336,7 +349,9 @@ function runCommands(rawCommands) {
   let attemptedKillAll = false;
 
   const printHistoryAndStartText = (command) => {
-    process.stdout.write(startText);
+    process.stdout.write(
+      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR + startText
+    );
     for (const data of command.history) {
       process.stdout.write(data);
     }
@@ -344,14 +359,18 @@ function runCommands(rawCommands) {
 
   const switchToDashboard = () => {
     current = { tag: "Dashboard" };
-    console.clear();
-    console.log(drawDashboard(commands, process.stdout.columns));
+    process.stdout.write(
+      HIDE_CURSOR +
+        DISABLE_ALTERNATE_SCREEN +
+        RESET_COLOR +
+        CLEAR +
+        drawDashboard(commands, process.stdout.columns, attemptedKillAll)
+    );
   };
 
   const switchToCommand = (index) => {
     const command = commands[index];
     current = { tag: "Command", index };
-    console.clear();
     printHistoryAndStartText(command);
   };
 
@@ -361,17 +380,15 @@ function runCommands(rawCommands) {
       (command) => command.status.tag !== "Exit"
     );
     if (notExited.length === 0) {
-      // Wait a little before exiting so we have time to redraw once more.
-      setImmediate(() => {
-        process.exit(0);
-      });
+      switchToDashboard();
+      process.exit(0);
     } else {
       for (const command of notExited) {
         command.kill();
       }
+      // So you can see how killing other commands go:
+      switchToDashboard();
     }
-    // So you can see how killing other commands go:
-    switchToDashboard();
   };
 
   const commands = rawCommands.map(
@@ -401,7 +418,11 @@ function runCommands(rawCommands) {
             }
           }
 
-          command.log(exitText(commands, command.name, exitCode));
+          command.log(
+            HIDE_CURSOR +
+              RESET_COLOR +
+              exitText(commands, command.name, exitCode)
+          );
 
           if (current.tag === "Dashboard") {
             // Redraw dashboard.
@@ -463,7 +484,7 @@ function runCommands(rawCommands) {
       console.error(error);
       for (const command of commands) {
         if (command.status.tag !== "Exit") {
-          if (isWindows) {
+          if (IS_WINDOWS) {
             command.status.terminal.kill();
           } else {
             command.status.terminal.kill("SIGKILL");
@@ -473,6 +494,12 @@ function runCommands(rawCommands) {
       process.exit(1);
     });
   }
+
+  process.on("exit", () => {
+    process.stdout.write(
+      SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + RESET_COLOR
+    );
+  });
 
   if (commands.length === 1) {
     switchToCommand(0);
@@ -534,7 +561,6 @@ function onStdin(
 
             case KEY_CODES.restart:
               command.start();
-              console.clear();
               printHistoryAndStartText(command);
               break;
           }
