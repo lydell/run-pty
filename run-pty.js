@@ -297,7 +297,11 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
-      this.status = { tag: "Exit", exitCode };
+      this.status = {
+        tag: "Exit",
+        exitCode,
+        killingWasSlow: this.status.tag === "Killing" && this.status.slow,
+      };
       this.onExit();
     });
 
@@ -308,7 +312,18 @@ class Command {
     // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     switch (this.status.tag) {
       case "Running":
-        this.status = { tag: "Killing", terminal: this.status.terminal };
+        this.status = {
+          tag: "Killing",
+          terminal: this.status.terminal,
+          slow: false,
+        };
+        setTimeout(() => {
+          if (this.status.tag === "Killing") {
+            this.status.slow = true;
+            // Ugly way to redraw:
+            this.onData("");
+          }
+        }, 100);
         if (IS_WINDOWS) {
           this.status.terminal.kill();
         } else {
@@ -317,8 +332,6 @@ class Command {
           // SIGTERM is needed for some programs (but is noisy for `npm run`).
           this.status.terminal.kill("SIGTERM");
         }
-        // Ugly way to redraw:
-        this.onData("");
         break;
 
       case "Killing":
@@ -351,15 +364,7 @@ function runCommands(rawCommands) {
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
 
-  const printHistoryAndExtraText = (command) => {
-    process.stdout.write(
-      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR
-    );
-
-    for (const data of command.history) {
-      process.stdout.write(data);
-    }
-
+  const printExtraText = (command) => {
     switch (command.status.tag) {
       case "Running":
         if (
@@ -371,9 +376,11 @@ function runCommands(rawCommands) {
         break;
 
       case "Killing":
-        process.stdout.write(
-          HIDE_CURSOR + RESET_COLOR + killingText(command.name)
-        );
+        if (command.status.slow) {
+          process.stdout.write(
+            HIDE_CURSOR + RESET_COLOR + killingText(command.name)
+          );
+        }
         break;
 
       case "Exit":
@@ -387,6 +394,18 @@ function runCommands(rawCommands) {
       default:
         throw new Error(`Unknown command status: ${command.status.tag}`);
     }
+  };
+
+  const printHistoryAndExtraText = (command) => {
+    process.stdout.write(
+      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR
+    );
+
+    for (const data of command.history) {
+      process.stdout.write(data);
+    }
+
+    printExtraText(command);
   };
 
   const switchToDashboard = () => {
@@ -459,8 +478,15 @@ function runCommands(rawCommands) {
             case "Command":
               if (current.index === index) {
                 const command = commands[index];
-                // Redraw current command.
-                printHistoryAndExtraText(command);
+                if (
+                  command.status.tag === "Exit" &&
+                  command.status.killingWasSlow
+                ) {
+                  // Redraw current command.
+                  printHistoryAndExtraText(command);
+                } else {
+                  printExtraText(command);
+                }
               }
               break;
 
