@@ -297,11 +297,7 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
-      this.status = {
-        tag: "Exit",
-        exitCode,
-        killingWasSlow: this.status.tag === "Killing" && this.status.slow,
-      };
+      this.status = { tag: "Exit", exitCode };
       this.onExit();
     });
 
@@ -364,7 +360,15 @@ function runCommands(rawCommands) {
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
 
-  const printExtraText = (command) => {
+  const printHistoryAndExtraText = (command) => {
+    process.stdout.write(
+      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR
+    );
+
+    for (const data of command.history) {
+      process.stdout.write(data);
+    }
+
     switch (command.status.tag) {
       case "Running":
         if (
@@ -394,18 +398,6 @@ function runCommands(rawCommands) {
       default:
         throw new Error(`Unknown command status: ${command.status.tag}`);
     }
-  };
-
-  const printHistoryAndExtraText = (command) => {
-    process.stdout.write(
-      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR
-    );
-
-    for (const data of command.history) {
-      process.stdout.write(data);
-    }
-
-    printExtraText(command);
   };
 
   const switchToDashboard = () => {
@@ -478,15 +470,8 @@ function runCommands(rawCommands) {
             case "Command":
               if (current.index === index) {
                 const command = commands[index];
-                if (
-                  command.status.tag === "Exit" &&
-                  command.status.killingWasSlow
-                ) {
-                  // Redraw current command.
-                  printHistoryAndExtraText(command);
-                } else {
-                  printExtraText(command);
-                }
+                // Redraw current command.
+                printHistoryAndExtraText(command);
               }
               break;
 
