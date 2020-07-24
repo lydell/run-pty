@@ -36,8 +36,6 @@ const DISABLE_ALTERNATE_SCREEN = "\u001B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\u001B[?2004l";
 const RESET_COLOR = "\u001B[0m";
 const CLEAR = IS_WINDOWS ? "\u001B[2J\u001B[0f" : "\u001B[2J\u001B[3J\u001B[H";
-const CLEAR_DOWN = "\u001B[0J";
-const MOVE_CURSOR_UP = (dy) => `\u001B[${dy}A`;
 
 const runningIndicator = "🟢";
 
@@ -102,7 +100,10 @@ function drawDashboard(commands, width, attemptedKillAll) {
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
-  if (attemptedKillAll) {
+  if (
+    attemptedKillAll &&
+    commands.every((command) => command.status.tag === "Exit")
+  ) {
     return `${finalLines}\n`;
   }
 
@@ -296,11 +297,8 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
-      const lastIsKillingText =
-        this.status.tag === "Killing" &&
-        this.history.length === this.status.historyLengthWhenStartedKilling;
       this.status = { tag: "Exit", exitCode };
-      this.onExit(exitCode, lastIsKillingText);
+      this.onExit();
     });
 
     this.status = { tag: "Running", terminal };
@@ -310,12 +308,7 @@ class Command {
     // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     switch (this.status.tag) {
       case "Running":
-        this.log(SHOW_CURSOR + RESET_COLOR + killingText(this.name));
-        this.status = {
-          tag: "Killing",
-          terminal: this.status.terminal,
-          historyLengthWhenStartedKilling: this.history.length,
-        };
+        this.status = { tag: "Killing", terminal: this.status.terminal };
         if (IS_WINDOWS) {
           this.status.terminal.kill();
         } else {
@@ -324,6 +317,8 @@ class Command {
           // SIGTERM is needed for some programs (but is noisy for `npm run`).
           this.status.terminal.kill("SIGTERM");
         }
+        // Ugly way to redraw:
+        this.onData("");
         break;
 
       case "Killing":
@@ -344,11 +339,6 @@ class Command {
     }
   }
 
-  log(data) {
-    this.pushHistory(data);
-    this.onData(data);
-  }
-
   pushHistory(data) {
     if (this.history.length > MAX_HISTORY) {
       this.history.shift();
@@ -361,19 +351,38 @@ function runCommands(rawCommands) {
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
 
-  const printHistoryAndStartText = (command) => {
+  const printHistoryAndExtraText = (command) => {
     process.stdout.write(
       SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR
     );
+
     for (const data of command.history) {
       process.stdout.write(data);
     }
-    if (
-      command.status.tag === "Running" &&
-      command.history.length > 0 &&
-      command.history[command.history.length - 1].endsWith("\n")
-    ) {
-      process.stdout.write(RESET_COLOR + runningText);
+
+    switch (command.status.tag) {
+      case "Running":
+        if (
+          command.history.length > 0 &&
+          command.history[command.history.length - 1].endsWith("\n")
+        ) {
+          process.stdout.write(RESET_COLOR + runningText);
+        }
+        break;
+
+      case "Killing":
+        process.stdout.write(RESET_COLOR + killingText(command.name));
+        break;
+
+      case "Exit":
+        process.stdout.write(
+          RESET_COLOR +
+            exitText(commands, command.name, command.status.exitCode)
+        );
+        break;
+
+      default:
+        throw new Error(`Unknown command status: ${command.status.tag}`);
     }
   };
 
@@ -391,7 +400,7 @@ function runCommands(rawCommands) {
   const switchToCommand = (index) => {
     const command = commands[index];
     current = { tag: "Command", index };
-    printHistoryAndStartText(command);
+    printHistoryAndExtraText(command);
   };
 
   const killAll = () => {
@@ -419,33 +428,46 @@ function runCommands(rawCommands) {
         args,
         onData: (data) => {
           if (current.tag === "Command" && current.index === index) {
-            process.stdout.write(data);
-          }
-        },
-        onExit: (exitCode, lastIsKillingText) => {
-          const command = commands[index];
+            const command = commands[current.index];
+            switch (command.status.tag) {
+              case "Running":
+                process.stdout.write(data);
+                break;
 
-          // Remove killing text.
-          if (lastIsKillingText) {
-            command.history.pop();
-            if (current.tag === "Command" && current.index === index) {
-              process.stdout.write(
-                MOVE_CURSOR_UP(
-                  killingText(command.name).split("\n").length - 1
-                ) + CLEAR_DOWN
-              );
+              case "Killing":
+                // Redraw with killingText at the bottom.
+                printHistoryAndExtraText(command);
+                break;
+
+              case "Exit":
+                throw new Error(
+                  `Received unexpected output from pty with pid ${this.status.terminal.pid} which already exited for: ${this.name}\n${data}`
+                );
+
+              default:
+                throw new Error(
+                  `Unknown command status: ${command.status.tag}`
+                );
             }
           }
+        },
+        onExit: () => {
+          switch (current.tag) {
+            case "Command":
+              if (current.index === index) {
+                const command = commands[index];
+                // Redraw current command.
+                printHistoryAndExtraText(command);
+              }
+              break;
 
-          command.log(
-            HIDE_CURSOR +
-              RESET_COLOR +
-              exitText(commands, command.name, exitCode)
-          );
+            case "Dashboard":
+              // Redraw dashboard.
+              switchToDashboard();
+              break;
 
-          if (current.tag === "Dashboard") {
-            // Redraw dashboard.
-            switchToDashboard();
+            default:
+              throw new Error(`Unknown current state: ${current.tag}`);
           }
 
           // Exit the whole program if all commands are killed.
@@ -486,7 +508,7 @@ function runCommands(rawCommands) {
       switchToDashboard,
       switchToCommand,
       killAll,
-      printHistoryAndStartText
+      printHistoryAndExtraText
     );
   });
 
@@ -534,7 +556,7 @@ function onStdin(
   switchToDashboard,
   switchToCommand,
   killAll,
-  printHistoryAndStartText
+  printHistoryAndExtraText
 ) {
   switch (current.tag) {
     case "Command": {
@@ -580,7 +602,7 @@ function onStdin(
 
             case KEY_CODES.restart:
               command.start();
-              printHistoryAndStartText(command);
+              printHistoryAndExtraText(command);
               break;
           }
           break;
@@ -655,7 +677,6 @@ module.exports = {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
-    exitText,
     help,
     parseArgs,
     summarizeLabels,
