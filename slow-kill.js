@@ -8,7 +8,7 @@ const signals = ["SIGHUP", "SIGINT", "SIGTERM"];
 for (const signal of signals) {
   process.on(signal, () => {
     if (message !== "") {
-      console.log(message);
+      console.log(`${message} (${signal})`);
     }
     setTimeout(() => {
       process.exit(0);

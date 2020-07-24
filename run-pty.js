@@ -371,12 +371,15 @@ function runCommands(rawCommands) {
         break;
 
       case "Killing":
-        process.stdout.write(RESET_COLOR + killingText(command.name));
+        process.stdout.write(
+          HIDE_CURSOR + RESET_COLOR + killingText(command.name)
+        );
         break;
 
       case "Exit":
         process.stdout.write(
-          RESET_COLOR +
+          HIDE_CURSOR +
+            RESET_COLOR +
             exitText(commands, command.name, command.status.exitCode)
         );
         break;
