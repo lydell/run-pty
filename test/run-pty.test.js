@@ -10,7 +10,6 @@ const {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
-    exitText,
     help,
     parseArgs,
     summarizeLabels,
@@ -38,10 +37,10 @@ describe("help", () => {
       Show output for one command at a time.
       Kill all at once.
 
-          ||1-9/a-z/A-Z|| switch command
+          ||1-9/a-z/A-Z|| focus command
           ||ctrl+z|| dashboard
-          ||ctrl+c|| exit current/all
-          ||enter || restart exited command
+          ||ctrl+c|| kill focused/all
+          ||enter || restart killed/exited command
 
       Separate the commands with a character of choice:
 
@@ -70,9 +69,9 @@ describe("dashboard", () => {
 
   test("empty", () => {
     expect(testDashboard([], 0)).toMatchInlineSnapshot(`
-      ||      || switch command
-      ||ctrl+c|| exit current/all
-      ||ctrl+z|| this dashboard
+      ||      || focus command
+      ||ctrl+c|| exit␊
+
     `);
   });
 
@@ -90,9 +89,9 @@ describe("dashboard", () => {
     ).toMatchInlineSnapshot(`
       ||| 1 |||  ⚪ exit 0  npm start
 
-      ||1     || switch command
-      ||ctrl+c|| exit current/all
-      ||ctrl+z|| this dashboard
+      ||1     || focus command
+      ||ctrl+c|| exit␊
+
     `);
   });
 
@@ -118,7 +117,7 @@ describe("dashboard", () => {
           },
           {
             command: ["ping", "localhost"],
-            status: { tag: "Running", terminal: { pid: 12345 } },
+            status: { tag: "Killing", terminal: { pid: 12345 } },
           },
           {
             command: ["yes"],
@@ -130,12 +129,12 @@ describe("dashboard", () => {
     ).toMatchInlineSnapshot(`
       ||| 1 |||  ⚪ exit 0      echo ./Some_script2.js -v '$end' 'hello world' '’quoted’' -…
       ||| 2 |||  🔴 exit 68     ping nope
-      ||| 3 |||  🟢 pid 12345   ping localhost
+      ||| 3 |||  ⭕ pid 12345   ping localhost
       ||| 4 |||  🟢 pid 123456  yes
 
-      ||1-4   || switch command
-      ||ctrl+c|| exit current/all
-      ||ctrl+z|| this dashboard
+      ||1-4   || focus command
+      ||ctrl+c|| force kill all␊
+
     `);
   });
 
@@ -212,9 +211,9 @@ describe("dashboard", () => {
       ||| Z |||  🟢 pid 10040  echo 60
       |||   |||  🟢 pid 10041  echo 61
 
-      ||1-9/a-z/A-Z|| switch command
-      ||ctrl+c|| exit current/all
-      ||ctrl+z|| this dashboard
+      ||1-9/a-z/A-Z|| focus command
+      ||ctrl+c|| kill all␊
+
     `);
   });
 });
@@ -241,34 +240,6 @@ describe("summarize labels", () => {
     expect(testLabels(60)).toBe("1-9/a-z/A-Y");
     expect(testLabels(61)).toBe("1-9/a-z/A-Z");
     expect(testLabels(62)).toBe("1-9/a-z/A-Z");
-  });
-});
-
-describe("exit text", () => {
-  test("exit 0", () => {
-    expect(replaceColor(exitText("npm start", 0))).toMatchInlineSnapshot(`
-      ␊
-      ⚪ npm start
-      exit 0
-
-      ||enter || restart
-      ||ctrl+c|| exit all
-      ||ctrl+z|| dashboard
-
-    `);
-  });
-
-  test("exit 1", () => {
-    expect(replaceColor(exitText("false", 1))).toMatchInlineSnapshot(`
-      ␊
-      🔴 false
-      exit 1
-
-      ||enter || restart
-      ||ctrl+c|| exit all
-      ||ctrl+z|| dashboard
-
-    `);
   });
 });
 
