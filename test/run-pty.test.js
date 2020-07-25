@@ -49,6 +49,17 @@ describe("help", () => {
           ||run-pty|| |@| ./report_progress.bash --root / --unit % |@| ping localhost
 
       Note: All arguments are strings and passed as-is – no shell script execution.
+      Use ||sh -c '...'|| or similar if you need that.
+
+      Environment variables:
+
+          ||RUN_PTY_MAX_HISTORY||
+              Higher → more command scrollback
+              Lower  → faster switching between commands
+              Default: 10000 (writes ≈ lines)
+
+          ||NO_COLOR|| and ||FORCE_COLOR||
+              Disable or force colored output.
     `);
   });
 });

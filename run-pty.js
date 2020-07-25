@@ -9,9 +9,11 @@ const pty = require("node-pty");
 // This is the same check that node-pty uses.
 const IS_WINDOWS = process.platform === "win32";
 
+const MAX_HISTORY_DEFAULT = 10000;
+
 const MAX_HISTORY = (() => {
   const env = process.env.RUN_PTY_MAX_HISTORY;
-  return /^\d+$/.test(env) ? Number(env) : 10000;
+  return /^\d+$/.test(env) ? Number(env) : MAX_HISTORY_DEFAULT;
 })();
 
 const KEYS = {
@@ -46,9 +48,9 @@ const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 const box = (string) =>
   colorette.bgWhite(colorette.black(colorette.bold(string)));
 
-const shortcut = (string) => colorette.blue(colorette.bold(string));
+const hl = (string) => colorette.blue(colorette.bold(string));
 
-const runPty = shortcut("run-pty");
+const runPty = hl("run-pty");
 const pc = colorette.gray("%");
 const at = colorette.gray("@");
 
@@ -57,10 +59,10 @@ Run several commands concurrently.
 Show output for one command at a time.
 Kill all at once.
 
-    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} focus command
-    ${shortcut(KEYS.dashboard)} dashboard
-    ${shortcut(KEYS.kill)} kill focused/all
-    ${shortcut(KEYS.restart)} restart killed/exited command
+    ${hl(summarizeLabels(ALL_LABELS.split("")))} focus command
+    ${hl(KEYS.dashboard)} dashboard
+    ${hl(KEYS.kill)} kill focused/all
+    ${hl(KEYS.restart)} restart killed/exited command
 
 Separate the commands with a character of choice:
 
@@ -69,6 +71,17 @@ Separate the commands with a character of choice:
     ${runPty} ${at} ./report_progress.bash --root / --unit % ${at} ping localhost
 
 Note: All arguments are strings and passed as-is – no shell script execution.
+Use ${hl("sh -c '...'")} or similar if you need that.
+
+Environment variables:
+
+    ${hl("RUN_PTY_MAX_HISTORY")}
+        Higher → more command scrollback
+        Lower  → faster switching between commands
+        Default: ${MAX_HISTORY_DEFAULT} (writes ≈ lines)
+
+    ${hl("NO_COLOR")} and ${hl("FORCE_COLOR")}
+        Disable or force colored output.
 `.trim();
 
 function killAllLabel(commands) {
@@ -110,8 +123,8 @@ function drawDashboard(commands, width, attemptedKillAll) {
   return `
 ${finalLines}
 
-${shortcut(padEnd(label, KEYS.kill.length))} focus command
-${shortcut(KEYS.kill)} ${killAllLabel(commands)}
+${hl(padEnd(label, KEYS.kill.length))} focus command
+${hl(KEYS.kill)} ${killAllLabel(commands)}
 `.trimStart();
 }
 
@@ -121,8 +134,8 @@ function firstHistoryLine(name) {
 
 // Newlines at the start/end are wanted here.
 const runningText = `
-${shortcut(KEYS.kill)} kill
-${shortcut(KEYS.dashboard)} dashboard
+${hl(KEYS.kill)} kill
+${hl(KEYS.dashboard)} dashboard
 
 `;
 
@@ -132,8 +145,8 @@ function killingText(commandName) {
 ${killingIndicator} ${commandName}
 killing…
 
-${shortcut(KEYS.kill)} force kill
-${shortcut(KEYS.dashboard)} dashboard
+${hl(KEYS.kill)} force kill
+${hl(KEYS.dashboard)} dashboard
 `;
 }
 
@@ -143,9 +156,9 @@ function exitText(commands, commandName, exitCode) {
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
-${shortcut(KEYS.restart)} restart
-${shortcut(KEYS.kill)} ${killAllLabel(commands)}
-${shortcut(KEYS.dashboard)} dashboard
+${hl(KEYS.restart)} restart
+${hl(KEYS.kill)} ${killAllLabel(commands)}
+${hl(KEYS.dashboard)} dashboard
 `;
 }
 

@@ -13,16 +13,16 @@ A use case is running several watchers. Maybe one or two for frontend (webpack, 
 ```json
 {
   "scripts": {
-    "watch:frontend": "webpack-dev-server",
-    "watch:backend": "nodemon server/index.ts",
-    "watch:all": "run-pty % npm run watch:frontend % npm run watch:backend"
+    "start": "run-pty % npm run frontend % npm run backend",
+    "frontend": "webpack-dev-server",
+    "backend": "nodemon server.js"
   }
 }
 ```
 
 ```
- 1   🟢 pid 78147  npm run 'watch:frontend'
- 2   🔴 exit 1     npm run 'watch:backend'
+ 1   🟢 pid 78147  npm run frontend
+ 2   🔴 exit 1     npm run backend
 
 1-2    focus command
 ctrl+c kill all
