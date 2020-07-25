@@ -200,7 +200,7 @@ function padEnd(string, maxLength) {
 function commandToPresentationName(command) {
   return command
     .map((part) =>
-      /^[\w./-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
+      /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
     )
     .join(" ");
 }
