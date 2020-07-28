@@ -32,11 +32,11 @@ $ npm start
 ➡️
 
 ```
- 1   🟢 pid 6241  npm run frontend
- 2   🟢 pid 6242  npm run backend
+[1]  🟢 pid 8807  npm run frontend
+[2]  🟢 pid 8808  npm run backend
 
-1-2    focus command
-ctrl+c kill all
+[1-2]    focus command
+[ctrl+c] kill all
 ```
 
 ➡️ <kbd>1</kbd> ️️➡️
@@ -47,10 +47,10 @@ ctrl+c kill all
 > @ frontend /Users/lydell/src/run-pty/demo
 > parcel watch index.html
 
-✨  Built in 50ms.
+✨  Built in 55ms.
 
-ctrl+c kill
-ctrl+z dashboard
+[ctrl+c] kill
+[ctrl+z] dashboard
 
 ▊
 ```
@@ -63,31 +63,31 @@ ctrl+z dashboard
 > @ frontend /Users/lydell/src/run-pty/demo
 > parcel watch index.html
 
-✨  Built in 50ms.
+✨  Built in 55ms.
 
 ⚪ npm run frontend
 exit 0
 
-enter  restart
-ctrl+c kill all
-ctrl+z dashboard
+[enter]  restart
+[ctrl+c] kill all
+[ctrl+z] dashboard
 ```
 
 ➡️ <kbd>ctrl+z</kbd> ➡️
 
 ```
- 1   ⚪ exit 0    npm run frontend
- 2   🟢 pid 6242  npm run backend
+[1]  ⚪ exit 0    npm run frontend
+[2]  🟢 pid 8808  npm run backend
 
-1-2    focus command
-ctrl+c kill all
+[1-2]    focus command
+[ctrl+c] kill all
 ```
 
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
- 1   ⚪ exit 0  npm run frontend
- 2   ⚪ exit 0  npm run backend
+[1]  ⚪ exit 0  npm run frontend
+[2]  ⚪ exit 0  npm run backend
 
 $ ▊
 ```

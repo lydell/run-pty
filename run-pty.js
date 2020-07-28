@@ -18,7 +18,7 @@ const MAX_HISTORY = (() => {
 
 const KEYS = {
   kill: "ctrl+c",
-  restart: "enter ", // Extra space for alignment.
+  restart: "enter",
   dashboard: "ctrl+z",
 };
 
@@ -45,14 +45,18 @@ const killingIndicator = "⭕";
 
 const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 
-const box = (string) =>
-  colorette.bgWhite(colorette.black(colorette.bold(string)));
-
 const hl = (string) => colorette.blue(colorette.bold(string));
+const dim = colorette.gray;
+
+const shortcut = (string, pad = true) =>
+  dim("[") +
+  hl(string) +
+  dim("]") +
+  (pad ? " ".repeat(Math.max(0, KEYS.kill.length - string.length)) : "");
 
 const runPty = hl("run-pty");
-const pc = colorette.gray("%");
-const at = colorette.gray("@");
+const pc = dim("%");
+const at = dim("@");
 
 const help = `
 Run several commands concurrently.
@@ -60,9 +64,9 @@ Show output for one command at a time.
 Kill all at once.
 
     ${hl(summarizeLabels(ALL_LABELS.split("")))} focus command
-    ${hl(KEYS.dashboard)} dashboard
-    ${hl(KEYS.kill)} kill focused/all
-    ${hl(KEYS.restart)} restart killed/exited command
+    ${shortcut(KEYS.dashboard)} dashboard
+    ${shortcut(KEYS.kill)} kill focused/all
+    ${shortcut(KEYS.restart)} restart killed/exited command
 
 Separate the commands with a character of choice:
 
@@ -95,7 +99,7 @@ function killAllLabel(commands) {
 // Newlines at the end are wanted here.
 function drawDashboard(commands, width, attemptedKillAll) {
   const lines = commands.map((command) => [
-    box(` ${command.label || " "} `),
+    shortcut(command.label, false),
     statusText(command.status),
     command.name,
   ]);
@@ -123,8 +127,8 @@ function drawDashboard(commands, width, attemptedKillAll) {
   return `
 ${finalLines}
 
-${hl(padEnd(label, KEYS.kill.length))} focus command
-${hl(KEYS.kill)} ${killAllLabel(commands)}
+${shortcut(label)} focus command
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 `.trimStart();
 }
 
@@ -134,8 +138,8 @@ function firstHistoryLine(name) {
 
 // Newlines at the start/end are wanted here.
 const runningText = `
-${hl(KEYS.kill)} kill
-${hl(KEYS.dashboard)} dashboard
+${shortcut(KEYS.kill)} kill
+${shortcut(KEYS.dashboard)} dashboard
 
 `;
 
@@ -145,8 +149,8 @@ function killingText(commandName) {
 ${killingIndicator} ${commandName}
 killing…
 
-${hl(KEYS.kill)} force kill
-${hl(KEYS.dashboard)} dashboard
+${shortcut(KEYS.kill)} force kill
+${shortcut(KEYS.dashboard)} dashboard
 `;
 }
 
@@ -156,9 +160,9 @@ function exitText(commands, commandName, exitCode) {
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
-${hl(KEYS.restart)} restart
-${hl(KEYS.kill)} ${killAllLabel(commands)}
-${hl(KEYS.dashboard)} dashboard
+${shortcut(KEYS.restart)} restart
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
+${shortcut(KEYS.dashboard)} dashboard
 `;
 }
 
