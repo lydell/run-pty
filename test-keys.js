@@ -16,9 +16,16 @@ process.stdin.on("data", (data) => {
 // `readline` splits that into:
 // "\u001b]", "1", "1", ";", "r", "g", "b", ":", "2", "8", "/", "2", "c", "/", "3", "4" "\u0007"
 // That breaks Vim, so we can’t use "keypress".
-process.stdin.on("keypress", (unknown, keypress) => {
-  console.log("keypress:", JSON.stringify(unknown), JSON.stringify(keypress));
-  if (keypress.ctrl && keypress.name === "c") {
-    process.exit();
+process.stdin.on(
+  "keypress",
+  /**
+   * @param {unknown} unknown
+   * @param {{ ctrl: boolean, name: string }} keypress
+   */
+  (unknown, keypress) => {
+    console.log("keypress:", JSON.stringify(unknown), JSON.stringify(keypress));
+    if (keypress.ctrl && keypress.name === "c") {
+      process.exit();
+    }
   }
-});
+);
