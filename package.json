@@ -25,12 +25,11 @@
     "xterm"
   ],
   "dependencies": {
-    "colorette": "^1.2.1",
     "node-pty": "^0.9.0"
   },
   "devDependencies": {
     "eslint": "7.5.0",
-    "eslint-plugin-jest": "23.18.0",
+    "eslint-plugin-jest": "23.19.0",
     "jest": "26.1.0",
     "prettier": "2.0.5"
   },

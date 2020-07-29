@@ -2,7 +2,6 @@
 
 "use strict";
 
-const colorette = require("colorette");
 const pty = require("node-pty");
 
 // node-pty does not support kill signals on Windows.
@@ -15,6 +14,8 @@ const MAX_HISTORY = (() => {
   const env = process.env.RUN_PTY_MAX_HISTORY;
   return /^\d+$/.test(env) ? Number(env) : MAX_HISTORY_DEFAULT;
 })();
+
+const NO_COLOR = "NO_COLOR" in process.env;
 
 const KEYS = {
   kill: "ctrl+c",
@@ -45,16 +46,20 @@ const killingIndicator = "⭕";
 
 const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 
-const hl = (string) => colorette.blue(colorette.bold(string));
-const dim = colorette.gray;
+const bold = NO_COLOR
+  ? (string) => string
+  : (string) => `\u001B[1m${string}${RESET_COLOR}`;
+const dim = NO_COLOR
+  ? (string) => string
+  : (string) => `\u001B[2m${string}${RESET_COLOR}`;
 
 const shortcut = (string, pad = true) =>
   dim("[") +
-  hl(string) +
+  bold(string) +
   dim("]") +
   (pad ? " ".repeat(Math.max(0, KEYS.kill.length - string.length)) : "");
 
-const runPty = hl("run-pty");
+const runPty = bold("run-pty");
 const pc = dim("%");
 const at = dim("@");
 
@@ -63,7 +68,7 @@ Run several commands concurrently.
 Show output for one command at a time.
 Kill all at once.
 
-    ${hl(summarizeLabels(ALL_LABELS.split("")))} focus command
+    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} focus command
     ${shortcut(KEYS.dashboard)} dashboard
     ${shortcut(KEYS.kill)} kill focused/all
     ${shortcut(KEYS.restart)} restart killed/exited command
@@ -75,17 +80,17 @@ Separate the commands with a character of choice:
     ${runPty} ${at} ./report_progress.bash --root / --unit % ${at} ping localhost
 
 Note: All arguments are strings and passed as-is – no shell script execution.
-Use ${hl("sh -c '...'")} or similar if you need that.
+Use ${bold("sh -c '...'")} or similar if you need that.
 
 Environment variables:
 
-    ${hl("RUN_PTY_MAX_HISTORY")}
+    ${bold("RUN_PTY_MAX_HISTORY")}
         Higher → more command scrollback
         Lower  → faster switching between commands
         Default: ${MAX_HISTORY_DEFAULT} (writes ≈ lines)
 
-    ${hl("NO_COLOR")} and ${hl("FORCE_COLOR")}
-        Disable or force colored output.
+    ${bold("NO_COLOR")}
+        Disable colored output.
 `.trim();
 
 function killAllLabel(commands) {
