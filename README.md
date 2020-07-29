@@ -32,8 +32,8 @@ $ npm start
 ➡️
 
 ```
-[1]  🟢 pid 8807  npm run frontend
-[2]  🟢 pid 8808  npm run backend
+[1]  🟢 pid 11084  npm run frontend
+[2]  🟢 pid 11085  npm run backend
 
 [1-2]    focus command
 [ctrl+c] kill all
@@ -45,9 +45,14 @@ $ npm start
 🟢 npm run frontend
 
 > @ frontend /Users/lydell/src/run-pty/demo
-> parcel watch index.html
+> parcel watch index.html --log-level 4
 
-✨  Built in 55ms.
+[9:51:27 AM]: Building...
+[9:51:27 AM]: Building index.html...
+[9:51:27 AM]: Built index.html...
+[9:51:27 AM]: Producing bundles...
+[9:51:27 AM]: Packaging...
+[9:51:27 AM]: ✨  Built in 67ms.
 
 [ctrl+c] kill
 [ctrl+z] dashboard
@@ -61,9 +66,14 @@ $ npm start
 🟢 npm run frontend
 
 > @ frontend /Users/lydell/src/run-pty/demo
-> parcel watch index.html
+> parcel watch index.html --log-level 4
 
-✨  Built in 55ms.
+[9:51:27 AM]: Building...
+[9:51:27 AM]: Building index.html...
+[9:51:27 AM]: Built index.html...
+[9:51:27 AM]: Producing bundles...
+[9:51:27 AM]: Packaging...
+[9:51:27 AM]: ✨  Built in 67ms.
 
 ⚪ npm run frontend
 exit 0
@@ -76,8 +86,8 @@ exit 0
 ➡️ <kbd>ctrl+z</kbd> ➡️
 
 ```
-[1]  ⚪ exit 0    npm run frontend
-[2]  🟢 pid 8808  npm run backend
+[1]  ⚪ exit 0     npm run frontend
+[2]  🟢 pid 11085  npm run backend
 
 [1-2]    focus command
 [ctrl+c] kill all
