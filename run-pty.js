@@ -33,12 +33,12 @@ const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 const LABEL_GROUPS = ["123456789", ALPHABET, ALPHABET.toUpperCase()];
 const ALL_LABELS = LABEL_GROUPS.join("");
 
-const HIDE_CURSOR = "\u001B[?25l";
-const SHOW_CURSOR = "\u001B[?25h";
-const DISABLE_ALTERNATE_SCREEN = "\u001B[?1049l";
-const DISABLE_BRACKETED_PASTE_MODE = "\u001B[?2004l";
-const RESET_COLOR = "\u001B[0m";
-const CLEAR = IS_WINDOWS ? "\u001B[2J\u001B[0f" : "\u001B[2J\u001B[3J\u001B[H";
+const HIDE_CURSOR = "\x1B[?25l";
+const SHOW_CURSOR = "\x1B[?25h";
+const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
+const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
+const RESET_COLOR = "\x1B[0m";
+const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 
 const runningIndicator = "🟢";
 
@@ -48,10 +48,10 @@ const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 
 const bold = NO_COLOR
   ? (string) => string
-  : (string) => `\u001B[1m${string}${RESET_COLOR}`;
+  : (string) => `\x1B[1m${string}${RESET_COLOR}`;
 const dim = NO_COLOR
   ? (string) => string
-  : (string) => `\u001B[2m${string}${RESET_COLOR}`;
+  : (string) => `\x1B[2m${string}${RESET_COLOR}`;
 
 const shortcut = (string, pad = true) =>
   dim("[") +
@@ -189,7 +189,7 @@ function statusText(status) {
 
 function removeColor(string) {
   // eslint-disable-next-line no-control-regex
-  return string.replace(/\x1b\[\d+m/g, "");
+  return string.replace(/\x1B\[\d+m/g, "");
 }
 
 function truncate(string, maxLength) {
