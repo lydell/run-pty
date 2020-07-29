@@ -104,7 +104,7 @@ function killAllLabel(commands) {
 // Newlines at the end are wanted here.
 function drawDashboard(commands, width, attemptedKillAll) {
   const lines = commands.map((command) => [
-    shortcut(command.label, false),
+    shortcut(command.label || " ", false),
     statusText(command.status),
     command.name,
   ]);
