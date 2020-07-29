@@ -511,6 +511,7 @@ function runCommands(rawCommands) {
             attemptedKillAll &&
             commands.every((command2) => command2.status.tag === "Exit")
           ) {
+            switchToDashboard();
             process.exit(0);
           }
         },
