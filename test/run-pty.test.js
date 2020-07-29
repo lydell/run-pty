@@ -11,9 +11,21 @@ const {
   },
 } = require("../run-pty");
 
+/**
+ * @param {string} string
+ * @returns {string}
+ */
 function replaceColor(string) {
   // eslint-disable-next-line no-control-regex
   return string.replace(/\x1B\[0m/g, "⧘").replace(/\x1B\[\d+m/g, "⧙");
+}
+
+/**
+ * @param {string} name
+ * @returns {undefined}
+ */
+function notCalled(name) {
+  throw new Error(`Expected ${name} not to be called!`);
 }
 
 // Make snapshots easier to read.
@@ -21,8 +33,9 @@ function replaceColor(string) {
 // After: `"string"`
 expect.addSnapshotSerializer({
   test: (value) => typeof value === "string",
+  /** @type {(value: unknown) => string} */
   print: (value) =>
-    value.replace(/^\n+|\n+$/, (match) => "␊\n".repeat(match.length)),
+    String(value).replace(/^\n+|\n+$/, (match) => "␊\n".repeat(match.length)),
 });
 
 describe("help", () => {
@@ -60,6 +73,12 @@ describe("help", () => {
 });
 
 describe("dashboard", () => {
+  /**
+   *
+   * @param {Array<{ command: Array<string>, status: import("../run-pty").Status }>} items
+   * @param {number} width
+   * @returns {string}
+   */
   function testDashboard(items, width) {
     return replaceColor(
       drawDashboard(
@@ -67,10 +86,42 @@ describe("dashboard", () => {
           label: ALL_LABELS[index] || "",
           name: commandToPresentationName(item.command),
           status: item.status,
+          // Unused in this case:
+          file: "file",
+          args: [],
+          history: [],
+          onData: () => notCalled("onData"),
+          onExit: () => notCalled("onExit"),
+          pushHistory: () => notCalled("pushHistory"),
+          start: () => notCalled("start"),
+          kill: () => notCalled("kill"),
         })),
-        width
+        width,
+        false
       )
     );
+  }
+
+  /**
+   *
+   * @param {{ pid: number }} init
+   * @returns {import("node-pty").IPty}
+   */
+  function fakeTerminal({ pid }) {
+    return {
+      pid,
+      // Unused in this case:
+      cols: 0,
+      rows: 0,
+      process: "process",
+      handleFlowControl: false,
+      onData: () => notCalled("onData") || { dispose: () => undefined },
+      onExit: () => notCalled("onExit") || { dispose: () => undefined },
+      on: () => notCalled("on"),
+      resize: () => notCalled("resize"),
+      write: () => notCalled("write"),
+      kill: () => notCalled("kill"),
+    };
   }
 
   test("empty", () => {
@@ -123,11 +174,18 @@ describe("dashboard", () => {
           },
           {
             command: ["ping", "localhost"],
-            status: { tag: "Killing", terminal: { pid: 12345 } },
+            status: {
+              tag: "Killing",
+              terminal: fakeTerminal({ pid: 12345 }),
+              slow: false,
+            },
           },
           {
             command: ["yes"],
-            status: { tag: "Running", terminal: { pid: 123456 } },
+            status: {
+              tag: "Running",
+              terminal: fakeTerminal({ pid: 123456 }),
+            },
           },
         ],
         80
@@ -149,7 +207,10 @@ describe("dashboard", () => {
       testDashboard(
         Array.from({ length: 62 }, (_, i) => ({
           command: ["echo", String(i)],
-          status: { tag: "Running", terminal: { pid: String(9980 + i) } },
+          status: {
+            tag: "Running",
+            terminal: fakeTerminal({ pid: 9980 + i }),
+          },
         })),
         80
       )
@@ -225,6 +286,10 @@ describe("dashboard", () => {
 });
 
 describe("summarize labels", () => {
+  /**
+   * @param {number} num
+   * @returns {string}
+   */
   function testLabels(num) {
     return summarizeLabels(ALL_LABELS.split("").slice(0, num));
   }
