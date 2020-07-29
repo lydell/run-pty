@@ -3,7 +3,6 @@
     "allowJs": true,
     "allowSyntheticDefaultImports": true,
     "checkJs": true,
-    "outDir": "dist",
     "forceConsistentCasingInFileNames": true,
     "importsNotUsedAsValues": "error",
     "isolatedModules": true,
@@ -14,14 +13,10 @@
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "outDir": "dist",
     "skipLibCheck": true,
     "strict": true,
     "target": "ESNext"
-    // "esModuleInterop": true,
   },
-  "exclude": [
-    "demo",
-    "node_modules",
-    "**/node_modules/*"
-  ]
+  "exclude": ["demo", "node_modules", "**/node_modules/*"]
 }
