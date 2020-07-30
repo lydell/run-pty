@@ -62,9 +62,10 @@ describe("help", () => {
       Environment variables:
 
           ⧙RUN_PTY_MAX_HISTORY⧘
+              Number of characters of output to remember.
               Higher → more command scrollback
               Lower  → faster switching between commands
-              Default: 10000 (writes ≈ lines)
+              Default: 1000000
 
           ⧙NO_COLOR⧘
               Disable colored output.
@@ -89,7 +90,7 @@ describe("dashboard", () => {
           // Unused in this case:
           file: "file",
           args: [],
-          history: [],
+          history: "",
           onData: () => notCalled("onData"),
           onExit: () => notCalled("onExit"),
           pushHistory: () => notCalled("pushHistory"),
