@@ -21,7 +21,7 @@ const pty = require("node-pty");
 // This is the same check that node-pty uses.
 const IS_WINDOWS = process.platform === "win32";
 
-const MAX_HISTORY_DEFAULT = 10000;
+const MAX_HISTORY_DEFAULT = 1000000;
 
 const MAX_HISTORY = (() => {
   const env = process.env.RUN_PTY_MAX_HISTORY;
@@ -113,9 +113,10 @@ Use ${bold("sh -c '...'")} or similar if you need that.
 Environment variables:
 
     ${bold("RUN_PTY_MAX_HISTORY")}
+        Number of characters of output to remember.
         Higher → more command scrollback
         Lower  → faster switching between commands
-        Default: ${MAX_HISTORY_DEFAULT} (writes ≈ lines)
+        Default: ${MAX_HISTORY_DEFAULT}
 
     ${bold("NO_COLOR")}
         Disable colored output.
@@ -386,8 +387,8 @@ class Command {
     this.name = commandToPresentationName([file, ...args]);
     this.onData = onData;
     this.onExit = onExit;
-    /** @type {Array<string>} */
-    this.history = [];
+    /** @type {string} */
+    this.history = "";
     /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
     this.start();
@@ -403,7 +404,7 @@ class Command {
       );
     }
 
-    this.history = [firstHistoryLine(this.name)];
+    this.history = firstHistoryLine(this.name);
 
     const terminal = pty.spawn(this.file, this.args, {
       cols: process.stdout.columns,
@@ -472,10 +473,10 @@ class Command {
    * @returns {void}
    */
   pushHistory(data) {
+    this.history += data;
     if (this.history.length > MAX_HISTORY) {
-      this.history.shift();
+      this.history = this.history.slice(-MAX_HISTORY);
     }
-    this.history.push(data);
   }
 }
 
@@ -493,19 +494,16 @@ function runCommands(rawCommands) {
    */
   const printHistoryAndExtraText = (command) => {
     process.stdout.write(
-      SHOW_CURSOR + DISABLE_ALTERNATE_SCREEN + RESET_COLOR + CLEAR
+      SHOW_CURSOR +
+        DISABLE_ALTERNATE_SCREEN +
+        RESET_COLOR +
+        CLEAR +
+        command.history
     );
-
-    for (const data of command.history) {
-      process.stdout.write(data);
-    }
 
     switch (command.status.tag) {
       case "Running":
-        if (
-          command.history.length > 0 &&
-          command.history[command.history.length - 1].endsWith("\n")
-        ) {
+        if (command.history.endsWith("\n")) {
           process.stdout.write(RESET_COLOR + runningText);
         }
         return undefined;
