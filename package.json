@@ -28,14 +28,14 @@
     "node-pty": "^0.9.0"
   },
   "devDependencies": {
-    "@types/jest": "26.0.7",
-    "@typescript-eslint/eslint-plugin": "^3.7.1",
-    "@typescript-eslint/parser": "3.6.0",
-    "eslint": "7.5.0",
-    "eslint-plugin-jest": "23.19.0",
-    "jest": "26.1.0",
+    "@types/jest": "26.0.8",
+    "@typescript-eslint/eslint-plugin": "3.7.1",
+    "@typescript-eslint/parser": "3.7.1",
+    "eslint": "7.6.0",
+    "eslint-plugin-jest": "23.20.0",
+    "jest": "26.2.2",
     "prettier": "2.0.5",
-    "typescript": "3.9.6"
+    "typescript": "3.9.7"
   },
   "scripts": {
     "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\" % make watch",
