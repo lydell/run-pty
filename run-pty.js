@@ -79,9 +79,9 @@ const dim = (string) => (NO_COLOR ? string : `\x1B[2m${string}${RESET_COLOR}`);
 
 /**
  * @param {string} string
- * @param {boolean} pad
+ * @param {{ pad?: boolean }} pad
  */
-const shortcut = (string, pad = true) =>
+const shortcut = (string, { pad = true } = {}) =>
   dim("[") +
   bold(string) +
   dim("]") +
@@ -164,7 +164,7 @@ const killAllLabel = (commands) =>
  */
 const drawDashboard = (commands, width, attemptedKillAll) => {
   const lines = commands.map((command) => [
-    shortcut(command.label || " ", false),
+    shortcut(command.label || " ", { pad: false }),
     statusText(command.status),
     command.name,
   ]);
@@ -652,9 +652,7 @@ const runCommands = (rawCommands) => {
 
   // Clean up all commands if someone tries to kill run-pty.
   for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
-    process.on(signal, () => {
-      killAll();
-    });
+    process.on(signal, killAll);
   }
 
   // Don’t leave running processes behind in case of an unexpected error.
