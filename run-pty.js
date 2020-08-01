@@ -91,6 +91,30 @@ const runPty = bold("run-pty");
 const pc = dim("%");
 const at = dim("@");
 
+/**
+ * @param {Array<string>} labels
+ * @returns {string}
+ */
+const summarizeLabels = (labels) => {
+  const numLabels = labels.length;
+  return LABEL_GROUPS.flatMap((group, index) => {
+    const previousLength = LABEL_GROUPS.slice(0, index).reduce(
+      (sum, previousGroup) => sum + previousGroup.length,
+      0
+    );
+    const currentLength = previousLength + group.length;
+    return numLabels > previousLength
+      ? numLabels < currentLength
+        ? group.slice(0, numLabels - previousLength)
+        : group
+      : [];
+  })
+    .map((group) =>
+      group.length === 1 ? group[0] : `${group[0]}-${group[group.length - 1]}`
+    )
+    .join("/");
+};
+
 const help = `
 Run several commands concurrently.
 Show output for one command at a time.
@@ -126,20 +150,19 @@ Environment variables:
  * @param {Array<Command>} commands
  * @returns {string}
  */
-function killAllLabel(commands) {
-  return commands.some((command) => command.status.tag === "Killing")
+const killAllLabel = (commands) =>
+  commands.some((command) => command.status.tag === "Killing")
     ? "force kill all"
     : commands.every((command) => command.status.tag === "Exit")
     ? "exit"
     : "kill all";
-}
 
 /**
  * @param {Array<Command>} commands
  * @param {number} width
  * @param {boolean} attemptedKillAll
  */
-function drawDashboard(commands, width, attemptedKillAll) {
+const drawDashboard = (commands, width, attemptedKillAll) => {
   const lines = commands.map((command) => [
     shortcut(command.label || " ", false),
     statusText(command.status),
@@ -173,15 +196,13 @@ ${finalLines}
 ${shortcut(label)} focus command
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 `.trimStart();
-}
+};
 
 /**
  * @param {string} name
  * @returns {string}
  */
-function firstHistoryLine(name) {
-  return `${runningIndicator} ${name}\n`;
-}
+const firstHistoryLine = (name) => `${runningIndicator} ${name}\n`;
 
 // Newlines at the start/end are wanted here.
 const runningText = `
@@ -194,16 +215,15 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @param {string} commandName
  * @returns {string}
  */
-function killingText(commandName) {
+const killingText = (commandName) =>
   // Newlines at the start/end are wanted here.
-  return `
+  `
 ${killingIndicator} ${commandName}
 killing…
 
 ${shortcut(KEYS.kill)} force kill
 ${shortcut(KEYS.dashboard)} dashboard
 `;
-}
 
 /**
  * @param {Array<Command>} commands
@@ -211,9 +231,9 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @param {number} exitCode
  * @returns {string}
  */
-function exitText(commands, commandName, exitCode) {
+const exitText = (commands, commandName, exitCode) =>
   // Newlines at the start/end are wanted here.
-  return `
+  `
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
@@ -221,13 +241,12 @@ ${shortcut(KEYS.restart)} restart
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
 `;
-}
 
 /**
  * @param {Status} status
  * @returns {string}
  */
-function statusText(status) {
+const statusText = (status) => {
   switch (status.tag) {
     case "Running":
       return `${runningIndicator} pid ${status.terminal.pid}`;
@@ -238,76 +257,50 @@ function statusText(status) {
     case "Exit":
       return `${exitIndicator(status.exitCode)} exit ${status.exitCode}`;
   }
-}
+};
 
 /**
  * @param {string} string
  * @returns {string}
  */
-function removeColor(string) {
+const removeColor = (string) =>
   // eslint-disable-next-line no-control-regex
-  return string.replace(/\x1B\[\d+m/g, "");
-}
+  string.replace(/\x1B\[\d+m/g, "");
 
 /**
  * @param {string} string
  * @param {number} maxLength
  * @returns {string}
  */
-function truncate(string, maxLength) {
+const truncate = (string, maxLength) => {
   const diff = removeColor(string).length - maxLength;
   return diff <= 0 ? string : `${string.slice(0, -(diff + 2))}…`;
-}
+};
 
 /**
  * @param {string} string
  * @param {number} maxLength
  * @returns {string}
  */
-function padEnd(string, maxLength) {
+const padEnd = (string, maxLength) => {
   const chars = Array.from(string);
   return chars
     .concat(
       Array.from({ length: Math.max(0, maxLength - chars.length) }, () => " ")
     )
     .join("");
-}
+};
 
 /**
  * @param {Array<string>} command
  * @returns {string}
  */
-function commandToPresentationName(command) {
-  return command
+const commandToPresentationName = (command) =>
+  command
     .map((part) =>
       /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
     )
     .join(" ");
-}
-
-/**
- * @param {Array<string>} labels
- * @returns {string}
- */
-function summarizeLabels(labels) {
-  const numLabels = labels.length;
-  return LABEL_GROUPS.flatMap((group, index) => {
-    const previousLength = LABEL_GROUPS.slice(0, index).reduce(
-      (sum, previousGroup) => sum + previousGroup.length,
-      0
-    );
-    const currentLength = previousLength + group.length;
-    return numLabels > previousLength
-      ? numLabels < currentLength
-        ? group.slice(0, numLabels - previousLength)
-        : group
-      : [];
-  })
-    .map((group) =>
-      group.length === 1 ? group[0] : `${group[0]}-${group[group.length - 1]}`
-    )
-    .join("/");
-}
 
 /**
  * @typedef {
@@ -321,7 +314,7 @@ function summarizeLabels(labels) {
  * @param {Array<string>} args
  * @returns {ParseResult}
  */
-function parseArgs(args) {
+const parseArgs = (args) => {
   if (args.length === 0 || args[0] === "-h" || args[0] === "--help") {
     return { tag: "Help" };
   }
@@ -368,7 +361,7 @@ function parseArgs(args) {
     tag: "Parsed",
     commands,
   };
-}
+};
 
 class Command {
   /**
@@ -483,7 +476,7 @@ class Command {
 /**
  * @param {Array<Array<string>>} rawCommands
  */
-function runCommands(rawCommands) {
+const runCommands = (rawCommands) => {
   /** @type {Current} */
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
@@ -692,7 +685,7 @@ function runCommands(rawCommands) {
   } else {
     switchToDashboard();
   }
-}
+};
 
 /**
  * @param {string} data
@@ -704,7 +697,7 @@ function runCommands(rawCommands) {
  * @param {(command: Command) => void} printHistoryAndExtraText
  * @returns {undefined}
  */
-function onStdin(
+const onStdin = (
   data,
   current,
   commands,
@@ -712,7 +705,7 @@ function onStdin(
   switchToCommand,
   killAll,
   printHistoryAndExtraText
-) {
+) => {
   switch (current.tag) {
     case "Command": {
       const command = commands[current.index];
@@ -784,12 +777,12 @@ function onStdin(
         }
       }
   }
-}
+};
 
 /**
  * @returns {undefined}
  */
-function run() {
+const run = () => {
   if (!process.stdin.isTTY) {
     console.error(
       "run-pty must be connected to a terminal (“is TTY”) to run properly."
@@ -812,7 +805,7 @@ function run() {
       console.error(parseResult.message);
       process.exit(1);
   }
-}
+};
 
 // @ts-ignore
 if (require.main === module) {
