@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "scripts": {
+    "start": "sleep 1 && run-pty % npm run frontend % npm run backend",
+    "frontend": "parcel watch index.html --log-level 4",
+    "backend": "nodemon server.js"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.4",
+    "parcel": "^1.12.4",
+    "run-pty": "file:.."
+  }
+}

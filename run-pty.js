@@ -2,12 +2,39 @@
 
 "use strict";
 
-const colorette = require("colorette");
 const pty = require("node-pty");
+
+/**
+ * @typedef {
+    | { tag: "Running", terminal: import("node-pty").IPty }
+    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean }
+    | { tag: "Exit", exitCode: number }
+   } Status
+ *
+ * @typedef {
+    | { tag: "Command", index: number }
+    | { tag: "Dashboard" }
+   } Current
+ */
+
+// node-pty does not support kill signals on Windows.
+// This is the same check that node-pty uses.
+const IS_WINDOWS = process.platform === "win32";
+
+const MAX_HISTORY_DEFAULT = 1000000;
+
+const MAX_HISTORY = (() => {
+  const env = process.env.RUN_PTY_MAX_HISTORY;
+  return env !== undefined && /^\d+$/.test(env)
+    ? Number(env)
+    : MAX_HISTORY_DEFAULT;
+})();
+
+const NO_COLOR = "NO_COLOR" in process.env;
 
 const KEYS = {
   kill: "ctrl+c",
-  restart: "enter ", // Extra space for alignment.
+  restart: "enter",
   dashboard: "ctrl+z",
 };
 
@@ -21,25 +48,82 @@ const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 const LABEL_GROUPS = ["123456789", ALPHABET, ALPHABET.toUpperCase()];
 const ALL_LABELS = LABEL_GROUPS.join("");
 
+const HIDE_CURSOR = "\x1B[?25l";
+const SHOW_CURSOR = "\x1B[?25h";
+const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
+const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
+const RESET_COLOR = "\x1B[0m";
+const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
+
 const runningIndicator = "🟢";
 
+const killingIndicator = "⭕";
+
+/**
+ * @param {number} exitCode
+ * @returns {string}
+ */
 const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
 
-const shortcut = (string) => colorette.blue(colorette.bold(string));
+/**
+ * @param {string} string
+ * @returns {string}
+ */
+const bold = (string) => (NO_COLOR ? string : `\x1B[1m${string}${RESET_COLOR}`);
 
-const runPty = shortcut("run-pty");
-const pc = colorette.gray("%");
-const at = colorette.gray("@");
+/**
+ * @param {string} string
+ * @returns {string}
+ */
+const dim = (string) => (NO_COLOR ? string : `\x1B[2m${string}${RESET_COLOR}`);
+
+/**
+ * @param {string} string
+ * @param {{ pad?: boolean }} pad
+ */
+const shortcut = (string, { pad = true } = {}) =>
+  dim("[") +
+  bold(string) +
+  dim("]") +
+  (pad ? " ".repeat(Math.max(0, KEYS.kill.length - string.length)) : "");
+
+const runPty = bold("run-pty");
+const pc = dim("%");
+const at = dim("@");
+
+/**
+ * @param {Array<string>} labels
+ * @returns {string}
+ */
+const summarizeLabels = (labels) => {
+  const numLabels = labels.length;
+  return LABEL_GROUPS.flatMap((group, index) => {
+    const previousLength = LABEL_GROUPS.slice(0, index).reduce(
+      (sum, previousGroup) => sum + previousGroup.length,
+      0
+    );
+    const currentLength = previousLength + group.length;
+    return numLabels > previousLength
+      ? numLabels < currentLength
+        ? group.slice(0, numLabels - previousLength)
+        : group
+      : [];
+  })
+    .map((group) =>
+      group.length === 1 ? group[0] : `${group[0]}-${group[group.length - 1]}`
+    )
+    .join("/");
+};
 
 const help = `
 Run several commands concurrently.
 Show output for one command at a time.
 Kill all at once.
 
-    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} switch command
+    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} focus command
     ${shortcut(KEYS.dashboard)} dashboard
-    ${shortcut(KEYS.kill)} exit current/all
-    ${shortcut(KEYS.restart)} restart exited command
+    ${shortcut(KEYS.kill)} kill focused/all
+    ${shortcut(KEYS.restart)} restart killed/exited command
 
 Separate the commands with a character of choice:
 
@@ -48,13 +132,39 @@ Separate the commands with a character of choice:
     ${runPty} ${at} ./report_progress.bash --root / --unit % ${at} ping localhost
 
 Note: All arguments are strings and passed as-is – no shell script execution.
+Use ${bold("sh -c '...'")} or similar if you need that.
+
+Environment variables:
+
+    ${bold("RUN_PTY_MAX_HISTORY")}
+        Number of characters of output to remember.
+        Higher → more command scrollback
+        Lower  → faster switching between commands
+        Default: ${MAX_HISTORY_DEFAULT}
+
+    ${bold("NO_COLOR")}
+        Disable colored output.
 `.trim();
 
-function drawDashboard(commands, width) {
+/**
+ * @param {Array<Command>} commands
+ * @returns {string}
+ */
+const killAllLabel = (commands) =>
+  commands.some((command) => command.status.tag === "Killing")
+    ? "force kill all"
+    : commands.every((command) => command.status.tag === "Exit")
+    ? "exit"
+    : "kill all";
+
+/**
+ * @param {Array<Command>} commands
+ * @param {number} width
+ * @param {boolean} attemptedKillAll
+ */
+const drawDashboard = (commands, width, attemptedKillAll) => {
   const lines = commands.map((command) => [
-    colorette.bgWhite(
-      colorette.black(colorette.bold(` ${command.label || " "} `))
-    ),
+    shortcut(command.label || " ", { pad: false }),
     statusText(command.status),
     command.name,
   ]);
@@ -72,93 +182,139 @@ function drawDashboard(commands, width) {
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
+  if (
+    attemptedKillAll &&
+    commands.every((command) => command.status.tag === "Exit")
+  ) {
+    return `${finalLines}\n`;
+  }
+
+  // Newlines at the end are wanted here.
   return `
 ${finalLines}
 
-${shortcut(padEnd(label, KEYS.kill.length))} switch command
-${shortcut(KEYS.kill)} exit current/all
-${shortcut(KEYS.dashboard)} this dashboard
-`.trim();
-}
+${shortcut(label)} focus command
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
+`.trimStart();
+};
 
-function firstHistoryLine(name) {
-  return `${runningIndicator} ${name}\n`;
-}
+/**
+ * @param {string} name
+ * @returns {string}
+ */
+const firstHistoryLine = (name) => `${runningIndicator} ${name}\n`;
 
-// Newlines at start/end are wanted here.
-function exitText(commandName, exitCode) {
-  return `
+// Newlines at the start/end are wanted here.
+const runningText = `
+${shortcut(KEYS.kill)} kill
+${shortcut(KEYS.dashboard)} dashboard
+
+`;
+
+/**
+ * @param {string} commandName
+ * @returns {string}
+ */
+const killingText = (commandName) =>
+  // Newlines at the start/end are wanted here.
+  `
+${killingIndicator} ${commandName}
+killing…
+
+${shortcut(KEYS.kill)} force kill
+${shortcut(KEYS.dashboard)} dashboard
+`;
+
+/**
+ * @param {Array<Command>} commands
+ * @param {string} commandName
+ * @param {number} exitCode
+ * @returns {string}
+ */
+const exitText = (commands, commandName, exitCode) =>
+  // Newlines at the start/end are wanted here.
+  `
 ${exitIndicator(exitCode)} ${commandName}
 exit ${exitCode}
 
 ${shortcut(KEYS.restart)} restart
-${shortcut(KEYS.kill)} exit all
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
 `;
-}
 
-function statusText(status) {
+/**
+ * @param {Status} status
+ * @returns {string}
+ */
+const statusText = (status) => {
   switch (status.tag) {
     case "Running":
       return `${runningIndicator} pid ${status.terminal.pid}`;
 
+    case "Killing":
+      return `${killingIndicator} pid ${status.terminal.pid}`;
+
     case "Exit":
       return `${exitIndicator(status.exitCode)} exit ${status.exitCode}`;
-
-    default:
-      throw new Error("Unknown command status", status);
   }
-}
+};
 
-function removeColor(string) {
+/**
+ * @param {string} string
+ * @returns {string}
+ */
+const removeColor = (string) =>
   // eslint-disable-next-line no-control-regex
-  return string.replace(/\x1b\[\d+m/g, "");
-}
+  string.replace(/\x1B\[\d+m/g, "");
 
-function truncate(string, maxLength) {
+/**
+ * @param {string} string
+ * @param {number} maxLength
+ * @returns {string}
+ */
+const truncate = (string, maxLength) => {
   const diff = removeColor(string).length - maxLength;
   return diff <= 0 ? string : `${string.slice(0, -(diff + 2))}…`;
-}
+};
 
-function padEnd(string, maxLength) {
+/**
+ * @param {string} string
+ * @param {number} maxLength
+ * @returns {string}
+ */
+const padEnd = (string, maxLength) => {
   const chars = Array.from(string);
   return chars
     .concat(
       Array.from({ length: Math.max(0, maxLength - chars.length) }, () => " ")
     )
     .join("");
-}
+};
 
-function commandToPresentationName(command) {
-  return command
+/**
+ * @param {Array<string>} command
+ * @returns {string}
+ */
+const commandToPresentationName = (command) =>
+  command
     .map((part) =>
-      /^[\w./-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
+      /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
     )
     .join(" ");
-}
 
-function summarizeLabels(labels) {
-  const numLabels = labels.length;
-  return LABEL_GROUPS.map((group, index) => {
-    const previousLength = LABEL_GROUPS.slice(0, index).reduce(
-      (sum, previousGroup) => sum + previousGroup.length,
-      0
-    );
-    const currentLength = previousLength + group.length;
-    return numLabels > previousLength
-      ? numLabels < currentLength
-        ? group.slice(0, numLabels - previousLength)
-        : group
-      : undefined;
-  })
-    .filter(Boolean)
-    .map((group) =>
-      group.length === 1 ? group[0] : `${group[0]}-${group[group.length - 1]}`
-    )
-    .join("/");
-}
+/**
+ * @typedef {
+    | { tag: "Help" }
+    | { tag: "Error", message: string }
+    | { tag: "Parsed", commands: Array<Array<string>> }
+   } ParseResult
+ */
 
-function parseArgs(args) {
+/**
+ * @param {Array<string>} args
+ * @returns {ParseResult}
+ */
+const parseArgs = (args) => {
   if (args.length === 0 || args[0] === "-h" || args[0] === "--help") {
     return { tag: "Help" };
   }
@@ -205,9 +361,18 @@ function parseArgs(args) {
     tag: "Parsed",
     commands,
   };
-}
+};
 
 class Command {
+  /**
+   * @param {{
+      label: string,
+      file: string,
+      args: Array<string>,
+      onData: (data: string) => undefined,
+      onExit: () => undefined,
+     }} commandInit
+   */
   constructor({ label, file, args, onData, onExit }) {
     this.label = label;
     this.file = file;
@@ -215,19 +380,24 @@ class Command {
     this.name = commandToPresentationName([file, ...args]);
     this.onData = onData;
     this.onExit = onExit;
-    this.history = [];
+    /** @type {string} */
+    this.history = "";
+    /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
     this.start();
   }
 
+  /**
+   * @returns {void}
+   */
   start() {
-    if (this.status.tag === "Running") {
+    if (this.status.tag !== "Exit") {
       throw new Error(
-        `pty already running with pid ${this.status.terminal.pid} for: ${this.name}`
+        `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.name}`
       );
     }
 
-    this.history = [firstHistoryLine(this.name)];
+    this.history = firstHistoryLine(this.name);
 
     const terminal = pty.spawn(this.file, this.args, {
       cols: process.stdout.columns,
@@ -235,7 +405,7 @@ class Command {
     });
 
     const disposeOnData = terminal.onData((data) => {
-      this.history.push(data);
+      this.pushHistory(data);
       this.onData(data);
     });
 
@@ -243,49 +413,157 @@ class Command {
       disposeOnData.dispose();
       disposeOnExit.dispose();
       this.status = { tag: "Exit", exitCode };
-      this.onExit(exitCode);
+      this.onExit();
     });
 
     this.status = { tag: "Running", terminal };
   }
 
-  log(data) {
-    this.history.push(data);
-    this.onData(data);
+  /**
+   * @returns {undefined}
+   */
+  kill() {
+    // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
+    switch (this.status.tag) {
+      case "Running":
+        this.status = {
+          tag: "Killing",
+          terminal: this.status.terminal,
+          slow: false,
+        };
+        setTimeout(() => {
+          if (this.status.tag === "Killing") {
+            this.status.slow = true;
+            // Ugly way to redraw:
+            this.onData("");
+          }
+        }, 100);
+        if (IS_WINDOWS) {
+          this.status.terminal.kill();
+        } else {
+          // SIGHUP causes a silent exit for `npm run`.
+          this.status.terminal.kill("SIGHUP");
+          // SIGTERM is needed for some programs (but is noisy for `npm run`).
+          this.status.terminal.kill("SIGTERM");
+        }
+        return undefined;
+
+      case "Killing":
+        if (IS_WINDOWS) {
+          this.status.terminal.kill();
+        } else {
+          this.status.terminal.kill("SIGKILL");
+        }
+        return undefined;
+
+      case "Exit":
+        throw new Error(`Cannot kill already exited pty for: ${this.name}`);
+    }
+  }
+
+  /**
+   * @param {string} data
+   * @returns {void}
+   */
+  pushHistory(data) {
+    this.history += data;
+    if (this.history.length > MAX_HISTORY) {
+      this.history = this.history.slice(-MAX_HISTORY);
+    }
   }
 }
 
-function runCommands(rawCommands) {
+/**
+ * @param {Array<Array<string>>} rawCommands
+ */
+const runCommands = (rawCommands) => {
+  /** @type {Current} */
   let current = { tag: "Dashboard" };
+  let attemptedKillAll = false;
 
-  const printHistory = (command) => {
-    for (const data of command.history) {
-      process.stdout.write(data);
+  /**
+   * @param {Command} command
+   * @returns {undefined}
+   */
+  const printHistoryAndExtraText = (command) => {
+    process.stdout.write(
+      SHOW_CURSOR +
+        DISABLE_ALTERNATE_SCREEN +
+        RESET_COLOR +
+        CLEAR +
+        command.history
+    );
+
+    switch (command.status.tag) {
+      case "Running":
+        if (command.history.endsWith("\n")) {
+          process.stdout.write(RESET_COLOR + runningText);
+        }
+        return undefined;
+
+      case "Killing":
+        if (command.status.slow) {
+          process.stdout.write(
+            HIDE_CURSOR + RESET_COLOR + killingText(command.name)
+          );
+        }
+        return undefined;
+
+      case "Exit":
+        process.stdout.write(
+          HIDE_CURSOR +
+            RESET_COLOR +
+            exitText(commands, command.name, command.status.exitCode)
+        );
+        return undefined;
     }
   };
 
+  /**
+   * @returns {void}
+   */
   const switchToDashboard = () => {
     current = { tag: "Dashboard" };
-    console.clear();
-    console.log(drawDashboard(commands, process.stdout.columns));
+    process.stdout.write(
+      HIDE_CURSOR +
+        DISABLE_ALTERNATE_SCREEN +
+        RESET_COLOR +
+        CLEAR +
+        drawDashboard(commands, process.stdout.columns, attemptedKillAll)
+    );
   };
 
+  /**
+   * @param {number} index
+   * @returns {void}
+   */
   const switchToCommand = (index) => {
     const command = commands[index];
     current = { tag: "Command", index };
-    console.clear();
-    printHistory(command);
+    printHistoryAndExtraText(command);
   };
 
+  /**
+   * @returns {void}
+   */
   const killAll = () => {
-    for (const command of commands) {
-      if (command.status.tag === "Running") {
-        command.status.terminal.kill();
+    attemptedKillAll = true;
+    const notExited = commands.filter(
+      (command) => command.status.tag !== "Exit"
+    );
+    if (notExited.length === 0) {
+      switchToDashboard();
+      process.exit(0);
+    } else {
+      for (const command of notExited) {
+        command.kill();
       }
+      // So you can see how killing other commands go:
+      switchToDashboard();
     }
-    process.exit(0);
   };
 
+  /** @type {Array<Command>} */
   const commands = rawCommands.map(
     ([file, ...args], index) =>
       new Command({
@@ -294,15 +572,49 @@ function runCommands(rawCommands) {
         args,
         onData: (data) => {
           if (current.tag === "Command" && current.index === index) {
-            process.stdout.write(data);
+            const command = commands[current.index];
+            switch (command.status.tag) {
+              case "Running":
+                process.stdout.write(data);
+                return undefined;
+
+              case "Killing":
+                // Redraw with killingText at the bottom.
+                printHistoryAndExtraText(command);
+                return undefined;
+
+              case "Exit":
+                throw new Error(
+                  `Received unexpected output from already exited pty for: ${command.name}\n${data}`
+                );
+            }
+          } else {
+            return undefined;
           }
         },
-        onExit: (exitCode) => {
-          const command = commands[index];
-          command.log(exitText(command.name, exitCode));
-          if (current.tag === "Dashboard") {
-            // Redraw dashboard.
+        onExit: () => {
+          // Exit the whole program if all commands are killed.
+          if (
+            attemptedKillAll &&
+            commands.every((command2) => command2.status.tag === "Exit")
+          ) {
             switchToDashboard();
+            process.exit(0);
+          }
+
+          switch (current.tag) {
+            case "Command":
+              if (current.index === index) {
+                const command = commands[index];
+                // Redraw current command.
+                printHistoryAndExtraText(command);
+              }
+              return undefined;
+
+            case "Dashboard":
+              // Redraw dashboard.
+              switchToDashboard();
+              return undefined;
           }
         },
       })
@@ -325,17 +637,44 @@ function runCommands(rawCommands) {
   });
 
   process.stdin.setRawMode(true);
-  process.stdin.setEncoding("utf8");
 
   process.stdin.on("data", (data) => {
     onStdin(
-      data,
+      data.toString("utf8"),
       current,
       commands,
       switchToDashboard,
       switchToCommand,
       killAll,
-      printHistory
+      printHistoryAndExtraText
+    );
+  });
+
+  // Clean up all commands if someone tries to kill run-pty.
+  for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+    process.on(signal, killAll);
+  }
+
+  // Don’t leave running processes behind in case of an unexpected error.
+  for (const event of ["uncaughtException", "unhandledRejection"]) {
+    process.on(event, (error) => {
+      console.error(error);
+      for (const command of commands) {
+        if (command.status.tag !== "Exit") {
+          if (IS_WINDOWS) {
+            command.status.terminal.kill();
+          } else {
+            command.status.terminal.kill("SIGKILL");
+          }
+        }
+      }
+      process.exit(1);
+    });
+  }
+
+  process.on("exit", () => {
+    process.stdout.write(
+      SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + RESET_COLOR
     );
   });
 
@@ -344,17 +683,27 @@ function runCommands(rawCommands) {
   } else {
     switchToDashboard();
   }
-}
+};
 
-function onStdin(
+/**
+ * @param {string} data
+ * @param {Current} current
+ * @param {Array<Command>} commands
+ * @param {() => void} switchToDashboard
+ * @param {(index: number) => void} switchToCommand
+ * @param {() => void} killAll
+ * @param {(command: Command) => void} printHistoryAndExtraText
+ * @returns {undefined}
+ */
+const onStdin = (
   data,
   current,
   commands,
   switchToDashboard,
   switchToCommand,
   killAll,
-  printHistory
-) {
+  printHistoryAndExtraText
+) => {
   switch (current.tag) {
     case "Command": {
       const command = commands[current.index];
@@ -362,48 +711,58 @@ function onStdin(
         case "Running":
           switch (data) {
             case KEY_CODES.kill:
-              command.status.terminal.kill();
-              break;
+              command.kill();
+              return undefined;
 
             case KEY_CODES.dashboard:
               switchToDashboard();
-              break;
+              return undefined;
 
             default:
               command.status.terminal.write(data);
-              break;
+              return undefined;
           }
-          break;
+
+        case "Killing":
+          switch (data) {
+            case KEY_CODES.kill:
+              command.kill();
+              return undefined;
+
+            case KEY_CODES.dashboard:
+              switchToDashboard();
+              return undefined;
+
+            default:
+              return undefined;
+          }
 
         case "Exit":
           switch (data) {
             case KEY_CODES.kill:
               killAll();
-              break;
+              return undefined;
 
             case KEY_CODES.dashboard:
               switchToDashboard();
-              break;
+              return undefined;
 
             case KEY_CODES.restart:
               command.start();
-              command.history.unshift("\n");
-              printHistory(command);
-              break;
-          }
-          break;
+              printHistoryAndExtraText(command);
+              return undefined;
 
-        default:
-          throw new Error("Unknown command status", command);
+            default:
+              return undefined;
+          }
       }
-      break;
     }
 
     case "Dashboard":
       switch (data) {
         case KEY_CODES.kill:
           killAll();
-          break;
+          return undefined;
 
         default: {
           const commandIndex = commands.findIndex(
@@ -412,17 +771,16 @@ function onStdin(
           if (commandIndex !== -1) {
             switchToCommand(commandIndex);
           }
-          break;
+          return undefined;
         }
       }
-      break;
-
-    default:
-      throw new Error("Unknown current", current);
   }
-}
+};
 
-function run() {
+/**
+ * @returns {undefined}
+ */
+const run = () => {
   if (!process.stdin.isTTY) {
     console.error(
       "run-pty must be connected to a terminal (“is TTY”) to run properly."
@@ -436,24 +794,18 @@ function run() {
     case "Help":
       console.log(help);
       process.exit(0);
-      break;
 
     case "Parsed":
       runCommands(parseResult.commands);
-      break;
+      return undefined;
 
     case "Error":
       console.error(parseResult.message);
       process.exit(1);
-      break;
-
-    default:
-      console.error("Unknown parseResult", parseResult);
-      process.exit(1);
-      break;
   }
-}
+};
 
+// @ts-ignore
 if (require.main === module) {
   run();
 }
@@ -463,7 +815,6 @@ module.exports = {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
-    exitText,
     help,
     parseArgs,
     summarizeLabels,
