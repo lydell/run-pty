@@ -401,7 +401,7 @@ class Command {
 
     this.history = firstHistoryLine(this.name);
 
-    const { file, args } = crossSpawnParse(this.file, this.args, {});
+    const { command: file, args } = crossSpawnParse(this.file, this.args, {});
     const terminal = pty.spawn(file, args, {
       cols: process.stdout.columns,
       rows: process.stdout.rows,
