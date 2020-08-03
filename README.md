@@ -111,6 +111,7 @@ $ ▊
 ## Credits
 
 - [microsoft/node-pty] does all the heavy lifting of running the commands.
+- [moxystudio/node-cross-spawn] is used for Windows support.
 - [apiel/run-screen] was the inspiration for this tool.
 
 ## iTerm2 flicker
@@ -131,4 +132,5 @@ There might still be occasional flicker. Hopefully the iTerm2 developers will im
 [concurrently]: https://github.com/kimmobrunfeldt/concurrently
 [iterm2]: https://www.iterm2.com/
 [microsoft/node-pty]: https://github.com/microsoft/node-pty
+[moxystudio/node-cross-spawn]: https://github.com/moxystudio/node-cross-spawn
 [tmux]: https://github.com/tmux/tmux

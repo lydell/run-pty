@@ -3,6 +3,7 @@
 "use strict";
 
 const pty = require("node-pty");
+const crossSpawnParse = require("cross-spawn/lib/parse");
 
 /**
  * @typedef {
@@ -55,15 +56,16 @@ const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const RESET_COLOR = "\x1B[0m";
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 
-const runningIndicator = "🟢";
+const runningIndicator = IS_WINDOWS ? ">" : "🟢";
 
-const killingIndicator = "⭕";
+const killingIndicator = IS_WINDOWS ? "@" : "⭕";
 
 /**
  * @param {number} exitCode
  * @returns {string}
  */
-const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
+const exitIndicator = (exitCode) =>
+  exitCode === 0 ? (IS_WINDOWS ? "." : "⚪") : IS_WINDOWS ? "!" : "🔴";
 
 /**
  * @param {string} string
@@ -399,7 +401,8 @@ class Command {
 
     this.history = firstHistoryLine(this.name);
 
-    const terminal = pty.spawn(this.file, this.args, {
+    const { file, args } = crossSpawnParse(this.file, this.args, {});
+    const terminal = pty.spawn(file, args, {
       cols: process.stdout.columns,
       rows: process.stdout.rows,
     });
