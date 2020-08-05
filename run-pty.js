@@ -55,16 +55,16 @@ const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const RESET_COLOR = "\x1B[0m";
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 
-const runningIndicator = IS_WINDOWS
-  ? NO_COLOR
-    ? "›"
-    : `\x1B[92m●${RESET_COLOR}`
+const runningIndicator = NO_COLOR
+  ? "›"
+  : IS_WINDOWS
+  ? `\x1B[92m●${RESET_COLOR}`
   : "🟢";
 
-const killingIndicator = IS_WINDOWS
-  ? NO_COLOR
-    ? "○"
-    : `\x1B[91m○${RESET_COLOR}`
+const killingIndicator = NO_COLOR
+  ? "○"
+  : IS_WINDOWS
+  ? `\x1B[91m○${RESET_COLOR}`
   : "⭕";
 
 /**
@@ -73,15 +73,15 @@ const killingIndicator = IS_WINDOWS
  */
 const exitIndicator = (exitCode) =>
   exitCode === 0
-    ? IS_WINDOWS
-      ? NO_COLOR
-        ? "●"
-        : `\x1B[97m●${RESET_COLOR}`
-      : "⚪"
-    : IS_WINDOWS
     ? NO_COLOR
-      ? "×"
-      : `\x1B[91m●${RESET_COLOR}`
+      ? "●"
+      : IS_WINDOWS
+      ? `\x1B[97m●${RESET_COLOR}`
+      : "⚪"
+    : NO_COLOR
+    ? "×"
+    : IS_WINDOWS
+    ? `\x1B[91m●${RESET_COLOR}`
     : "🔴";
 
 /**
