@@ -55,16 +55,34 @@ const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const RESET_COLOR = "\x1B[0m";
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 
-const runningIndicator = IS_WINDOWS ? ">" : "🟢";
+const runningIndicator = IS_WINDOWS
+  ? NO_COLOR
+    ? "›"
+    : `\x1B[92m●${RESET_COLOR}`
+  : "🟢";
 
-const killingIndicator = IS_WINDOWS ? "@" : "⭕";
+const killingIndicator = IS_WINDOWS
+  ? NO_COLOR
+    ? "○"
+    : `\x1B[91m○${RESET_COLOR}`
+  : "⭕";
 
 /**
  * @param {number} exitCode
  * @returns {string}
  */
 const exitIndicator = (exitCode) =>
-  exitCode === 0 ? (IS_WINDOWS ? "." : "⚪") : IS_WINDOWS ? "!" : "🔴";
+  exitCode === 0
+    ? IS_WINDOWS
+      ? NO_COLOR
+        ? "●"
+        : `\x1B[97m●${RESET_COLOR}`
+      : "⚪"
+    : IS_WINDOWS
+    ? NO_COLOR
+      ? "×"
+      : `\x1B[91m●${RESET_COLOR}`
+    : "🔴";
 
 /**
  * @param {string} string
@@ -172,7 +190,7 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
 
   const widestStatus = Math.max(
     0,
-    ...lines.map(([, status]) => Array.from(status).length)
+    ...lines.map(([, status]) => Array.from(removeColor(status)).length)
   );
 
   const finalLines = lines
@@ -287,7 +305,10 @@ const padEnd = (string, maxLength) => {
   const chars = Array.from(string);
   return chars
     .concat(
-      Array.from({ length: Math.max(0, maxLength - chars.length) }, () => " ")
+      Array.from(
+        { length: Math.max(0, maxLength - removeColor(string).length) },
+        () => " "
+      )
     )
     .join("");
 };
@@ -302,6 +323,17 @@ const commandToPresentationName = (command) =>
       /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "'\\''")}'`
     )
     .join(" ");
+
+/**
+ * @param {string} arg
+ * @returns {string}
+ */
+const cmdEscape = (arg) =>
+  // https://qntm.org/cmd
+  `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`.replace(
+    /[()%!^"<>&|;, ]/g,
+    "^$&"
+  );
 
 /**
  * @typedef {
@@ -401,7 +433,17 @@ class Command {
     this.history = firstHistoryLine(this.name);
 
     const [file, args] = IS_WINDOWS
-      ? ["cmd.exe", ["/d", "/s", "/q", "/c", this.file, ...this.args]]
+      ? [
+          "cmd.exe",
+          [
+            "/d",
+            "/s",
+            "/q",
+            "/c",
+            cmdEscape(this.file),
+            ...this.args.map(cmdEscape),
+          ].join(" "),
+        ]
       : [this.file, this.args];
     const terminal = pty.spawn(file, args, {
       cols: process.stdout.columns,
