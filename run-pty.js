@@ -3,7 +3,6 @@
 "use strict";
 
 const pty = require("node-pty");
-// const crossSpawnParse = require("cross-spawn/lib/parse");
 
 /**
  * @typedef {
@@ -401,9 +400,8 @@ class Command {
 
     this.history = firstHistoryLine(this.name);
 
-    // const { command: file, args } = crossSpawnParse(this.file, this.args, {});
     const [file, args] = IS_WINDOWS
-      ? ["", ["/d", "/s", "/q", "/c", ...this.args]]
+      ? ["cmd.exe", ["/d", "/s", "/q", "/c", this.file, ...this.args]]
       : [this.file, this.args];
     const terminal = pty.spawn(file, args, {
       cols: process.stdout.columns,
