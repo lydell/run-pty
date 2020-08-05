@@ -301,17 +301,12 @@ const truncate = (string, maxLength) => {
  * @param {number} maxLength
  * @returns {string}
  */
-const padEnd = (string, maxLength) => {
-  const chars = Array.from(string);
-  return chars
-    .concat(
-      Array.from(
-        { length: Math.max(0, maxLength - removeColor(string).length) },
-        () => " "
-      )
-    )
-    .join("");
-};
+const padEnd = (string, maxLength) =>
+  string +
+  Array.from(
+    { length: Math.max(0, maxLength - Array.from(removeColor(string)).length) },
+    () => " "
+  ).join("");
 
 /**
  * @param {Array<string>} command
@@ -320,7 +315,11 @@ const padEnd = (string, maxLength) => {
 const commandToPresentationName = (command) =>
   command
     .map((part) =>
-      /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "'\\''")}'`
+      /^[\w.,:/=@%+-]+$/.test(part)
+        ? part
+        : `'${part.replace(/'/g, "'\\''")}'`
+            .replace(/^''(\\'')/, "$1")
+            .replace(/('\\')''$/, "$1")
     )
     .join(" ");
 
