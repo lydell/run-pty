@@ -315,11 +315,20 @@ const padEnd = (string, maxLength) =>
 const commandToPresentationName = (command) =>
   command
     .map((part) =>
-      /^[\w.,:/=@%+-]+$/.test(part)
-        ? part
-        : `'${part.replace(/'/g, "'\\''")}'`
-            .replace(/^''(\\'')/, "$1")
-            .replace(/('\\')''$/, "$1")
+      part === ""
+        ? "''"
+        : part
+            .split(/(')/)
+            .map((subPart) =>
+              subPart === ""
+                ? ""
+                : subPart === "'"
+                ? "\\'"
+                : /^[\w.,:/=@%+-]+$/.test(subPart)
+                ? subPart
+                : `'${subPart}'`
+            )
+            .join("")
     )
     .join(" ");
 

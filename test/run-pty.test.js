@@ -163,9 +163,9 @@ describe("dashboard", () => {
               "./Some_script2.js",
               "-v",
               "$end",
-              "'quoted'thing'",
+              "",
+              "'quoted'th|ng'",
               "hello world",
-              "--long-flag",
             ],
             status: { tag: "Exit", exitCode: 0 },
           },
@@ -192,7 +192,7 @@ describe("dashboard", () => {
         80
       )
     ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙1⧘⧙]⧘  ⚪ exit 0      echo ./Some_script2.js -v '$end' \\''quoted'\\''thing'\\' 'hel…
+      ⧙[⧘⧙1⧘⧙]⧘  ⚪ exit 0      echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'he…
       ⧙[⧘⧙2⧘⧙]⧘  🔴 exit 68     ping nope
       ⧙[⧘⧙3⧘⧙]⧘  ⭕ pid 12345   ping localhost
       ⧙[⧘⧙4⧘⧙]⧘  🟢 pid 123456  yes
