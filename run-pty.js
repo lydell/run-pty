@@ -300,7 +300,7 @@ const padEnd = (string, maxLength) => {
 const commandToPresentationName = (command) =>
   command
     .map((part) =>
-      /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
+      /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "'\\''")}'`
     )
     .join(" ");
 
@@ -788,9 +788,7 @@ const onStdin = (
  */
 const run = () => {
   if (!process.stdin.isTTY) {
-    console.error(
-      "run-pty must be connected to a terminal (“is TTY”) to run properly."
-    );
+    console.error("run-pty requires stdin to be a TTY to run properly.");
     process.exit(1);
   }
 
