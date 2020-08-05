@@ -328,11 +328,18 @@ const commandToPresentationName = (command) =>
  * @param {string} arg
  * @returns {string}
  */
-const cmdEscape = (arg) =>
+const cmdEscapeMetaChars = (arg) =>
   // https://qntm.org/cmd
-  `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`.replace(
-    /[()%!^"<>&|;, ]/g,
-    "^$&"
+  arg.replace(/[()%!^"<>&|;, ]/g, "^$&");
+
+/**
+ * @param {string} arg
+ * @returns {string}
+ */
+const cmdEscapeArg = (arg) =>
+  // https://qntm.org/cmd
+  cmdEscapeMetaChars(
+    `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
   );
 
 /**
@@ -440,8 +447,8 @@ class Command {
             "/s",
             "/q",
             "/c",
-            cmdEscape(this.file),
-            ...this.args.map(cmdEscape),
+            cmdEscapeMetaChars(this.file),
+            ...this.args.map(cmdEscapeArg),
           ].join(" "),
         ]
       : [this.file, this.args];
