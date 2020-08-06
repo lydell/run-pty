@@ -1,3 +1,9 @@
+### Version 2.1.0 (2020-08-06)
+
+run-pty now works on Windows!
+
+Also, in `NO_COLOR` mode you no longer get colored emoji.
+
 ### Version 2.0.0 (2020-08-03)
 
 This release features proper killing of commands and some UI tweaks.
