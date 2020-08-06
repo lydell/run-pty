@@ -55,15 +55,34 @@ const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const RESET_COLOR = "\x1B[0m";
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 
-const runningIndicator = "🟢";
+const runningIndicator = NO_COLOR
+  ? "›"
+  : IS_WINDOWS
+  ? `\x1B[92m●${RESET_COLOR}`
+  : "🟢";
 
-const killingIndicator = "⭕";
+const killingIndicator = NO_COLOR
+  ? "○"
+  : IS_WINDOWS
+  ? `\x1B[91m○${RESET_COLOR}`
+  : "⭕";
 
 /**
  * @param {number} exitCode
  * @returns {string}
  */
-const exitIndicator = (exitCode) => (exitCode === 0 ? "⚪" : "🔴");
+const exitIndicator = (exitCode) =>
+  exitCode === 0
+    ? NO_COLOR
+      ? "●"
+      : IS_WINDOWS
+      ? `\x1B[97m●${RESET_COLOR}`
+      : "⚪"
+    : NO_COLOR
+    ? "×"
+    : IS_WINDOWS
+    ? `\x1B[91m●${RESET_COLOR}`
+    : "🔴";
 
 /**
  * @param {string} string
@@ -171,7 +190,7 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
 
   const widestStatus = Math.max(
     0,
-    ...lines.map(([, status]) => Array.from(status).length)
+    ...lines.map(([, status]) => Array.from(removeColor(status)).length)
   );
 
   const finalLines = lines
@@ -282,14 +301,12 @@ const truncate = (string, maxLength) => {
  * @param {number} maxLength
  * @returns {string}
  */
-const padEnd = (string, maxLength) => {
-  const chars = Array.from(string);
-  return chars
-    .concat(
-      Array.from({ length: Math.max(0, maxLength - chars.length) }, () => " ")
-    )
-    .join("");
-};
+const padEnd = (string, maxLength) =>
+  string +
+  Array.from(
+    { length: Math.max(0, maxLength - Array.from(removeColor(string)).length) },
+    () => " "
+  ).join("");
 
 /**
  * @param {Array<string>} command
@@ -298,9 +315,40 @@ const padEnd = (string, maxLength) => {
 const commandToPresentationName = (command) =>
   command
     .map((part) =>
-      /^[\w.,:/=@%+-]+$/.test(part) ? part : `'${part.replace(/'/g, "’")}'`
+      part === ""
+        ? "''"
+        : part
+            .split(/(')/)
+            .map((subPart) =>
+              subPart === ""
+                ? ""
+                : subPart === "'"
+                ? "\\'"
+                : /^[\w.,:/=@%+-]+$/.test(subPart)
+                ? subPart
+                : `'${subPart}'`
+            )
+            .join("")
     )
     .join(" ");
+
+/**
+ * @param {string} arg
+ * @returns {string}
+ */
+const cmdEscapeMetaChars = (arg) =>
+  // https://qntm.org/cmd
+  arg.replace(/[()%!^"<>&|;, ]/g, "^$&");
+
+/**
+ * @param {string} arg
+ * @returns {string}
+ */
+const cmdEscapeArg = (arg) =>
+  // https://qntm.org/cmd
+  cmdEscapeMetaChars(
+    `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
+  );
 
 /**
  * @typedef {
@@ -399,7 +447,20 @@ class Command {
 
     this.history = firstHistoryLine(this.name);
 
-    const terminal = pty.spawn(this.file, this.args, {
+    const [file, args] = IS_WINDOWS
+      ? [
+          "cmd.exe",
+          [
+            "/d",
+            "/s",
+            "/q",
+            "/c",
+            cmdEscapeMetaChars(this.file),
+            ...this.args.map(cmdEscapeArg),
+          ].join(" "),
+        ]
+      : [this.file, this.args];
+    const terminal = pty.spawn(file, args, {
       cols: process.stdout.columns,
       rows: process.stdout.rows,
     });
@@ -782,9 +843,7 @@ const onStdin = (
  */
 const run = () => {
   if (!process.stdin.isTTY) {
-    console.error(
-      "run-pty must be connected to a terminal (“is TTY”) to run properly."
-    );
+    console.error("run-pty requires stdin to be a TTY to run properly.");
     process.exit(1);
   }
 

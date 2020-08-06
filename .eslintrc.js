@@ -26,7 +26,6 @@ module.exports = {
     "prefer-destructuring": ["error", { array: false, object: true }],
     "prefer-template": "error",
     eqeqeq: "error",
-    strict: "error",
   },
   overrides: [
     {
@@ -38,6 +37,12 @@ module.exports = {
         ...require("@typescript-eslint/eslint-plugin").configs[
           "recommended-requiring-type-checking"
         ].rules,
+      },
+    },
+    {
+      files: "*.js",
+      rules: {
+        strict: "error",
       },
     },
     {
