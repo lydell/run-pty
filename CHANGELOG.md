@@ -1,3 +1,7 @@
+### Version 2.1.1 (2020-09-10)
+
+Fixed: The first line of output and keyboard shortcuts now show up as they should on Windows ([#3](https://github.com/lydell/run-pty/issues/3)).
+
 ### Version 2.1.0 (2020-08-06)
 
 run-pty now works on Windows!
