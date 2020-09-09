@@ -52,7 +52,7 @@ const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
-const RESET_COLOR = "\x1B[0m";
+const RESET_COLOR = "\x1B[m";
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 
 const runningIndicator = NO_COLOR
@@ -284,7 +284,7 @@ const statusText = (status) => {
  */
 const removeColor = (string) =>
   // eslint-disable-next-line no-control-regex
-  string.replace(/\x1B\[\d+m/g, "");
+  string.replace(/\x1B\[\d*m/g, "");
 
 /**
  * @param {string} string
@@ -463,7 +463,15 @@ class Command {
     const terminal = pty.spawn(file, args, {
       cols: process.stdout.columns,
       rows: process.stdout.rows,
+      // Avoid conpty adding escape sequences to clear the screen:
+      conptyInheritCursor: true,
     });
+
+    if (IS_WINDOWS) {
+      // Needed when using `conptyInheritCursor`. Otherwise the spawned
+      // terminals hang and will not run their command.
+      terminal.write("\x1B[1;1R");
+    }
 
     const disposeOnData = terminal.onData((data) => {
       this.pushHistory(data);
@@ -557,7 +565,10 @@ const runCommands = (rawCommands) => {
 
     switch (command.status.tag) {
       case "Running":
-        if (command.history.endsWith("\n")) {
+        if (
+          command.history.endsWith("\n") ||
+          command.history.endsWith(`\n${RESET_COLOR}`)
+        ) {
           process.stdout.write(RESET_COLOR + runningText);
         }
         return undefined;

@@ -17,7 +17,7 @@ const {
  */
 function replaceColor(string) {
   // eslint-disable-next-line no-control-regex
-  return string.replace(/\x1B\[0m/g, "⧘").replace(/\x1B\[\d+m/g, "⧙");
+  return string.replace(/\x1B\[0?m/g, "⧘").replace(/\x1B\[\d+m/g, "⧙");
 }
 
 /**
