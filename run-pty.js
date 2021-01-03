@@ -2,6 +2,7 @@
 
 "use strict";
 
+const fs = require("fs");
 const pty = require("node-pty");
 
 /**
@@ -184,13 +185,15 @@ const killAllLabel = (commands) =>
 const drawDashboard = (commands, width, attemptedKillAll) => {
   const lines = commands.map((command) => [
     shortcut(command.label || " ", { pad: false }),
-    statusText(command.status),
-    command.name,
+    statusText(command.status, command.statusFromRules),
+    command.title,
   ]);
 
   const widestStatus = Math.max(
     0,
-    ...lines.map(([, status]) => Array.from(removeColor(status)).length)
+    ...lines.map(
+      ([, status]) => Array.from(removeGraphicRenditions(status)).length
+    )
   );
 
   const finalLines = lines
@@ -263,12 +266,13 @@ ${shortcut(KEYS.dashboard)} dashboard
 
 /**
  * @param {Status} status
+ * @param {string | undefined} statusFromRules
  * @returns {string}
  */
-const statusText = (status) => {
+const statusText = (status, statusFromRules = runningIndicator) => {
   switch (status.tag) {
     case "Running":
-      return `${runningIndicator} pid ${status.terminal.pid}`;
+      return `${statusFromRules} pid ${status.terminal.pid}`;
 
     case "Killing":
       return `${killingIndicator} pid ${status.terminal.pid}`;
@@ -282,9 +286,9 @@ const statusText = (status) => {
  * @param {string} string
  * @returns {string}
  */
-const removeColor = (string) =>
+const removeGraphicRenditions = (string) =>
   // eslint-disable-next-line no-control-regex
-  string.replace(/\x1B\[\d*m/g, "");
+  string.replace(/\x1B\[(?:\d+(?:;\d+)+)?m/g, "");
 
 /**
  * @param {string} string
@@ -292,7 +296,7 @@ const removeColor = (string) =>
  * @returns {string}
  */
 const truncate = (string, maxLength) => {
-  const diff = removeColor(string).length - maxLength;
+  const diff = removeGraphicRenditions(string).length - maxLength;
   return diff <= 0 ? string : `${string.slice(0, -(diff + 2))}…`;
 };
 
@@ -304,7 +308,12 @@ const truncate = (string, maxLength) => {
 const padEnd = (string, maxLength) =>
   string +
   Array.from(
-    { length: Math.max(0, maxLength - Array.from(removeColor(string)).length) },
+    {
+      length: Math.max(
+        0,
+        maxLength - Array.from(removeGraphicRenditions(string)).length
+      ),
+    },
     () => " "
   ).join("");
 
@@ -353,9 +362,17 @@ const cmdEscapeArg = (arg) =>
 /**
  * @typedef {
     | { tag: "Help" }
+    | { tag: "NoCommands" }
     | { tag: "Error", message: string }
-    | { tag: "Parsed", commands: Array<Array<string>> }
+    | { tag: "Parsed", commands: Array<CommandDescription> }
    } ParseResult
+ *
+ * @typedef {{
+    title: string,
+    cwd: string,
+    command: Array<string>,
+    status: Array<[RegExp, string]>
+   }} CommandDescription
  */
 
 /**
@@ -367,18 +384,28 @@ const parseArgs = (args) => {
     return { tag: "Help" };
   }
 
-  const delimiter = args[0];
-
-  if (/^[\w-]*$/.test(delimiter)) {
-    return {
-      tag: "Error",
-      message: [
-        "The first argument is the delimiter to use between commands.",
-        "It must not be empty or a-z/0-9/underscores/dashes only.",
-        "Maybe try % as delimiter?",
-      ].join("\n"),
-    };
+  if (args.length === 1) {
+    try {
+      const commands = parseNDJSON(fs.readFileSync(args[0], "utf8"));
+      return commands.length === 0
+        ? { tag: "NoCommands" }
+        : { tag: "Parsed", commands };
+    } catch (error) {
+      return {
+        tag: "Error",
+        message: [
+          "The first argument is either the delimiter to use between commands,",
+          "or the path to an NDJSON file that describes the commands.",
+          "If you meant to use a file, make sure it exists.",
+          "Otherwise, choose a delimiter like % and provide at least one command.",
+          "Failed to read command descriptions file as NDJSON:",
+          error instanceof Error ? error.message : "Unknown error",
+        ].join("\n"),
+      };
+    }
   }
+
+  const delimiter = args[0];
 
   let command = [];
   const commands = [];
@@ -399,39 +426,202 @@ const parseArgs = (args) => {
   }
 
   if (commands.length === 0) {
-    return {
-      tag: "Error",
-      message: "You must specify at least one command to run.",
-    };
+    return { tag: "NoCommands" };
   }
 
   return {
     tag: "Parsed",
-    commands,
+    commands: commands.map((command2) => ({
+      title: commandToPresentationName(command2),
+      cwd: ".",
+      command: command2,
+      status: [],
+    })),
   };
 };
+
+/**
+ * @param {string} string
+ * @returns {Array<CommandDescription>}
+ */
+const parseNDJSON = (string) =>
+  string.split("\n").flatMap((line, lineIndex) => {
+    const trimmed = line.trim();
+    if (trimmed === "") {
+      return [];
+    }
+
+    /**
+     * @param {string} message
+     * @returns {Error}
+     */
+    const lineError = (message) =>
+      new Error(`Line ${lineIndex + 1}: ${message}`);
+
+    /** @type {unknown} */
+    let json;
+
+    try {
+      json = JSON.parse(trimmed);
+    } catch (error) {
+      throw lineError(
+        error instanceof Error ? error.message : "Unknown JSON.parse error"
+      );
+    }
+
+    if (typeof json !== "object" || Array.isArray(json) || json === null) {
+      throw lineError(`Expected a JSON object but got: ${trimmed}`);
+    }
+
+    /** @type {Partial<CommandDescription>} */
+    const commandDescription = {};
+
+    for (const [key, value] of Object.entries(json)) {
+      switch (key) {
+        case "title":
+          if (typeof value !== "string") {
+            throw lineError(
+              `title: Expected a string but got: ${JSON.stringify(value)}`
+            );
+          }
+          commandDescription.title = value;
+          break;
+
+        case "cwd":
+          if (typeof value !== "string") {
+            throw lineError(
+              `cwd: Expected a string but got: ${JSON.stringify(value)}`
+            );
+          }
+          commandDescription.cwd = value;
+          break;
+
+        case "command": {
+          if (!Array.isArray(value)) {
+            throw lineError(
+              `command: Expected an array but got: ${JSON.stringify(value)}`
+            );
+          }
+
+          const command = [];
+          for (const [index, item] of value.entries()) {
+            if (typeof item !== "string") {
+              throw lineError(
+                `command[${index}]: Expected a string but got: ${JSON.stringify(
+                  value
+                )}`
+              );
+            }
+            command.push(item);
+          }
+
+          if (command.length === 0) {
+            throw lineError("command: Expected a non-empty array");
+          }
+
+          commandDescription.command = command;
+          break;
+        }
+
+        case "status": {
+          if (
+            typeof json !== "object" ||
+            Array.isArray(json) ||
+            json === null
+          ) {
+            throw lineError(
+              `status: Expected an object but got: ${JSON.stringify(value)}`
+            );
+          }
+
+          /** @type {Array<[RegExp, string]>} */
+          const status = [];
+          for (const [key2, value2] of Object.entries(value)) {
+            if (typeof value2 !== "string") {
+              throw lineError(
+                `command[${JSON.stringify(
+                  key2
+                )}]: Expected a string but got: ${JSON.stringify(value)}`
+              );
+            }
+            try {
+              status.push([RegExp(key2, "u"), value2]);
+            } catch (error) {
+              throw lineError(
+                `command[${JSON.stringify(
+                  key2
+                )}]: This key is not a valid regex: ${
+                  error instanceof Error
+                    ? error.message
+                    : "Unknown RegExp error"
+                }`
+              );
+            }
+          }
+
+          commandDescription.status = status;
+          break;
+        }
+
+        default:
+          throw lineError(`Unknown key: ${key}`);
+      }
+    }
+
+    if (commandDescription.command === undefined) {
+      throw lineError("command: This field is required, but was not provided.");
+    }
+
+    const {
+      command,
+      title = commandToPresentationName(command),
+      cwd = ".",
+      status = [],
+    } = commandDescription;
+
+    return { title, cwd, command, status };
+  });
 
 class Command {
   /**
    * @param {{
       label: string,
-      file: string,
-      args: Array<string>,
+      commandDescription: CommandDescription,
       onData: (data: string) => undefined,
       onExit: () => undefined,
      }} commandInit
    */
-  constructor({ label, file, args, onData, onExit }) {
+  constructor({
+    label,
+    commandDescription: {
+      title,
+      cwd,
+      command: [file, ...args],
+      status: statusRules,
+    },
+    onData,
+    onExit,
+  }) {
+    const formattedCommand = commandToPresentationName([file, ...args]);
     this.label = label;
     this.file = file;
     this.args = args;
-    this.name = commandToPresentationName([file, ...args]);
+    this.cwd = cwd;
+    this.title = title;
+    this.formattedCommandWithTitle =
+      title === formattedCommand
+        ? formattedCommand
+        : `${bold(`${title}:`)} ${formattedCommand}`;
     this.onData = onData;
     this.onExit = onExit;
     /** @type {string} */
     this.history = "";
     /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
+    /** @type {string | undefined} */
+    this.statusFromRules = undefined;
+    /** @type {Array<[RegExp, string]>} */
+    this.statusRules = statusRules;
     this.start();
   }
 
@@ -441,11 +631,11 @@ class Command {
   start() {
     if (this.status.tag !== "Exit") {
       throw new Error(
-        `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.name}`
+        `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.title}`
       );
     }
 
-    this.history = firstHistoryLine(this.name);
+    this.history = firstHistoryLine(this.formattedCommandWithTitle);
 
     const [file, args] = IS_WINDOWS
       ? [
@@ -461,6 +651,7 @@ class Command {
         ]
       : [this.file, this.args];
     const terminal = pty.spawn(file, args, {
+      cwd: this.cwd,
       cols: process.stdout.columns,
       rows: process.stdout.rows,
       // Avoid conpty adding escape sequences to clear the screen:
@@ -526,7 +717,7 @@ class Command {
         return undefined;
 
       case "Exit":
-        throw new Error(`Cannot kill already exited pty for: ${this.name}`);
+        throw new Error(`Cannot kill already exited pty for: ${this.title}`);
     }
   }
 
@@ -535,17 +726,56 @@ class Command {
    * @returns {void}
    */
   pushHistory(data) {
+    this.updateStatusFromRules(data);
     this.history += data;
     if (this.history.length > MAX_HISTORY) {
       this.history = this.history.slice(-MAX_HISTORY);
     }
   }
+
+  /**
+   * @param {string} data
+   * @returns {void}
+   */
+  updateStatusFromRules(data) {
+    const lastLine = getLastLine(this.history);
+    const lines = (lastLine + data).split(/(?:\r?\n|\r)/);
+    for (const line of lines) {
+      for (const [regex, status] of this.statusRules) {
+        if (regex.test(removeGraphicRenditions(line))) {
+          this.statusFromRules =
+            status === ""
+              ? undefined
+              : NO_COLOR
+              ? removeGraphicRenditions(status)
+              : status;
+        }
+      }
+    }
+  }
 }
 
 /**
- * @param {Array<Array<string>>} rawCommands
+ * @param {string} string
+ * @returns {string}
  */
-const runCommands = (rawCommands) => {
+const getLastLine = (string) => {
+  let index = string.length - 1;
+  while (index >= 0) {
+    const char = string[index];
+    if (char === "\n" || char === "\r") {
+      break;
+    }
+    index--;
+  }
+  return string.slice(index + 1);
+};
+
+/**
+ * @param {Array<CommandDescription>} commandDescriptions
+ * @returns {void}
+ */
+const runCommands = (commandDescriptions) => {
   /** @type {Current} */
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
@@ -576,7 +806,9 @@ const runCommands = (rawCommands) => {
       case "Killing":
         if (command.status.slow) {
           process.stdout.write(
-            HIDE_CURSOR + RESET_COLOR + killingText(command.name)
+            HIDE_CURSOR +
+              RESET_COLOR +
+              killingText(command.formattedCommandWithTitle)
           );
         }
         return undefined;
@@ -585,7 +817,11 @@ const runCommands = (rawCommands) => {
         process.stdout.write(
           HIDE_CURSOR +
             RESET_COLOR +
-            exitText(commands, command.name, command.status.exitCode)
+            exitText(
+              commands,
+              command.formattedCommandWithTitle,
+              command.status.exitCode
+            )
         );
         return undefined;
     }
@@ -636,32 +872,39 @@ const runCommands = (rawCommands) => {
   };
 
   /** @type {Array<Command>} */
-  const commands = rawCommands.map(
-    ([file, ...args], index) =>
+  const commands = commandDescriptions.map(
+    (commandDescription, index) =>
       new Command({
         label: ALL_LABELS[index] || "",
-        file,
-        args,
+        commandDescription,
         onData: (data) => {
-          if (current.tag === "Command" && current.index === index) {
-            const command = commands[current.index];
-            switch (command.status.tag) {
-              case "Running":
-                process.stdout.write(data);
-                return undefined;
+          switch (current.tag) {
+            case "Command":
+              if (current.index === index) {
+                const command = commands[index];
+                switch (command.status.tag) {
+                  case "Running":
+                    process.stdout.write(data);
+                    return undefined;
 
-              case "Killing":
-                // Redraw with killingText at the bottom.
-                printHistoryAndExtraText(command);
-                return undefined;
+                  case "Killing":
+                    // Redraw with killingText at the bottom.
+                    printHistoryAndExtraText(command);
+                    return undefined;
 
-              case "Exit":
-                throw new Error(
-                  `Received unexpected output from already exited pty for: ${command.name}\n${data}`
-                );
-            }
-          } else {
-            return undefined;
+                  case "Exit":
+                    throw new Error(
+                      `Received unexpected output from already exited pty for: ${command.title}\n${data}`
+                    );
+                }
+              }
+              return undefined;
+
+            case "Dashboard":
+              // Redraw dashboard.
+              // TODO: Only do this if a status has changed.
+              switchToDashboard();
+              return undefined;
           }
         },
         onExit: () => {
@@ -863,6 +1106,9 @@ const run = () => {
   switch (parseResult.tag) {
     case "Help":
       console.log(help);
+      process.exit(0);
+
+    case "NoCommands":
       process.exit(0);
 
     case "Parsed":
