@@ -1,4 +1,4 @@
 .cache
 dist
 node_modules
-test.json
+test.ndjson

@@ -55,6 +55,7 @@ const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const RESET_COLOR = "\x1B[m";
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
+const CLEAR_RIGHT = "\x1B[K";
 
 const runningIndicator = NO_COLOR
   ? "›"
@@ -84,6 +85,12 @@ const exitIndicator = (exitCode) =>
     : IS_WINDOWS
     ? `\x1B[91m●${RESET_COLOR}`
     : "🔴";
+
+/**
+ * @param {number} n
+ * @returns {string}
+ */
+const cursorHorizontalAbsolute = (n) => `\x1B[${n}G`;
 
 /**
  * @param {string} string
@@ -183,23 +190,34 @@ const killAllLabel = (commands) =>
  * @param {boolean} attemptedKillAll
  */
 const drawDashboard = (commands, width, attemptedKillAll) => {
-  const lines = commands.map((command) => [
-    shortcut(command.label || " ", { pad: false }),
-    statusText(command.status, command.statusFromRules),
-    command.title,
-  ]);
+  const lines = commands.map((command) => {
+    const [icon, status] = statusText(command.status, command.statusFromRules);
+    return {
+      label: shortcut(command.label || " ", { pad: false }),
+      icon,
+      status,
+      title: command.title,
+    };
+  });
 
-  const widestStatus = Math.max(
-    0,
-    ...lines.map(
-      ([, status]) => Array.from(removeGraphicRenditions(status)).length
-    )
-  );
+  const widestStatus = Math.max(0, ...lines.map(({ status }) => status.length));
 
   const finalLines = lines
-    .map(([label, status, name]) =>
-      truncate([label, padEnd(status, widestStatus), name].join("  "), width)
-    )
+    .map(({ label, icon, status, title }) => {
+      const separator = "  ";
+      const start = [label, icon].join(separator);
+      const end = [status.padEnd(widestStatus, " "), title].join(separator);
+      const iconWidth = IS_WINDOWS || NO_COLOR ? 1 : 2;
+      return truncate(
+        `${truncate(start, width)}${cursorHorizontalAbsolute(
+          removeGraphicRenditions(label).length +
+            separator.length +
+            iconWidth +
+            1
+        )}${separator}${CLEAR_RIGHT}${end}`,
+        width
+      );
+    })
     .join("\n");
 
   const label = summarizeLabels(commands.map((command) => command.label));
@@ -267,18 +285,18 @@ ${shortcut(KEYS.dashboard)} dashboard
 /**
  * @param {Status} status
  * @param {string | undefined} statusFromRules
- * @returns {string}
+ * @returns {[string, string]}
  */
 const statusText = (status, statusFromRules = runningIndicator) => {
   switch (status.tag) {
     case "Running":
-      return `${statusFromRules} pid ${status.terminal.pid}`;
+      return [statusFromRules, `pid ${status.terminal.pid}`];
 
     case "Killing":
-      return `${killingIndicator} pid ${status.terminal.pid}`;
+      return [killingIndicator, `pid ${status.terminal.pid}`];
 
     case "Exit":
-      return `${exitIndicator(status.exitCode)} exit ${status.exitCode}`;
+      return [exitIndicator(status.exitCode), `exit ${status.exitCode}`];
   }
 };
 
@@ -288,7 +306,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
  */
 const removeGraphicRenditions = (string) =>
   // eslint-disable-next-line no-control-regex
-  string.replace(/\x1B\[(?:\d+(?:;\d+)+)?m/g, "");
+  string.replace(/\x1B\[(?:\d+(?:;\d+)*)?m/g, "");
 
 /**
  * @param {string} string
@@ -299,23 +317,6 @@ const truncate = (string, maxLength) => {
   const diff = removeGraphicRenditions(string).length - maxLength;
   return diff <= 0 ? string : `${string.slice(0, -(diff + 2))}…`;
 };
-
-/**
- * @param {string} string
- * @param {number} maxLength
- * @returns {string}
- */
-const padEnd = (string, maxLength) =>
-  string +
-  Array.from(
-    {
-      length: Math.max(
-        0,
-        maxLength - Array.from(removeGraphicRenditions(string)).length
-      ),
-    },
-    () => " "
-  ).join("");
 
 /**
  * @param {Array<string>} command
