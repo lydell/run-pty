@@ -388,7 +388,7 @@ const parseArgs = (args) => {
 
   if (args.length === 1) {
     try {
-      const commands = parseNDJSON(fs.readFileSync(args[0], "utf8"));
+      const commands = parseInputFile(fs.readFileSync(args[0], "utf8"));
       return commands.length === 0
         ? { tag: "NoCommands" }
         : { tag: "Parsed", commands };
@@ -397,10 +397,10 @@ const parseArgs = (args) => {
         tag: "Error",
         message: [
           "The first argument is either the delimiter to use between commands,",
-          "or the path to an NDJSON file that describes the commands.",
+          "or the path to a JSON file that describes the commands.",
           "If you meant to use a file, make sure it exists.",
           "Otherwise, choose a delimiter like % and provide at least one command.",
-          "Failed to read command descriptions file as NDJSON:",
+          "Failed to read command descriptions file as JSON:",
           error instanceof Error ? error.message : "Unknown error",
         ].join("\n"),
       };
@@ -447,151 +447,175 @@ const parseArgs = (args) => {
  * @param {string} string
  * @returns {Array<CommandDescription>}
  */
-const parseNDJSON = (string) =>
-  string.split("\n").flatMap((line, lineIndex) => {
-    const trimmed = line.trim();
-    if (trimmed === "") {
-      return [];
-    }
-
-    /**
-     * @param {string} message
-     * @returns {Error}
-     */
-    const lineError = (message) =>
-      new Error(`Line ${lineIndex + 1}: ${message}`);
-
-    /** @type {unknown} */
-    let json;
-
-    try {
-      json = JSON.parse(trimmed);
-    } catch (error) {
-      throw lineError(
-        error instanceof Error ? error.message : "Unknown JSON.parse error"
-      );
-    }
-
-    if (typeof json !== "object" || Array.isArray(json) || json === null) {
-      throw lineError(`Expected a JSON object but got: ${trimmed}`);
-    }
-
-    /** @type {Partial<CommandDescription>} */
-    const commandDescription = {};
-
-    for (const [key, value] of Object.entries(json)) {
-      switch (key) {
-        case "title":
-          if (typeof value !== "string") {
-            throw lineError(
-              `title: Expected a string but got: ${JSON.stringify(value)}`
-            );
-          }
-          commandDescription.title = value;
-          break;
-
-        case "cwd":
-          if (typeof value !== "string") {
-            throw lineError(
-              `cwd: Expected a string but got: ${JSON.stringify(value)}`
-            );
-          }
-          commandDescription.cwd = value;
-          break;
-
-        case "command": {
-          if (!Array.isArray(value)) {
-            throw lineError(
-              `command: Expected an array but got: ${JSON.stringify(value)}`
-            );
-          }
-
-          const command = [];
-          for (const [index, item] of value.entries()) {
-            if (typeof item !== "string") {
-              throw lineError(
-                `command[${index}]: Expected a string but got: ${JSON.stringify(
-                  value
-                )}`
-              );
-            }
-            command.push(item);
-          }
-
-          if (command.length === 0) {
-            throw lineError("command: Expected a non-empty array");
-          }
-
-          commandDescription.command = command;
-          break;
-        }
-
-        case "status": {
-          if (
-            typeof json !== "object" ||
-            Array.isArray(json) ||
-            json === null
-          ) {
-            throw lineError(
-              `status: Expected an object but got: ${JSON.stringify(value)}`
-            );
-          }
-
-          /** @type {Array<[RegExp, string]>} */
-          const status = [];
-          for (const [key2, value2] of Object.entries(value)) {
-            if (typeof value2 !== "string") {
-              throw lineError(
-                `command[${JSON.stringify(
-                  key2
-                )}]: Expected a string but got: ${JSON.stringify(value)}`
-              );
-            }
-            switch (key2) {
-              case "{default}":
-                commandDescription.defaultStatus = value2;
-                break;
-
-              default:
-                try {
-                  status.push([RegExp(key2, "u"), value2]);
-                } catch (error) {
-                  throw lineError(
-                    `command[${JSON.stringify(
-                      key2
-                    )}]: This key is not a valid regex: ${
-                      error instanceof Error
-                        ? error.message
-                        : "Unknown RegExp error"
-                    }`
-                  );
-                }
-            }
-          }
-
-          commandDescription.status = status;
-          break;
-        }
-
-        default:
-          throw lineError(`Unknown key: ${key}`);
+const parseInputFile = (string) => {
+  const first = string.trimStart().slice(0, 1);
+  switch (first) {
+    case "[": {
+      /** @type {unknown} */
+      const json = JSON.parse(string);
+      if (!Array.isArray(json)) {
+        throw new Error(`Expected an array but got: ${JSON.stringify(json)}`);
       }
+
+      return json.map((item, index) => {
+        try {
+          return parseInputItem(item);
+        } catch (error) {
+          throw new Error(
+            `Index ${index}: ${
+              error instanceof Error ? error.message : "Unknown parse error"
+            }`
+          );
+        }
+      });
     }
 
-    if (commandDescription.command === undefined) {
-      throw lineError("command: This field is required, but was not provided.");
+    case "{":
+      return string.split("\n").flatMap((line, lineIndex) => {
+        const trimmed = line.trim();
+        if (trimmed === "") {
+          return [];
+        }
+
+        try {
+          return parseInputItem(JSON.parse(trimmed));
+        } catch (error) {
+          throw new Error(
+            `Line ${lineIndex + 1}: ${
+              error instanceof Error ? error.message : "Unknown parse error"
+            }`
+          );
+        }
+      });
+
+    default:
+      throw new Error(
+        `Expected input to start with [ or { but got: ${first || "nothing"}`
+      );
+  }
+};
+
+/**
+ * @param {unknown} json
+ * @returns {CommandDescription}
+ */
+const parseInputItem = (json) => {
+  if (typeof json !== "object" || Array.isArray(json) || json === null) {
+    throw new Error(`Expected a JSON object but got: ${JSON.stringify(json)}`);
+  }
+
+  /** @type {Partial<CommandDescription>} */
+  const commandDescription = {};
+
+  for (const [key, value] of Object.entries(json)) {
+    switch (key) {
+      case "title":
+        if (typeof value !== "string") {
+          throw new Error(
+            `title: Expected a string but got: ${JSON.stringify(value)}`
+          );
+        }
+        commandDescription.title = value;
+        break;
+
+      case "cwd":
+        if (typeof value !== "string") {
+          throw new Error(
+            `cwd: Expected a string but got: ${JSON.stringify(value)}`
+          );
+        }
+        commandDescription.cwd = value;
+        break;
+
+      case "command": {
+        if (!Array.isArray(value)) {
+          throw new Error(
+            `command: Expected an array but got: ${JSON.stringify(value)}`
+          );
+        }
+
+        const command = [];
+        for (const [index, item] of value.entries()) {
+          if (typeof item !== "string") {
+            throw new Error(
+              `command[${index}]: Expected a string but got: ${JSON.stringify(
+                value
+              )}`
+            );
+          }
+          command.push(item);
+        }
+
+        if (command.length === 0) {
+          throw new Error("command: Expected a non-empty array");
+        }
+
+        commandDescription.command = command;
+        break;
+      }
+
+      case "status": {
+        if (typeof json !== "object" || Array.isArray(json) || json === null) {
+          throw new Error(
+            `status: Expected an object but got: ${JSON.stringify(value)}`
+          );
+        }
+
+        /** @type {Array<[RegExp, string]>} */
+        const status = [];
+        for (const [key2, value2] of Object.entries(value)) {
+          if (typeof value2 !== "string") {
+            throw new Error(
+              `command[${JSON.stringify(
+                key2
+              )}]: Expected a string but got: ${JSON.stringify(value)}`
+            );
+          }
+          switch (key2) {
+            case "{default}":
+              commandDescription.defaultStatus = value2;
+              break;
+
+            default:
+              try {
+                status.push([RegExp(key2, "u"), value2]);
+              } catch (error) {
+                throw new Error(
+                  `command[${JSON.stringify(
+                    key2
+                  )}]: This key is not a valid regex: ${
+                    error instanceof Error
+                      ? error.message
+                      : "Unknown RegExp error"
+                  }`
+                );
+              }
+          }
+        }
+
+        commandDescription.status = status;
+        break;
+      }
+
+      default:
+        throw new Error(`Unknown key: ${key}`);
     }
+  }
 
-    const {
-      command,
-      title = commandToPresentationName(command),
-      cwd = ".",
-      status = [],
-      defaultStatus,
-    } = commandDescription;
+  if (commandDescription.command === undefined) {
+    throw new Error("command: This field is required, but was not provided.");
+  }
 
-    return { title, cwd, command, status, defaultStatus };
-  });
+  const {
+    command,
+    title = commandToPresentationName(command),
+    cwd = ".",
+    status = [],
+    defaultStatus,
+  } = commandDescription;
+
+  return { title, cwd, command, status, defaultStatus };
+};
 
 class Command {
   /**
