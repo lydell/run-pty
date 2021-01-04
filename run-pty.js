@@ -598,7 +598,7 @@ class Command {
    * @param {{
       label: string,
       commandDescription: CommandDescription,
-      onData: (data: string) => undefined,
+      onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onExit: () => undefined,
      }} commandInit
    */
@@ -679,8 +679,8 @@ class Command {
     }
 
     const disposeOnData = terminal.onData((data) => {
-      this.pushHistory(data);
-      this.onData(data);
+      const statusFromRulesChanged = this.pushHistory(data);
+      this.onData(data, statusFromRulesChanged);
     });
 
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
@@ -709,7 +709,7 @@ class Command {
           if (this.status.tag === "Killing") {
             this.status.slow = true;
             // Ugly way to redraw:
-            this.onData("");
+            this.onData("", false);
           }
         }, 100);
         if (IS_WINDOWS) {
@@ -737,23 +737,26 @@ class Command {
 
   /**
    * @param {string} data
-   * @returns {void}
+   * @returns {boolean}
    */
   pushHistory(data) {
-    this.updateStatusFromRules(data);
+    const statusFromRulesChanged = this.updateStatusFromRules(data);
     this.history += data;
     if (this.history.length > MAX_HISTORY) {
       this.history = this.history.slice(-MAX_HISTORY);
     }
+    return statusFromRulesChanged;
   }
 
   /**
    * @param {string} data
-   * @returns {void}
+   * @returns {boolean}
    */
   updateStatusFromRules(data) {
+    const previousStatusFromRules = this.statusFromRules;
     const lastLine = getLastLine(this.history);
     const lines = (lastLine + data).split(/(?:\r?\n|\r)/);
+
     for (const line of lines) {
       for (const [regex, status] of this.statusRules) {
         if (regex.test(removeGraphicRenditions(line))) {
@@ -766,6 +769,8 @@ class Command {
         }
       }
     }
+
+    return this.statusFromRules !== previousStatusFromRules;
   }
 }
 
@@ -891,7 +896,7 @@ const runCommands = (commandDescriptions) => {
       new Command({
         label: ALL_LABELS[index] || "",
         commandDescription,
-        onData: (data) => {
+        onData: (data, statusFromRulesChanged) => {
           switch (current.tag) {
             case "Command":
               if (current.index === index) {
@@ -915,9 +920,10 @@ const runCommands = (commandDescriptions) => {
               return undefined;
 
             case "Dashboard":
-              // Redraw dashboard.
-              // TODO: Only do this if a status has changed.
-              switchToDashboard();
+              if (statusFromRulesChanged) {
+                // Redraw dashboard.
+                switchToDashboard();
+              }
               return undefined;
           }
         },
