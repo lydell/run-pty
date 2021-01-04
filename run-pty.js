@@ -373,6 +373,7 @@ const cmdEscapeArg = (arg) =>
     cwd: string,
     command: Array<string>,
     status: Array<[RegExp, string]>
+    defaultStatus: string | undefined
    }} CommandDescription
  */
 
@@ -437,6 +438,7 @@ const parseArgs = (args) => {
       cwd: ".",
       command: command2,
       status: [],
+      defaultStatus: undefined,
     })),
   };
 };
@@ -545,18 +547,25 @@ const parseNDJSON = (string) =>
                 )}]: Expected a string but got: ${JSON.stringify(value)}`
               );
             }
-            try {
-              status.push([RegExp(key2, "u"), value2]);
-            } catch (error) {
-              throw lineError(
-                `command[${JSON.stringify(
-                  key2
-                )}]: This key is not a valid regex: ${
-                  error instanceof Error
-                    ? error.message
-                    : "Unknown RegExp error"
-                }`
-              );
+            switch (key2) {
+              case "{default}":
+                commandDescription.defaultStatus = value2;
+                break;
+
+              default:
+                try {
+                  status.push([RegExp(key2, "u"), value2]);
+                } catch (error) {
+                  throw lineError(
+                    `command[${JSON.stringify(
+                      key2
+                    )}]: This key is not a valid regex: ${
+                      error instanceof Error
+                        ? error.message
+                        : "Unknown RegExp error"
+                    }`
+                  );
+                }
             }
           }
 
@@ -578,9 +587,10 @@ const parseNDJSON = (string) =>
       title = commandToPresentationName(command),
       cwd = ".",
       status = [],
+      defaultStatus,
     } = commandDescription;
 
-    return { title, cwd, command, status };
+    return { title, cwd, command, status, defaultStatus };
   });
 
 class Command {
@@ -599,6 +609,7 @@ class Command {
       cwd,
       command: [file, ...args],
       status: statusRules,
+      defaultStatus,
     },
     onData,
     onExit,
@@ -620,7 +631,8 @@ class Command {
     /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
     /** @type {string | undefined} */
-    this.statusFromRules = undefined;
+    this.statusFromRules = defaultStatus;
+    this.defaultStatus = defaultStatus;
     /** @type {Array<[RegExp, string]>} */
     this.statusRules = statusRules;
     this.start();
@@ -637,6 +649,7 @@ class Command {
     }
 
     this.history = firstHistoryLine(this.formattedCommandWithTitle);
+    this.statusFromRules = this.defaultStatus;
 
     const [file, args] = IS_WINDOWS
       ? [
