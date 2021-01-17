@@ -372,7 +372,7 @@ const cmdEscapeArg = (arg) =>
     title: string,
     cwd: string,
     command: Array<string>,
-    status: Array<[RegExp, string]>
+    status: Array<[RegExp, string | undefined]>
     defaultStatus: string | undefined
    }} CommandDescription
  */
@@ -561,7 +561,7 @@ const parseInputItem = (json) => {
           );
         }
 
-        /** @type {Array<[RegExp, string]>} */
+        /** @type {Array<[RegExp, string | undefined]>} */
         const status = [];
         for (const [key2, value2] of Object.entries(value)) {
           if (typeof value2 !== "string") {
@@ -571,31 +571,34 @@ const parseInputItem = (json) => {
               )}]: Expected a string but got: ${JSON.stringify(value)}`
             );
           }
-          switch (key2) {
-            case "{default}":
-              commandDescription.defaultStatus = value2;
-              break;
-
-            default:
-              try {
-                status.push([RegExp(key2, "u"), value2]);
-              } catch (error) {
-                throw new Error(
-                  `command[${JSON.stringify(
-                    key2
-                  )}]: This key is not a valid regex: ${
-                    error instanceof Error
-                      ? error.message
-                      : "Unknown RegExp error"
-                  }`
-                );
-              }
+          try {
+            status.push([
+              RegExp(key2, "u"),
+              value2 === "" ? undefined : value2,
+            ]);
+          } catch (error) {
+            throw new Error(
+              `command[${JSON.stringify(
+                key2
+              )}]: This key is not a valid regex: ${
+                error instanceof Error ? error.message : "Unknown RegExp error"
+              }`
+            );
           }
         }
 
         commandDescription.status = status;
         break;
       }
+
+      case "defaultStatus":
+        if (typeof value !== "string") {
+          throw new Error(
+            `defaultStatus: Expected a string but got: ${JSON.stringify(value)}`
+          );
+        }
+        commandDescription.defaultStatus = value === "" ? undefined : value;
+        break;
 
       default:
         throw new Error(`Unknown key: ${key}`);
@@ -657,7 +660,7 @@ class Command {
     /** @type {string | undefined} */
     this.statusFromRules = defaultStatus;
     this.defaultStatus = defaultStatus;
-    /** @type {Array<[RegExp, string]>} */
+    /** @type {Array<[RegExp, string | undefined]>} */
     this.statusRules = statusRules;
     this.start();
   }
@@ -785,7 +788,7 @@ class Command {
       for (const [regex, status] of this.statusRules) {
         if (regex.test(removeGraphicRenditions(line))) {
           this.statusFromRules =
-            status === ""
+            status === undefined
               ? undefined
               : NO_COLOR
               ? removeGraphicRenditions(status)
