@@ -392,17 +392,26 @@ const parseArgs = (args) => {
       return commands.length === 0
         ? { tag: "NoCommands" }
         : { tag: "Parsed", commands };
-    } catch (error) {
+    } catch (errorAny) {
+      /** @type {Error & {code?: string} | undefined} */
+      const error = errorAny instanceof Error ? errorAny : undefined;
       return {
         tag: "Error",
-        message: [
-          "The first argument is either the delimiter to use between commands,",
-          "or the path to a JSON file that describes the commands.",
-          "If you meant to use a file, make sure it exists.",
-          "Otherwise, choose a delimiter like % and provide at least one command.",
-          "Failed to read command descriptions file as JSON:",
-          error instanceof Error ? error.message : "Unknown error",
-        ].join("\n"),
+        message:
+          error === undefined
+            ? "An unknown error occurred when reading command descriptions file."
+            : typeof error.code === "string"
+            ? [
+                "The first argument is either the delimiter to use between commands,",
+                "or the path to a JSON file that describes the commands.",
+                "If you meant to use a file, make sure it exists.",
+                "Otherwise, choose a delimiter like % and provide at least one command.",
+                error.message,
+              ].join("\n")
+            : [
+                "Failed to read command descriptions file as JSON:",
+                error.message,
+              ].join("\n"),
       };
     }
   }
