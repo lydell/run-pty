@@ -372,8 +372,8 @@ const cmdEscapeArg = (arg) =>
     title: string,
     cwd: string,
     command: Array<string>,
-    status: Array<[RegExp, string | undefined]>
-    defaultStatus: string | undefined
+    status: Array<[RegExp, [string, string] | undefined]>
+    defaultStatus: [string, string] | undefined
    }} CommandDescription
  */
 
@@ -570,27 +570,19 @@ const parseInputItem = (json) => {
           );
         }
 
-        /** @type {Array<[RegExp, string | undefined]>} */
+        /** @type {Array<[RegExp, [string, string] | undefined]>} */
         const status = [];
         for (const [key2, value2] of Object.entries(value)) {
-          if (typeof value2 !== "string") {
-            throw new Error(
-              `command[${JSON.stringify(
-                key2
-              )}]: Expected a string but got: ${JSON.stringify(value)}`
-            );
-          }
           try {
-            status.push([
-              RegExp(key2, "u"),
-              value2 === "" ? undefined : value2,
-            ]);
+            status.push([RegExp(key2, "u"), parseStatus(value2)]);
           } catch (error) {
             throw new Error(
-              `command[${JSON.stringify(
-                key2
-              )}]: This key is not a valid regex: ${
-                error instanceof Error ? error.message : "Unknown RegExp error"
+              `command[${JSON.stringify(key2)}]: ${
+                error instanceof SyntaxError
+                  ? `This key is not a valid regex: ${error.message}`
+                  : error instanceof Error
+                  ? error.message
+                  : "Unknown error"
               }`
             );
           }
@@ -601,12 +593,15 @@ const parseInputItem = (json) => {
       }
 
       case "defaultStatus":
-        if (typeof value !== "string") {
+        try {
+          commandDescription.defaultStatus = parseStatus(value);
+        } catch (error) {
           throw new Error(
-            `defaultStatus: Expected a string but got: ${JSON.stringify(value)}`
+            `defaultStatus: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
           );
         }
-        commandDescription.defaultStatus = value === "" ? undefined : value;
         break;
 
       default:
@@ -627,6 +622,33 @@ const parseInputItem = (json) => {
   } = commandDescription;
 
   return { title, cwd, command, status, defaultStatus };
+};
+
+/**
+ * @param {unknown} json
+ * @returns {[string, string] | undefined}
+ */
+const parseStatus = (json) => {
+  if (json === null) {
+    return undefined;
+  }
+
+  if (!Array.isArray(json) || json.length !== 2) {
+    throw new Error(
+      `Expected an array of length 2 but got: ${JSON.stringify(json)}`
+    );
+  }
+
+  /** @type {unknown} */
+  const value1 = json[0];
+  /** @type {unknown} */
+  const value2 = json[1];
+
+  if (typeof value1 !== "string" || typeof value2 !== "string") {
+    throw new Error(`Expected two strings but got: ${JSON.stringify(json)}`);
+  }
+
+  return [value1, value2];
 };
 
 class Command {
@@ -667,9 +689,10 @@ class Command {
     /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
     /** @type {string | undefined} */
-    this.statusFromRules = defaultStatus;
+    this.statusFromRules = extractStatus(defaultStatus);
+    /** @type {[string, string] | undefined} */
     this.defaultStatus = defaultStatus;
-    /** @type {Array<[RegExp, string | undefined]>} */
+    /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
     this.start();
   }
@@ -685,7 +708,7 @@ class Command {
     }
 
     this.history = firstHistoryLine(this.formattedCommandWithTitle);
-    this.statusFromRules = this.defaultStatus;
+    this.statusFromRules = extractStatus(this.defaultStatus);
 
     const [file, args] = IS_WINDOWS
       ? [
@@ -796,12 +819,7 @@ class Command {
     for (const line of lines) {
       for (const [regex, status] of this.statusRules) {
         if (regex.test(removeGraphicRenditions(line))) {
-          this.statusFromRules =
-            status === undefined
-              ? undefined
-              : NO_COLOR
-              ? removeGraphicRenditions(status)
-              : status;
+          this.statusFromRules = extractStatus(status);
         }
       }
     }
@@ -809,6 +827,19 @@ class Command {
     return this.statusFromRules !== previousStatusFromRules;
   }
 }
+
+/**
+ * @param {[string, string] | undefined} status
+ * @returns {string | undefined}
+ */
+const extractStatus = (status) =>
+  status === undefined
+    ? undefined
+    : NO_COLOR
+    ? removeGraphicRenditions(status[1])
+    : IS_WINDOWS
+    ? status[1]
+    : status[0];
 
 /**
  * @param {string} string
