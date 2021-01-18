@@ -577,7 +577,7 @@ const parseInputItem = (json) => {
             status.push([RegExp(key2, "u"), parseStatus(value2)]);
           } catch (error) {
             throw new Error(
-              `command[${JSON.stringify(key2)}]: ${
+              `status[${JSON.stringify(key2)}]: ${
                 error instanceof SyntaxError
                   ? `This key is not a valid regex: ${error.message}`
                   : error instanceof Error
