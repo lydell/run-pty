@@ -147,15 +147,20 @@ The JSON format lets you specify additional things apart from the command itself
 | title | `string` | `command` as a string | What to show in the dashboard. |
 | cwd | `string` | `"."` | Current working directory for the command. |
 | status | <code>{ [regex: string]: [string,&nbsp;string] &vert; null }</code> | `{}` | Customize the status of the command in the dashboard. |
-| defaultStatus | <code>[string,&nbsp;string] &vert; null</code> | `null` | Customize the status of the command in the dashboard. |
+| defaultStatus | <code>[string,&nbsp;string] &vert; null</code> | `null` | Customize the default status of the command in the dashboard. |
 
-- command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % npm run frontend` on the command line, the JSON version of it is `["npm", "run", "frontend"]`.
+- command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % npm run frontend` on the command line, the JSON version of it is `["npm", "run", "frontend"]`. And `run-pty % echo 'hello world'` would be `["echo", "hello world"]`.
 
 - title: If you have complicated commands, it might be hard to find what you’re looking for in the dashboard. This lets you use more human readable titles instead. The titles are also shown when you focus a command (before the command itself).
 
-- cwd: This is handy if you need to run some command as if you were in a subdirectory.
+- cwd: This is handy if you need to run some command as if you were in a subdirectory. When focusing a command, the `cwd` is shown below the title/command (unless it’s `"."` or equal to the title):
 
-- status: It’s common to run watchers in `run-pty`. If your program crashes, the watcher will still be up and running and wait for source code changes so it can restart your program and try again. `run-pty` will display a 🟢 in the dashboard (since the watcher is successfully running), which makes things look all green while things are actually broken. `status` lets you replace 🟢 with custom status indicators.
+  ```
+  🟢 Custom title: npm run something
+  📂 my/cwd/path
+  ```
+
+- status: It’s common to run watchers in `run-pty`. Watchers wrap your program – if your program crashes, the watcher will still be up and running and wait for source code changes so it can restart your program and try again. `run-pty` will display a 🟢 in the dashboard (since the watcher is successfully running), which makes things look all green. But in reality things are broken. `status` lets you replace 🟢 with custom status indicators.
 
   The keys in the object are regexes with the `u` flag.
 
@@ -165,8 +170,8 @@ The JSON format lets you specify additional things apart from the command itself
 
   This is how the value (`[string, string] | null`) is used:
 
-  - The first string is used on non-Windows OS:es, unless the `NO_COLOR` environment variable is set. The string is drawn in 2 character slots in the terminal – if your string is longer, it will be cut off.
-  - The second string is used on Windows or if `NO_COLOR` is set. In `NO_COLOR` mode, ANSI codes (“graphic renditions”) are stripped as well. So you can use ANSI codes (in either string) to make your experience more colorful while still letting people have monochrome output if they prefer. Unlike the first string, the second string is drawn in **1** character slot in the terminal.
+  - The first string is used on all OS:es except Windows, unless the `NO_COLOR` environment variable is set. The string is drawn in 2 character slots in the terminal – if your string is longer, it will be cut off. Emojis usually need 2 character slots.
+  - The second string is used on Windows or if `NO_COLOR` is set. In `NO_COLOR` mode, ANSI codes (“graphic renditions”) are stripped as well. So you can use ANSI codes (in either string) to make your experience more colorful while still letting people have monochrome output if they prefer. Unlike the first string, the second string is drawn in **1** character slot in the terminal. (Windows does not support emojis in the terminal very well, and for `NO_COLOR` you might not want colored emojis, so a single character should do.)
   - `null` resets the indicator to the standard 🟢 one (_not_ `defaultStatus`).
 
 - defaultStatus: This lets you replace 🟢 with a custom status indicator at startup (before your command has written anything). The value works like for `status`.
