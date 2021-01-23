@@ -39,7 +39,7 @@
   },
   "scripts": {
     "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node get-cursor-position.js % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\" % make watch",
-    "test": "prettier --check . && eslint . && tsc && jest",
+    "test": "prettier --check . && eslint . --report-unused-disable-directives && tsc && jest",
     "prepublishOnly": "npm test"
   }
 }

@@ -1,6 +1,10 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
 
 jobs:
   build:
@@ -15,15 +19,24 @@ jobs:
           node-version: 14.x
 
       - name: Cache node_modules
+        id: cache-node_modules
         uses: actions/cache@v1
         with:
           path: node_modules
           key: node_modules-${{ hashFiles('package-lock.json') }}
 
-      - name: Run workflow
-        shell: bash
-        run: |
-          test -d node_modules || npm ci
-          npm test
-        env:
-          CI: true
+      - name: npm ci
+        if: steps.cache-node_modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: tsc
+        run: npx --no-install tsc
+
+      - name: ESLint
+        run: npx --no-install eslint . --report-unused-disable-directives
+
+      - name: Prettier
+        run: npx --no-install prettier --check .
+
+      - name: Jest
+        run: npx --no-install jest
