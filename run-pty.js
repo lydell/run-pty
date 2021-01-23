@@ -86,6 +86,8 @@ const exitIndicator = (exitCode) =>
     ? `\x1B[91m●${RESET_COLOR}`
     : "🔴";
 
+const folder = NO_COLOR ? "⌂" : IS_WINDOWS ? `\x1B[91m⌂${RESET_COLOR}` : "📂";
+
 /**
  * @param {number} n
  * @returns {string}
@@ -241,10 +243,13 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 
 /**
  * @param {string} name
+ * @param {string} cwd
  * @returns {string}
  */
-const firstHistoryLine = (name) =>
-  `${runningIndicator}${EMOJI_WIDTH_FIX} ${name}${RESET_COLOR}\n`;
+const historyStart = (name, cwd) =>
+  `${runningIndicator}${EMOJI_WIDTH_FIX} ${name}${RESET_COLOR}\n${
+    cwd === "." ? "" : `${folder}${EMOJI_WIDTH_FIX} ${dim(cwd)}\n`
+  }`;
 
 // Newlines at the start/end are wanted here.
 const runningText = `
@@ -709,7 +714,7 @@ class Command {
       );
     }
 
-    this.history = firstHistoryLine(this.formattedCommandWithTitle);
+    this.history = historyStart(this.formattedCommandWithTitle, this.cwd);
     this.statusFromRules = extractStatus(this.defaultStatus);
 
     const [file, args] = IS_WINDOWS
