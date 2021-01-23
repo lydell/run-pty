@@ -15,7 +15,6 @@ module.exports = {
     ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
     "@typescript-eslint/ban-ts-comment": "off",
     "@typescript-eslint/no-var-requires": "off",
-    "@typescript-eslint/switch-exhaustiveness-check": "error",
     "arrow-body-style": "error",
     curly: "error",
     "dot-notation": "error",
@@ -38,6 +37,7 @@ module.exports = {
         ...require("@typescript-eslint/eslint-plugin").configs[
           "recommended-requiring-type-checking"
         ].rules,
+        "@typescript-eslint/switch-exhaustiveness-check": "error",
       },
     },
     {

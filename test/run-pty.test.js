@@ -19,10 +19,12 @@ const {
  * @returns {string}
  */
 function replaceAnsi(string) {
+  /* eslint-disable no-control-regex */
   return string
     .replace(/\x1B\[0?m/g, "⧘")
     .replace(/\x1B\[\d+m/g, "⧙")
     .replace(/\x1B\[\d*[GK]/g, "");
+  /* eslint-enable no-control-regex */
 }
 
 /**
