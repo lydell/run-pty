@@ -7,8 +7,10 @@ const {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
+    exitText,
     help,
     historyStart,
+    killingText,
     parseArgs,
     summarizeLabels,
   },
@@ -327,17 +329,18 @@ describe("dashboard", () => {
 
 describe("history start", () => {
   /**
-   * @param {string} name
+   * @param {(command: import("../run-pty").CommandText) => string} f
+   * @param {string} formattedCommandWithTitle
    * @param {string} title
    * @param {string} cwd
    * @returns {string}
    */
-  function testHistoryStart(name, title, cwd) {
-    return replaceAnsi(historyStart(name, title, cwd));
+  function render(f, formattedCommandWithTitle, title, cwd) {
+    return replaceAnsi(f({ formattedCommandWithTitle, title, cwd }));
   }
 
   test("just a command", () => {
-    expect(testHistoryStart("npm start", "npm start", "."))
+    expect(render(historyStart, "npm start", "npm start", "./"))
       .toMatchInlineSnapshot(`
       🟢 npm start⧘␊
 
@@ -345,8 +348,9 @@ describe("history start", () => {
   });
 
   test("title with command and changed cwd", () => {
-    expect(testHistoryStart("frontend: npm start", "frontend", "web/frontend"))
-      .toMatchInlineSnapshot(`
+    expect(
+      render(historyStart, "frontend: npm start", "frontend", "web/frontend")
+    ).toMatchInlineSnapshot(`
       🟢 frontend: npm start⧘
       📂 ⧙web/frontend⧘␊
 
@@ -354,9 +358,78 @@ describe("history start", () => {
   });
 
   test("cwd not shown if same as title", () => {
-    expect(testHistoryStart("frontend: npm start", "frontend", "frontend"))
+    expect(render(historyStart, "frontend: npm start", "frontend", "frontend"))
       .toMatchInlineSnapshot(`
       🟢 frontend: npm start⧘␊
+
+    `);
+  });
+
+  test("killing without cwd", () => {
+    expect(render(killingText, "frontend: npm start", "frontend", "./x/.."))
+      .toMatchInlineSnapshot(`
+      ␊
+      ⭕ frontend: npm start⧘
+      killing…
+
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+
+    `);
+  });
+
+  test("killing with cwd", () => {
+    expect(
+      render(killingText, "frontend: npm start", "frontend", "web/frontend")
+    ).toMatchInlineSnapshot(`
+      ␊
+      ⭕ frontend: npm start⧘
+      📂 ⧙web/frontend⧘
+      killing…
+
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+
+    `);
+  });
+
+  test("exit 0 with cwd", () => {
+    expect(
+      render(
+        (command) => exitText([], command, 0),
+        "frontend: npm start",
+        "frontend",
+        "web/frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      ␊
+      ⚪ frontend: npm start⧘
+      📂 ⧙web/frontend⧘
+      exit 0
+
+      ⧙[⧘⧙enter⧘⧙]⧘  restart
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+
+    `);
+  });
+
+  test("exit 1 without cwd", () => {
+    expect(
+      render(
+        (command) => exitText([], command, 0),
+        "frontend: npm start",
+        "frontend",
+        "frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      ␊
+      ⚪ frontend: npm start⧘
+      exit 0
+
+      ⧙[⧘⧙enter⧘⧙]⧘  restart
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
 
     `);
   });

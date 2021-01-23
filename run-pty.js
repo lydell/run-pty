@@ -3,6 +3,7 @@
 "use strict";
 
 const fs = require("fs");
+const path = require("path");
 const pty = require("node-pty");
 
 /**
@@ -246,17 +247,26 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 };
 
 /**
- * @param {string} name
- * @param {string} title
- * @param {string} cwd
+ * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "cwd">} CommandText
+ */
+
+/**
+ * @param {CommandText} command
  * @returns {string}
  */
-const historyStart = (name, title, cwd) =>
-  `${runningIndicator}${EMOJI_WIDTH_FIX} ${name}${RESET_COLOR}\n${
-    cwd === "." || cwd === title
-      ? ""
-      : `${folder}${EMOJI_WIDTH_FIX} ${dim(cwd)}\n`
-  }`;
+const cwdText = (command) =>
+  path.resolve(command.cwd) === process.cwd() || command.cwd === command.title
+    ? ""
+    : `${folder}${EMOJI_WIDTH_FIX} ${dim(command.cwd)}\n`;
+
+/**
+ * @param {CommandText} command
+ * @returns {string}
+ */
+const historyStart = (command) =>
+  `${runningIndicator}${EMOJI_WIDTH_FIX} ${
+    command.formattedCommandWithTitle
+  }${RESET_COLOR}\n${cwdText(command)}`;
 
 // Newlines at the start/end are wanted here.
 const runningText = `
@@ -266,14 +276,16 @@ ${shortcut(KEYS.dashboard)} dashboard
 `;
 
 /**
- * @param {string} commandName
+ * @param {CommandText} command
  * @returns {string}
  */
-const killingText = (commandName) =>
+const killingText = (command) =>
   // Newlines at the start/end are wanted here.
   `
-${killingIndicator}${EMOJI_WIDTH_FIX} ${commandName}${RESET_COLOR}
-killing…
+${killingIndicator}${EMOJI_WIDTH_FIX} ${
+    command.formattedCommandWithTitle
+  }${RESET_COLOR}
+${cwdText(command)}killing…
 
 ${shortcut(KEYS.kill)} force kill
 ${shortcut(KEYS.dashboard)} dashboard
@@ -281,15 +293,17 @@ ${shortcut(KEYS.dashboard)} dashboard
 
 /**
  * @param {Array<Command>} commands
- * @param {string} commandName
+ * @param {CommandText} command
  * @param {number} exitCode
  * @returns {string}
  */
-const exitText = (commands, commandName, exitCode) =>
+const exitText = (commands, command, exitCode) =>
   // Newlines at the start/end are wanted here.
   `
-${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${commandName}${RESET_COLOR}
-exit ${exitCode}
+${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
+    command.formattedCommandWithTitle
+  }${RESET_COLOR}
+${cwdText(command)}exit ${exitCode}
 
 ${shortcut(KEYS.restart)} restart
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
@@ -721,11 +735,7 @@ class Command {
       );
     }
 
-    this.history = historyStart(
-      this.formattedCommandWithTitle,
-      this.title,
-      this.cwd
-    );
+    this.history = historyStart(this);
     this.statusFromRules = extractStatus(this.defaultStatus);
 
     const [file, args] = IS_WINDOWS
@@ -910,9 +920,7 @@ const runCommands = (commandDescriptions) => {
       case "Killing":
         if (command.status.slow) {
           process.stdout.write(
-            HIDE_CURSOR +
-              RESET_COLOR +
-              killingText(command.formattedCommandWithTitle)
+            HIDE_CURSOR + RESET_COLOR + killingText(command)
           );
         }
         return undefined;
@@ -921,11 +929,7 @@ const runCommands = (commandDescriptions) => {
         process.stdout.write(
           HIDE_CURSOR +
             RESET_COLOR +
-            exitText(
-              commands,
-              command.formattedCommandWithTitle,
-              command.status.exitCode
-            )
+            exitText(commands, command, command.status.exitCode)
         );
         return undefined;
     }
@@ -1236,8 +1240,10 @@ module.exports = {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
+    exitText,
     help,
     historyStart,
+    killingText,
     parseArgs,
     summarizeLabels,
   },

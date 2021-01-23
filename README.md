@@ -153,7 +153,7 @@ The JSON format lets you specify additional things apart from the command itself
 
 - title: If you have complicated commands, it might be hard to find what you’re looking for in the dashboard. This lets you use more human readable titles instead. The titles are also shown when you focus a command (before the command itself).
 
-- cwd: This is handy if you need to run some command as if you were in a subdirectory. When focusing a command, the `cwd` is shown below the title/command (unless it’s `"."` or equal to the title):
+- cwd: This is handy if you need to run some command as if you were in a subdirectory. When focusing a command, the `cwd` is shown below the title/command (unless it’s `"."` (the CWD of the `run-pty` process itself) or equal to the title):
 
   ```
   🟢 Custom title: npm run something
