@@ -166,6 +166,10 @@ Separate the commands with a character of choice:
 Note: All arguments are strings and passed as-is – no shell script execution.
 Use ${bold("sh -c '...'")} or similar if you need that.
 
+Alternatively, specify the commands in a JSON (or NDJSON) file:
+
+    ${runPty} run-pty.json
+
 Environment variables:
 
     ${bold("RUN_PTY_MAX_HISTORY")}

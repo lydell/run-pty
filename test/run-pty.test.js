@@ -64,6 +64,10 @@ describe("help", () => {
       Note: All arguments are strings and passed as-is – no shell script execution.
       Use ⧙sh -c '...'⧘ or similar if you need that.
 
+      Alternatively, specify the commands in a JSON (or NDJSON) file:
+
+          ⧙run-pty⧘ run-pty.json
+
       Environment variables:
 
           ⧙RUN_PTY_MAX_HISTORY⧘
@@ -485,6 +489,14 @@ describe("parse json", () => {
         message: Failed to read command descriptions file as JSON:
       Expected input to start with [ or { but got: n,
         tag: Error,
+      }
+    `);
+  });
+
+  test("empty list of commands", () => {
+    expect(testJson("empty-array.json")).toMatchInlineSnapshot(`
+      Object {
+        tag: NoCommands,
       }
     `);
   });
