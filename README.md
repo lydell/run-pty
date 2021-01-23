@@ -146,8 +146,8 @@ The JSON format lets you specify additional things apart from the command itself
 | command | `Array<string>` | _Required_ | The command to run. Must not be empty. |
 | title | `string` | `command` as a string | What to show in the dashboard. |
 | cwd | `string` | `"."` | Current working directory for the command. |
-| status | `{ [regex: string]: [string, string] | null }` | `{}` | Customize the status of the command in the dashboard. |
-| defaultStatus | `[string, string] | null` | `null` | Customize the status of the command in the dashboard. |
+| status | <code>{ [regex: string]: [string, string] &vert; null }</code> | `{}` | Customize the status of the command in the dashboard. |
+| defaultStatus | <code>[string, string] &vert; null</code> | `null` | Customize the status of the command in the dashboard. |
 
 - command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % npm run frontend` on the command line, the JSON version of it is `["npm", "run", "frontend"]`.
 
