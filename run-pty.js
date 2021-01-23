@@ -205,16 +205,14 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
   const finalLines = lines
     .map(({ label, icon, status, title }) => {
       const separator = "  ";
-      const start = [label, icon].join(separator);
+      const start = truncate([label, icon].join(separator), width);
       const end = [status.padEnd(widestStatus, " "), title].join(separator);
       const iconWidth = IS_WINDOWS || NO_COLOR ? 1 : 2;
+      const cursor = cursorHorizontalAbsolute(
+        removeGraphicRenditions(label).length + separator.length + iconWidth + 1
+      );
       return truncate(
-        `${truncate(start, width)}${cursorHorizontalAbsolute(
-          removeGraphicRenditions(label).length +
-            separator.length +
-            iconWidth +
-            1
-        )}${separator}${CLEAR_RIGHT}${end}`,
+        `${start}${cursor}${separator}${CLEAR_RIGHT}${end}`,
         width
       );
     })
