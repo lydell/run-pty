@@ -22,7 +22,7 @@ function replaceColor(string) {
 
 /**
  * @param {string} name
- * @returns {undefined}
+ * @returns {never}
  */
 function notCalled(name) {
   throw new Error(`Expected ${name} not to be called!`);
@@ -85,17 +85,23 @@ describe("dashboard", () => {
       drawDashboard(
         items.map((item, index) => ({
           label: ALL_LABELS[index] || "",
-          name: commandToPresentationName(item.command),
+          title: commandToPresentationName(item.command),
+          formattedCommandWithTitle: commandToPresentationName(item.command),
           status: item.status,
           // Unused in this case:
           file: "file",
           args: [],
+          cwd: ".",
           history: "",
+          statusFromRules: undefined,
+          defaultStatus: undefined,
+          statusRules: [],
           onData: () => notCalled("onData"),
           onExit: () => notCalled("onExit"),
           pushHistory: () => notCalled("pushHistory"),
           start: () => notCalled("start"),
           kill: () => notCalled("kill"),
+          updateStatusFromRules: () => notCalled("updateStatusFromRules"),
         })),
         width,
         false
