@@ -255,7 +255,8 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
  * @returns {string}
  */
 const cwdText = (command) =>
-  path.resolve(command.cwd) === process.cwd() || command.cwd === command.title
+  path.resolve(command.cwd) === process.cwd() ||
+  command.cwd === removeGraphicRenditions(command.title)
     ? ""
     : `${folder}${EMOJI_WIDTH_FIX} ${dim(command.cwd)}\n`;
 
