@@ -503,6 +503,16 @@ describe("parse json", () => {
     `);
   });
 
+  test("empty NDJSON", () => {
+    expect(testJson("empty.ndjson")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Expected input to start with [ or { but got: nothing,
+        tag: Error,
+      }
+    `);
+  });
+
   test("kitchen sink", () => {
     const parsed = testJson("kitchen-sink.json");
 
