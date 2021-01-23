@@ -327,7 +327,7 @@ describe("dashboard", () => {
   });
 });
 
-describe("history start", () => {
+describe("focused command", () => {
   /**
    * @param {(command: import("../run-pty").CommandText) => string} f
    * @param {string} formattedCommandWithTitle
