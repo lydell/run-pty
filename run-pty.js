@@ -243,12 +243,15 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 
 /**
  * @param {string} name
+ * @param {string} title
  * @param {string} cwd
  * @returns {string}
  */
-const historyStart = (name, cwd) =>
+const historyStart = (name, title, cwd) =>
   `${runningIndicator}${EMOJI_WIDTH_FIX} ${name}${RESET_COLOR}\n${
-    cwd === "." ? "" : `${folder}${EMOJI_WIDTH_FIX} ${dim(cwd)}\n`
+    cwd === "." || cwd === title
+      ? ""
+      : `${folder}${EMOJI_WIDTH_FIX} ${dim(cwd)}\n`
   }`;
 
 // Newlines at the start/end are wanted here.
@@ -714,7 +717,11 @@ class Command {
       );
     }
 
-    this.history = historyStart(this.formattedCommandWithTitle, this.cwd);
+    this.history = historyStart(
+      this.formattedCommandWithTitle,
+      this.title,
+      this.cwd
+    );
     this.statusFromRules = extractStatus(this.defaultStatus);
 
     const [file, args] = IS_WINDOWS
