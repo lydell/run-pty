@@ -86,7 +86,7 @@ const exitIndicator = (exitCode) =>
     ? `\x1B[91m●${RESET_COLOR}`
     : "🔴";
 
-const folder = NO_COLOR ? "⌂" : IS_WINDOWS ? `\x1B[91m⌂${RESET_COLOR}` : "📂";
+const folder = NO_COLOR ? "⌂" : IS_WINDOWS ? `\x1B[2m⌂${RESET_COLOR}` : "📂";
 
 /**
  * @param {number} n
