@@ -160,7 +160,7 @@ The JSON format lets you specify additional things apart from the command itself
   📂 my/cwd/path
   ```
 
-- status: It’s common to run watchers in `run-pty`. Watchers wrap your program – if your program crashes, the watcher will still be up and running and wait for source code changes so it can restart your program and try again. `run-pty` will display a 🟢 in the dashboard (since the watcher is successfully running), which makes things look all green. But in reality things are broken. `status` lets you replace 🟢 with custom status indicators.
+- status: It’s common to run watchers in `run-pty`. Watchers wrap your program – if your program crashes, the watcher will still be up and running and wait for source code changes so it can restart your program and try again. `run-pty` will display a 🟢 in the dashboard (since the watcher is successfully running), which makes things look all green. But in reality things are broken. `status` lets you replace 🟢 with custom status indicators, such as 🚨 to indicate an error.
 
   The keys in the object are regexes with the `u` flag.
 
@@ -176,7 +176,7 @@ The JSON format lets you specify additional things apart from the command itself
 
 - defaultStatus: This lets you replace 🟢 with a custom status indicator at startup (before your command has written anything). The value works like for `status`.
 
-Instead of JSON, you can also use [NDJSON] – one JSON object per line (blank lines are OK, too). This is handy if you generate the file on the fly using a crude script.
+Instead of JSON, you can also use [NDJSON] – one JSON object per line (blank lines are OK, too). This is handy if you generate the file on the fly using some primitive scripting language.
 
 ## Credits
 
