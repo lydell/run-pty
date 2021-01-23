@@ -1233,6 +1233,7 @@ module.exports = {
     commandToPresentationName,
     drawDashboard,
     help,
+    historyStart,
     parseArgs,
     summarizeLabels,
   },

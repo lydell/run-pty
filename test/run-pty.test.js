@@ -6,6 +6,7 @@ const {
     commandToPresentationName,
     drawDashboard,
     help,
+    historyStart,
     parseArgs,
     summarizeLabels,
   },
@@ -15,17 +16,11 @@ const {
  * @param {string} string
  * @returns {string}
  */
-function replaceColor(string) {
-  // eslint-disable-next-line no-control-regex
-  return string.replace(/\x1B\[0?m/g, "⧘").replace(/\x1B\[\d+m/g, "⧙");
-}
-
-/**
- * @param {string} string
- * @returns {string}
- */
-function replaceCursorMovements(string) {
-  return string.replace(/\x1B\[\d*[GK]/g, "");
+function replaceAnsi(string) {
+  return string
+    .replace(/\x1B\[0?m/g, "⧘")
+    .replace(/\x1B\[\d+m/g, "⧙")
+    .replace(/\x1B\[\d*[GK]/g, "");
 }
 
 /**
@@ -48,7 +43,7 @@ expect.addSnapshotSerializer({
 
 describe("help", () => {
   test("it works", () => {
-    expect(replaceColor(help)).toMatchInlineSnapshot(`
+    expect(replaceAnsi(help)).toMatchInlineSnapshot(`
       Run several commands concurrently.
       Show output for one command at a time.
       Kill all at once.
@@ -89,32 +84,30 @@ describe("dashboard", () => {
    * @returns {string}
    */
   function testDashboard(items, width) {
-    return replaceCursorMovements(
-      replaceColor(
-        drawDashboard(
-          items.map((item, index) => ({
-            label: ALL_LABELS[index] || "",
-            title: commandToPresentationName(item.command),
-            formattedCommandWithTitle: commandToPresentationName(item.command),
-            status: item.status,
-            // Unused in this case:
-            file: "file",
-            args: [],
-            cwd: ".",
-            history: "",
-            statusFromRules: undefined,
-            defaultStatus: undefined,
-            statusRules: [],
-            onData: () => notCalled("onData"),
-            onExit: () => notCalled("onExit"),
-            pushHistory: () => notCalled("pushHistory"),
-            start: () => notCalled("start"),
-            kill: () => notCalled("kill"),
-            updateStatusFromRules: () => notCalled("updateStatusFromRules"),
-          })),
-          width,
-          false
-        )
+    return replaceAnsi(
+      drawDashboard(
+        items.map((item, index) => ({
+          label: ALL_LABELS[index] || "",
+          title: commandToPresentationName(item.command),
+          formattedCommandWithTitle: commandToPresentationName(item.command),
+          status: item.status,
+          // Unused in this case:
+          file: "file",
+          args: [],
+          cwd: ".",
+          history: "",
+          statusFromRules: undefined,
+          defaultStatus: undefined,
+          statusRules: [],
+          onData: () => notCalled("onData"),
+          onExit: () => notCalled("onExit"),
+          pushHistory: () => notCalled("pushHistory"),
+          start: () => notCalled("start"),
+          kill: () => notCalled("kill"),
+          updateStatusFromRules: () => notCalled("updateStatusFromRules"),
+        })),
+        width,
+        false
       )
     );
   }
@@ -297,6 +290,43 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all␊
+
+    `);
+  });
+});
+
+describe("history start", () => {
+  /**
+   * @param {string} name
+   * @param {string} title
+   * @param {string} cwd
+   * @returns {string}
+   */
+  function testHistoryStart(name, title, cwd) {
+    return replaceAnsi(historyStart(name, title, cwd));
+  }
+
+  test("just a command", () => {
+    expect(testHistoryStart("npm start", "npm start", "."))
+      .toMatchInlineSnapshot(`
+      🟢 npm start⧘␊
+
+    `);
+  });
+
+  test("title with command and changed cwd", () => {
+    expect(testHistoryStart("frontend: npm start", "frontend", "web/frontend"))
+      .toMatchInlineSnapshot(`
+      🟢 frontend: npm start⧘
+      📂 ⧙web/frontend⧘␊
+
+    `);
+  });
+
+  test("cwd not shown if same as title", () => {
+    expect(testHistoryStart("frontend: npm start", "frontend", "frontend"))
+      .toMatchInlineSnapshot(`
+      🟢 frontend: npm start⧘␊
 
     `);
   });
