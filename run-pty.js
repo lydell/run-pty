@@ -208,13 +208,11 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
       const start = truncate([label, icon].join(separator), width);
       const end = [status.padEnd(widestStatus, " "), title].join(separator);
       const iconWidth = IS_WINDOWS || NO_COLOR ? 1 : 2;
-      const cursor = cursorHorizontalAbsolute(
-        removeGraphicRenditions(label).length + separator.length + iconWidth + 1
-      );
-      return truncate(
-        `${start}${cursor}${separator}${CLEAR_RIGHT}${end}`,
-        width
-      );
+      const startLength =
+        removeGraphicRenditions(label).length + separator.length + iconWidth;
+      return `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
+        startLength + 1
+      )}${CLEAR_RIGHT}${truncate(`${separator}${end}`, width - startLength)}`;
     })
     .join("\n");
 

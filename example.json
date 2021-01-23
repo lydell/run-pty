@@ -1,16 +1,28 @@
 [
-  { "title": "pinger", "command": ["ping", "localhost"] },
+  {
+    "title": "pinger",
+    "command": ["ping", "localhost"],
+    "defaultStatus": ["", ""]
+  },
   {
     "command": ["node", "test-keys.js"],
     "status": {
-      "keypress": ["⌨️", "K"],
+      "keypress": ["⌨️", "\u001B[96mK"],
       "backspace": null
     },
-    "defaultStatus": ["⚡️", "S"]
+    "defaultStatus": ["⚡️", "\u001B[93mS"]
   },
   {
     "title": "ls demo",
     "command": ["node", "-p", "fs.readdirSync('.')"],
     "cwd": "demo"
+  },
+  {
+    "title": "node Lorem ipsum dolor sit amet consectetur adipiscing elit ac faucibus, senectus neque etiam tempus tortor suscipit quis auctor, id ad fusce eleifend lobortis integer elementum praesent. Sodales quam elementum dui conubia purus aliquam facilisi bibendum senectus, netus consequat nec felis posuere erat himenaeos. Vitae conubia nisi interdum vestibulum neque est quisque, facilisis elementum ultricies commodo feugiat natoque mi, eu potenti posuere eros condimentum ridiculus.",
+    "command": ["node"],
+    "defaultStatus": [
+      "status Lorem ipsum dolor sit amet consectetur adipiscing elit ac faucibus, senectus neque etiam tempus tortor suscipit quis auctor, id ad fusce eleifend lobortis integer elementum praesent. Sodales quam elementum dui conubia purus aliquam facilisi bibendum senectus, netus consequat nec felis posuere erat himenaeos. Vitae conubia nisi interdum vestibulum neque est quisque, facilisis elementum ultricies commodo feugiat natoque mi, eu potenti posuere eros condimentum ridiculus.",
+      "status Lorem ipsum dolor sit amet consectetur adipiscing elit ac faucibus, senectus neque etiam tempus tortor suscipit quis auctor, id ad fusce eleifend lobortis integer elementum praesent. Sodales quam elementum dui conubia purus aliquam facilisi bibendum senectus, netus consequat nec felis posuere erat himenaeos. Vitae conubia nisi interdum vestibulum neque est quisque, facilisis elementum ultricies commodo feugiat natoque mi, eu potenti posuere eros condimentum ridiculus."
+    ]
   }
 ]
