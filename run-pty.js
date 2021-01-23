@@ -118,6 +118,9 @@ const runPty = bold("run-pty");
 const pc = dim("%");
 const at = dim("@");
 
+const [ICON_WIDTH, EMOJI_WIDTH_FIX] =
+  IS_WINDOWS || NO_COLOR ? [1, ""] : [2, cursorHorizontalAbsolute(3)];
+
 /**
  * @param {Array<string>} labels
  * @returns {string}
@@ -207,9 +210,8 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
       const separator = "  ";
       const start = truncate([label, icon].join(separator), width);
       const end = [status.padEnd(widestStatus, " "), title].join(separator);
-      const iconWidth = IS_WINDOWS || NO_COLOR ? 1 : 2;
       const startLength =
-        removeGraphicRenditions(label).length + separator.length + iconWidth;
+        removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
       return `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1
       )}${CLEAR_RIGHT}${truncate(`${separator}${end}`, width - startLength)}`;
@@ -238,7 +240,8 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
  * @param {string} name
  * @returns {string}
  */
-const firstHistoryLine = (name) => `${runningIndicator} ${name}\n`;
+const firstHistoryLine = (name) =>
+  `${runningIndicator}${EMOJI_WIDTH_FIX} ${name}\n`;
 
 // Newlines at the start/end are wanted here.
 const runningText = `
@@ -254,7 +257,7 @@ ${shortcut(KEYS.dashboard)} dashboard
 const killingText = (commandName) =>
   // Newlines at the start/end are wanted here.
   `
-${killingIndicator} ${commandName}
+${killingIndicator}${EMOJI_WIDTH_FIX} ${commandName}
 killing…
 
 ${shortcut(KEYS.kill)} force kill
@@ -270,7 +273,7 @@ ${shortcut(KEYS.dashboard)} dashboard
 const exitText = (commands, commandName, exitCode) =>
   // Newlines at the start/end are wanted here.
   `
-${exitIndicator(exitCode)} ${commandName}
+${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${commandName}
 exit ${exitCode}
 
 ${shortcut(KEYS.restart)} restart
