@@ -1,5 +1,7 @@
 "use strict";
 
+const path = require("path");
+
 const {
   __forTests: {
     ALL_LABELS,
@@ -466,5 +468,60 @@ describe("parse args", () => {
     expect(parseArgs(["+", "one", "+", "+", "+two", "+"])).toStrictEqual(
       parsedCommands([["one"], ["+two"]])
     );
+  });
+});
+
+describe("parse json", () => {
+  /**
+   * @param {string} name
+   */
+  function testJson(name) {
+    return parseArgs([path.join(__dirname, "fixtures", name)]);
+  }
+
+  test("bad json type", () => {
+    expect(testJson("bad-json-type.json")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Expected input to start with [ or { but got: n,
+        tag: Error,
+      }
+    `);
+  });
+
+  test("kitchen sink", () => {
+    const parsed = testJson("kitchen-sink.json");
+
+    expect(parsed).toStrictEqual({
+      tag: "Parsed",
+      commands: [
+        {
+          command: ["node"],
+          title: "node",
+          cwd: ".",
+          defaultStatus: undefined,
+          status: [],
+        },
+        {
+          command: ["npm", "start"],
+          title: "Backend",
+          cwd: ".",
+          defaultStatus: undefined,
+          status: [],
+        },
+        {
+          command: ["npm", "run", "parcel"],
+          title: "Parcel",
+          cwd: "frontend",
+          status: [
+            [/🚨/u, ["🚨", "E"]],
+            [/✨/u, undefined],
+          ],
+          defaultStatus: ["⏳", "S"],
+        },
+      ],
+    });
+
+    expect(testJson("kitchen-sink.ndjson")).toStrictEqual(parsed);
   });
 });
