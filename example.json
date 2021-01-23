@@ -1,0 +1,16 @@
+[
+  { "title": "pinger", "command": ["ping", "localhost"] },
+  {
+    "command": ["node", "test-keys.js"],
+    "status": {
+      "keypress": ["⌨️", "K"],
+      "backspace": null
+    },
+    "defaultStatus": ["⚡️", "S"]
+  },
+  {
+    "title": "ls demo",
+    "command": ["node", "-p", "fs.readdirSync('.')"],
+    "cwd": "demo"
+  }
+]
