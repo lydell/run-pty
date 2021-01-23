@@ -79,7 +79,12 @@ describe("help", () => {
 describe("dashboard", () => {
   /**
    *
-   * @param {Array<{ command: Array<string>, status: import("../run-pty").Status }>} items
+   * @param {Array<{
+   *   command: Array<string>;
+   *   status: import("../run-pty").Status;
+   *   statusFromRules?: string;
+   *   title?: string;
+   * }>} items
    * @param {number} width
    * @returns {string}
    */
@@ -88,7 +93,10 @@ describe("dashboard", () => {
       drawDashboard(
         items.map((item, index) => ({
           label: ALL_LABELS[index] || "",
-          title: commandToPresentationName(item.command),
+          title:
+            item.title === undefined
+              ? commandToPresentationName(item.command)
+              : item.title,
           formattedCommandWithTitle: commandToPresentationName(item.command),
           status: item.status,
           // Unused in this case:
@@ -96,7 +104,7 @@ describe("dashboard", () => {
           args: [],
           cwd: ".",
           history: "",
-          statusFromRules: undefined,
+          statusFromRules: item.statusFromRules,
           defaultStatus: undefined,
           statusRules: [],
           onData: () => notCalled("onData"),
@@ -162,7 +170,7 @@ describe("dashboard", () => {
     `);
   });
 
-  test("four commands", () => {
+  test("a variety of commands", () => {
     expect(
       testDashboard(
         [
@@ -177,10 +185,12 @@ describe("dashboard", () => {
               "hello world",
             ],
             status: { tag: "Exit", exitCode: 0 },
+            statusFromRules: "!", // Should be ignored.
           },
           {
             command: ["ping", "nope"],
             status: { tag: "Exit", exitCode: 68 },
+            statusFromRules: "!", // Should be ignored.
           },
           {
             command: ["ping", "localhost"],
@@ -189,6 +199,7 @@ describe("dashboard", () => {
               terminal: fakeTerminal({ pid: 12345 }),
               slow: false,
             },
+            statusFromRules: "!", // Should be ignored.
           },
           {
             command: ["yes"],
@@ -196,6 +207,16 @@ describe("dashboard", () => {
               tag: "Running",
               terminal: fakeTerminal({ pid: 123456 }),
             },
+          },
+          {
+            command: ["npm", "start"],
+            status: {
+              tag: "Running",
+              terminal: fakeTerminal({ pid: 123456 }),
+            },
+            statusFromRules: "🚨",
+            title:
+              "very long title for some reason that needs to be cut off at some point",
           },
         ],
         80
@@ -205,8 +226,9 @@ describe("dashboard", () => {
       ⧙[⧘⧙2⧘⧙]⧘  🔴⧘  exit 68     ping nope⧘
       ⧙[⧘⧙3⧘⧙]⧘  ⭕⧘  pid 12345   ping localhost⧘
       ⧙[⧘⧙4⧘⧙]⧘  🟢⧘  pid 123456  yes⧘
+      ⧙[⧘⧙5⧘⧙]⧘  🚨⧘  pid 123456  very long title for some reason that needs to be cut off …⧘
 
-      ⧙[⧘⧙1-4⧘⧙]⧘    focus command
+      ⧙[⧘⧙1-5⧘⧙]⧘    focus command
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill all␊
 
     `);
