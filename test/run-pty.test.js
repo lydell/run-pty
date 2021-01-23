@@ -485,6 +485,26 @@ describe("parse json", () => {
     return parseArgs([path.join(__dirname, "fixtures", name)]);
   }
 
+  test("invalid json syntax", () => {
+    expect(testJson("invalid-json-syntax.json")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Unexpected token ] in JSON at position 91,
+        tag: Error,
+      }
+    `);
+  });
+
+  test("invalid ndjson syntax", () => {
+    expect(testJson("invalid-ndjson-syntax.ndjson")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Line 2: Unexpected token } in JSON at position 40,
+        tag: Error,
+      }
+    `);
+  });
+
   test("bad json type", () => {
     expect(testJson("bad-json-type.json")).toMatchInlineSnapshot(`
       Object {
@@ -508,6 +528,56 @@ describe("parse json", () => {
       Object {
         message: Failed to read command descriptions file as JSON:
       Expected input to start with [ or { but got: nothing,
+        tag: Error,
+      }
+    `);
+  });
+
+  test("empty command", () => {
+    expect(testJson("empty-command.json")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Index 0: command: Expected a non-empty array,
+        tag: Error,
+      }
+    `);
+  });
+
+  test("missing command", () => {
+    expect(testJson("missing-command.json")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Index 0: command: This field is required, but was not provided.,
+        tag: Error,
+      }
+    `);
+  });
+
+  test("wrong command type", () => {
+    expect(testJson("wrong-command-type.json")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Index 0: command: Expected an array but got: "npm run frontend",
+        tag: Error,
+      }
+    `);
+  });
+
+  test("invalid regex", () => {
+    expect(testJson("invalid-regex.json")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Index 0: status["{}"]: This key is not a valid regex: Invalid regular expression: /{}/: Lone quantifier brackets,
+        tag: Error,
+      }
+    `);
+  });
+
+  test("key typo", () => {
+    expect(testJson("key-typo.json")).toMatchInlineSnapshot(`
+      Object {
+        message: Failed to read command descriptions file as JSON:
+      Index 0: Unknown key: titel,
         tag: Error,
       }
     `);
