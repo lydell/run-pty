@@ -214,7 +214,10 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
         removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
       return `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1
-      )}${CLEAR_RIGHT}${truncate(`${separator}${end}`, width - startLength)}`;
+      )}${CLEAR_RIGHT}${truncate(
+        `${separator}${end}`,
+        width - startLength
+      )}${RESET_COLOR}`;
     })
     .join("\n");
 
@@ -241,7 +244,7 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
  * @returns {string}
  */
 const firstHistoryLine = (name) =>
-  `${runningIndicator}${EMOJI_WIDTH_FIX} ${name}\n`;
+  `${runningIndicator}${EMOJI_WIDTH_FIX} ${name}${RESET_COLOR}\n`;
 
 // Newlines at the start/end are wanted here.
 const runningText = `
@@ -257,7 +260,7 @@ ${shortcut(KEYS.dashboard)} dashboard
 const killingText = (commandName) =>
   // Newlines at the start/end are wanted here.
   `
-${killingIndicator}${EMOJI_WIDTH_FIX} ${commandName}
+${killingIndicator}${EMOJI_WIDTH_FIX} ${commandName}${RESET_COLOR}
 killing…
 
 ${shortcut(KEYS.kill)} force kill
@@ -273,7 +276,7 @@ ${shortcut(KEYS.dashboard)} dashboard
 const exitText = (commands, commandName, exitCode) =>
   // Newlines at the start/end are wanted here.
   `
-${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${commandName}
+${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${commandName}${RESET_COLOR}
 exit ${exitCode}
 
 ${shortcut(KEYS.restart)} restart
@@ -680,7 +683,7 @@ class Command {
     this.formattedCommandWithTitle =
       title === formattedCommand
         ? formattedCommand
-        : `${bold(`${title}:`)} ${formattedCommand}`;
+        : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
     this.onData = onData;
     this.onExit = onExit;
     /** @type {string} */
