@@ -210,20 +210,26 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
     };
   });
 
-  const widestStatus = Math.max(0, ...lines.map(({ status }) => status.length));
+  const widestStatus = Math.max(
+    0,
+    ...lines.map(({ status }) => (status === undefined ? 0 : status.length))
+  );
 
   const finalLines = lines
     .map(({ label, icon, status, title }) => {
       const separator = "  ";
-      const start = truncate([label, icon].join(separator), width);
-      const end = [status.padEnd(widestStatus, " "), title].join(separator);
+      const start = truncate(`${label}${separator}${icon}`, width);
       const startLength =
         removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
+      const end =
+        status === undefined
+          ? title
+          : `${status.padEnd(widestStatus, " ")}${separator}${title}`;
       return `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1
-      )}${CLEAR_RIGHT}${truncate(
-        `${separator}${end}`,
-        width - startLength
+      )}${CLEAR_RIGHT}${separator}${truncate(
+        end,
+        width - startLength - separator.length
       )}${RESET_COLOR}`;
     })
     .join("\n");
@@ -270,17 +276,22 @@ const historyStart = (command) =>
   }${RESET_COLOR}\n${cwdText(command)}`;
 
 // Newlines at the start/end are wanted here.
-const runningText = `
-${shortcut(KEYS.kill)} kill
+/**
+ * @param {number} pid
+ * @returns {string}
+ */
+const runningText = (pid) => `
+${shortcut(KEYS.kill)} kill ${dim(`(pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
 
 `;
 
 /**
  * @param {CommandText} command
+ * @param {number} pid
  * @returns {string}
  */
-const killingText = (command) =>
+const killingText = (command, pid) =>
   // Newlines at the start/end are wanted here.
   `
 ${killingIndicator}${EMOJI_WIDTH_FIX} ${
@@ -288,7 +299,7 @@ ${killingIndicator}${EMOJI_WIDTH_FIX} ${
   }${RESET_COLOR}
 ${cwdText(command)}killing…
 
-${shortcut(KEYS.kill)} force kill
+${shortcut(KEYS.kill)} force kill ${dim(`(pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
 `;
 
@@ -314,18 +325,18 @@ ${shortcut(KEYS.dashboard)} dashboard
 /**
  * @param {Status} status
  * @param {string | undefined} statusFromRules
- * @returns {[string, string]}
+ * @returns {[string, string | undefined]}
  */
 const statusText = (status, statusFromRules = runningIndicator) => {
   switch (status.tag) {
     case "Running":
-      return [statusFromRules, `pid ${status.terminal.pid}`];
+      return [statusFromRules, undefined];
 
     case "Killing":
-      return [killingIndicator, `pid ${status.terminal.pid}`];
+      return [killingIndicator, undefined];
 
     case "Exit":
-      return [exitIndicator(status.exitCode), `exit ${status.exitCode}`];
+      return [exitIndicator(status.exitCode), bold(`exit ${status.exitCode}`)];
   }
 };
 
@@ -344,7 +355,7 @@ const removeGraphicRenditions = (string) =>
  */
 const truncate = (string, maxLength) => {
   const diff = removeGraphicRenditions(string).length - maxLength;
-  return diff <= 0 ? string : `${string.slice(0, -(diff + 2))}…`;
+  return diff <= 0 ? string : `${string.slice(0, -(diff + 1))}…`;
 };
 
 /**
@@ -914,14 +925,18 @@ const runCommands = (commandDescriptions) => {
           command.history.endsWith("\n") ||
           command.history.endsWith(`\n${RESET_COLOR}`)
         ) {
-          process.stdout.write(RESET_COLOR + runningText);
+          process.stdout.write(
+            RESET_COLOR + runningText(command.status.terminal.pid)
+          );
         }
         return undefined;
 
       case "Killing":
         if (command.status.slow) {
           process.stdout.write(
-            HIDE_CURSOR + RESET_COLOR + killingText(command)
+            HIDE_CURSOR +
+              RESET_COLOR +
+              killingText(command, command.status.terminal.pid)
           );
         }
         return undefined;
@@ -1246,6 +1261,7 @@ module.exports = {
     historyStart,
     killingText,
     parseArgs,
+    runningText,
     summarizeLabels,
   },
 };

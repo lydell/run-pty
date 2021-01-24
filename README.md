@@ -32,8 +32,8 @@ $ npm start
 ➡️
 
 ```
-[1]  🟢 pid 11084  npm run frontend
-[2]  🟢 pid 11085  npm run backend
+[1]  🟢  npm run frontend
+[2]  🟢  npm run backend
 
 [1-2]    focus command
 [ctrl+c] kill all
@@ -54,7 +54,7 @@ $ npm start
 [9:51:27 AM]: Packaging...
 [9:51:27 AM]: ✨  Built in 67ms.
 
-[ctrl+c] kill
+[ctrl+c] kill (pid 63096)
 [ctrl+z] dashboard
 
 ▊
@@ -86,8 +86,8 @@ exit 0
 ➡️ <kbd>ctrl+z</kbd> ➡️
 
 ```
-[1]  ⚪ exit 0     npm run frontend
-[2]  🟢 pid 11085  npm run backend
+[1]  ⚪  exit 0  npm run frontend
+[2]  🟢  npm run backend
 
 [1-2]    focus command
 [ctrl+c] kill all
@@ -96,8 +96,8 @@ exit 0
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
-[1]  ⚪ exit 0  npm run frontend
-[2]  ⚪ exit 0  npm run backend
+[1]  ⚪  exit 0  npm run frontend
+[2]  ⚪  exit 0  npm run backend
 
 $ ▊
 ```
