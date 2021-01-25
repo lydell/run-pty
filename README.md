@@ -166,12 +166,12 @@ The JSON format lets you specify additional things apart from the command itself
 
   The values are either a tuple with two strings or `null`.
 
-  For each _line_ of output, `run-pty` matches all the regexes from top to bottom. For every match, the status indicator is set to the corresponding value. If several regexes match, the last match wins.
+  For each _line_ of output, `run-pty` matches all the regexes from top to bottom. For every match, the status indicator is set to the corresponding value. If several regexes match, the last match wins. [Graphic renditions] are stripped before matching.
 
   This is how the value (`[string, string] | null`) is used:
 
   - The first string is used on all OS:es except Windows, unless the `NO_COLOR` environment variable is set. The string is drawn in 2 character slots in the terminal – if your string is longer, it will be cut off. Emojis usually need 2 character slots.
-  - The second string is used on Windows or if `NO_COLOR` is set. In `NO_COLOR` mode, ANSI codes (“graphic renditions”) are stripped as well. So you can use ANSI codes (in either string) to make your experience more colorful while still letting people have monochrome output if they prefer. Unlike the first string, the second string is drawn in **1** character slot in the terminal. (Windows does not support emojis in the terminal very well, and for `NO_COLOR` you might not want colored emojis, so a single character should do.)
+  - The second string is used on Windows or if `NO_COLOR` is set. In `NO_COLOR` mode, [graphic renditions] are stripped as well. So you can use ANSI codes (in either string) to make your experience more colorful while still letting people have monochrome output if they prefer. Unlike the first string, the second string is drawn in **1** character slot in the terminal. (Windows does not support emojis in the terminal very well, and for `NO_COLOR` you might not want colored emojis, so a single character should do.)
   - `null` resets the indicator to the standard 🟢 one (_not_ `defaultStatus`).
 
 - defaultStatus: This lets you replace 🟢 with a custom status indicator at startup (before your command has written anything). The value works like for `status`.
@@ -199,6 +199,7 @@ There might still be occasional flicker. Hopefully the iTerm2 developers will im
 
 [apiel/run-screen]: https://github.com/apiel/run-screen
 [concurrently]: https://github.com/kimmobrunfeldt/concurrently
+[graphic renditions]: https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
 [iterm2]: https://www.iterm2.com/
 [microsoft/node-pty]: https://github.com/microsoft/node-pty
 [ndjson]: https://github.com/ndjson/ndjson-spec

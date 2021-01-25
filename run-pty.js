@@ -340,13 +340,15 @@ const statusText = (status, statusFromRules = runningIndicator) => {
   }
 };
 
+// eslint-disable-next-line no-control-regex
+const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
+
 /**
  * @param {string} string
  * @returns {string}
  */
 const removeGraphicRenditions = (string) =>
-  // eslint-disable-next-line no-control-regex
-  string.replace(/\x1B\[(?:\d+(?:;\d+)*)?m/g, "");
+  string.replace(GRAPHIC_RENDITIONS, "");
 
 /**
  * @param {string} string
@@ -354,8 +356,22 @@ const removeGraphicRenditions = (string) =>
  * @returns {string}
  */
 const truncate = (string, maxLength) => {
-  const diff = removeGraphicRenditions(string).length - maxLength;
-  return diff <= 0 ? string : `${string.slice(0, -(diff + 1))}…`;
+  let result = "";
+  let length = 0;
+  for (const [index, part] of string.split(GRAPHIC_RENDITIONS).entries()) {
+    if (index % 2 === 0) {
+      const diff = maxLength - length - part.length;
+      if (diff < 0) {
+        return `${result + part.slice(0, diff - 1)}…`;
+      } else {
+        result += part;
+        length += part.length;
+      }
+    } else {
+      result += part;
+    }
+  }
+  return result;
 };
 
 /**
