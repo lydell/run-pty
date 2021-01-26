@@ -37,6 +37,7 @@ module.exports = {
         ...require("@typescript-eslint/eslint-plugin").configs[
           "recommended-requiring-type-checking"
         ].rules,
+        "@typescript-eslint/switch-exhaustiveness-check": "error",
       },
     },
     {

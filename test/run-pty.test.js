@@ -1,12 +1,18 @@
 "use strict";
 
+const path = require("path");
+
 const {
   __forTests: {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
+    exitText,
     help,
+    historyStart,
+    killingText,
     parseArgs,
+    runningText,
     summarizeLabels,
   },
 } = require("../run-pty");
@@ -15,14 +21,18 @@ const {
  * @param {string} string
  * @returns {string}
  */
-function replaceColor(string) {
-  // eslint-disable-next-line no-control-regex
-  return string.replace(/\x1B\[0?m/g, "⧘").replace(/\x1B\[\d+m/g, "⧙");
+function replaceAnsi(string) {
+  /* eslint-disable no-control-regex */
+  return string
+    .replace(/\x1B\[0?m/g, "⧘")
+    .replace(/\x1B\[\d+m/g, "⧙")
+    .replace(/\x1B\[\d*[GK]/g, "");
+  /* eslint-enable no-control-regex */
 }
 
 /**
  * @param {string} name
- * @returns {undefined}
+ * @returns {never}
  */
 function notCalled(name) {
   throw new Error(`Expected ${name} not to be called!`);
@@ -40,7 +50,7 @@ expect.addSnapshotSerializer({
 
 describe("help", () => {
   test("it works", () => {
-    expect(replaceColor(help)).toMatchInlineSnapshot(`
+    expect(replaceAnsi(help)).toMatchInlineSnapshot(`
       Run several commands concurrently.
       Show output for one command at a time.
       Kill all at once.
@@ -59,6 +69,10 @@ describe("help", () => {
       Note: All arguments are strings and passed as-is – no shell script execution.
       Use ⧙sh -c '...'⧘ or similar if you need that.
 
+      Alternatively, specify the commands in a JSON (or NDJSON) file:
+
+          ⧙run-pty⧘ run-pty.json
+
       Environment variables:
 
           ⧙RUN_PTY_MAX_HISTORY⧘
@@ -76,26 +90,40 @@ describe("help", () => {
 describe("dashboard", () => {
   /**
    *
-   * @param {Array<{ command: Array<string>, status: import("../run-pty").Status }>} items
+   * @param {Array<{
+   *   command: Array<string>;
+   *   status: import("../run-pty").Status;
+   *   statusFromRules?: string;
+   *   title?: string;
+   * }>} items
    * @param {number} width
    * @returns {string}
    */
   function testDashboard(items, width) {
-    return replaceColor(
+    return replaceAnsi(
       drawDashboard(
         items.map((item, index) => ({
           label: ALL_LABELS[index] || "",
-          name: commandToPresentationName(item.command),
+          title:
+            item.title === undefined
+              ? commandToPresentationName(item.command)
+              : item.title,
+          formattedCommandWithTitle: commandToPresentationName(item.command),
           status: item.status,
           // Unused in this case:
           file: "file",
           args: [],
+          cwd: ".",
           history: "",
+          statusFromRules: item.statusFromRules,
+          defaultStatus: undefined,
+          statusRules: [],
           onData: () => notCalled("onData"),
           onExit: () => notCalled("onExit"),
           pushHistory: () => notCalled("pushHistory"),
           start: () => notCalled("start"),
           kill: () => notCalled("kill"),
+          updateStatusFromRules: () => notCalled("updateStatusFromRules"),
         })),
         width,
         false
@@ -145,7 +173,7 @@ describe("dashboard", () => {
         80
       )
     ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙1⧘⧙]⧘  ⚪ exit 0  npm start
+      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit␊
@@ -153,7 +181,7 @@ describe("dashboard", () => {
     `);
   });
 
-  test("four commands", () => {
+  test("a variety of commands", () => {
     expect(
       testDashboard(
         [
@@ -168,10 +196,12 @@ describe("dashboard", () => {
               "hello world",
             ],
             status: { tag: "Exit", exitCode: 0 },
+            statusFromRules: "!", // Should be ignored.
           },
           {
             command: ["ping", "nope"],
             status: { tag: "Exit", exitCode: 68 },
+            statusFromRules: "!", // Should be ignored.
           },
           {
             command: ["ping", "localhost"],
@@ -180,6 +210,7 @@ describe("dashboard", () => {
               terminal: fakeTerminal({ pid: 12345 }),
               slow: false,
             },
+            statusFromRules: "!", // Should be ignored.
           },
           {
             command: ["yes"],
@@ -188,16 +219,27 @@ describe("dashboard", () => {
               terminal: fakeTerminal({ pid: 123456 }),
             },
           },
+          {
+            command: ["npm", "start"],
+            status: {
+              tag: "Running",
+              terminal: fakeTerminal({ pid: 123456 }),
+            },
+            statusFromRules: "🚨",
+            title:
+              "very long title for some reason that needs to be cut off at some point",
+          },
         ],
         80
       )
     ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙1⧘⧙]⧘  ⚪ exit 0      echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'he…
-      ⧙[⧘⧙2⧘⧙]⧘  🔴 exit 68     ping nope
-      ⧙[⧘⧙3⧘⧙]⧘  ⭕ pid 12345   ping localhost
-      ⧙[⧘⧙4⧘⧙]⧘  🟢 pid 123456  yes
+      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘   echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'hell…⧘
+      ⧙[⧘⧙2⧘⧙]⧘  🔴⧘  ⧙exit 68⧘  ping nope⧘
+      ⧙[⧘⧙3⧘⧙]⧘  ⭕⧘  ping localhost⧘
+      ⧙[⧘⧙4⧘⧙]⧘  🟢⧘  yes⧘
+      ⧙[⧘⧙5⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
 
-      ⧙[⧘⧙1-4⧘⧙]⧘    focus command
+      ⧙[⧘⧙1-5⧘⧙]⧘    focus command
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill all␊
 
     `);
@@ -216,71 +258,200 @@ describe("dashboard", () => {
         80
       )
     ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙1⧘⧙]⧘  🟢 pid 9980   echo 0
-      ⧙[⧘⧙2⧘⧙]⧘  🟢 pid 9981   echo 1
-      ⧙[⧘⧙3⧘⧙]⧘  🟢 pid 9982   echo 2
-      ⧙[⧘⧙4⧘⧙]⧘  🟢 pid 9983   echo 3
-      ⧙[⧘⧙5⧘⧙]⧘  🟢 pid 9984   echo 4
-      ⧙[⧘⧙6⧘⧙]⧘  🟢 pid 9985   echo 5
-      ⧙[⧘⧙7⧘⧙]⧘  🟢 pid 9986   echo 6
-      ⧙[⧘⧙8⧘⧙]⧘  🟢 pid 9987   echo 7
-      ⧙[⧘⧙9⧘⧙]⧘  🟢 pid 9988   echo 8
-      ⧙[⧘⧙a⧘⧙]⧘  🟢 pid 9989   echo 9
-      ⧙[⧘⧙b⧘⧙]⧘  🟢 pid 9990   echo 10
-      ⧙[⧘⧙c⧘⧙]⧘  🟢 pid 9991   echo 11
-      ⧙[⧘⧙d⧘⧙]⧘  🟢 pid 9992   echo 12
-      ⧙[⧘⧙e⧘⧙]⧘  🟢 pid 9993   echo 13
-      ⧙[⧘⧙f⧘⧙]⧘  🟢 pid 9994   echo 14
-      ⧙[⧘⧙g⧘⧙]⧘  🟢 pid 9995   echo 15
-      ⧙[⧘⧙h⧘⧙]⧘  🟢 pid 9996   echo 16
-      ⧙[⧘⧙i⧘⧙]⧘  🟢 pid 9997   echo 17
-      ⧙[⧘⧙j⧘⧙]⧘  🟢 pid 9998   echo 18
-      ⧙[⧘⧙k⧘⧙]⧘  🟢 pid 9999   echo 19
-      ⧙[⧘⧙l⧘⧙]⧘  🟢 pid 10000  echo 20
-      ⧙[⧘⧙m⧘⧙]⧘  🟢 pid 10001  echo 21
-      ⧙[⧘⧙n⧘⧙]⧘  🟢 pid 10002  echo 22
-      ⧙[⧘⧙o⧘⧙]⧘  🟢 pid 10003  echo 23
-      ⧙[⧘⧙p⧘⧙]⧘  🟢 pid 10004  echo 24
-      ⧙[⧘⧙q⧘⧙]⧘  🟢 pid 10005  echo 25
-      ⧙[⧘⧙r⧘⧙]⧘  🟢 pid 10006  echo 26
-      ⧙[⧘⧙s⧘⧙]⧘  🟢 pid 10007  echo 27
-      ⧙[⧘⧙t⧘⧙]⧘  🟢 pid 10008  echo 28
-      ⧙[⧘⧙u⧘⧙]⧘  🟢 pid 10009  echo 29
-      ⧙[⧘⧙v⧘⧙]⧘  🟢 pid 10010  echo 30
-      ⧙[⧘⧙w⧘⧙]⧘  🟢 pid 10011  echo 31
-      ⧙[⧘⧙x⧘⧙]⧘  🟢 pid 10012  echo 32
-      ⧙[⧘⧙y⧘⧙]⧘  🟢 pid 10013  echo 33
-      ⧙[⧘⧙z⧘⧙]⧘  🟢 pid 10014  echo 34
-      ⧙[⧘⧙A⧘⧙]⧘  🟢 pid 10015  echo 35
-      ⧙[⧘⧙B⧘⧙]⧘  🟢 pid 10016  echo 36
-      ⧙[⧘⧙C⧘⧙]⧘  🟢 pid 10017  echo 37
-      ⧙[⧘⧙D⧘⧙]⧘  🟢 pid 10018  echo 38
-      ⧙[⧘⧙E⧘⧙]⧘  🟢 pid 10019  echo 39
-      ⧙[⧘⧙F⧘⧙]⧘  🟢 pid 10020  echo 40
-      ⧙[⧘⧙G⧘⧙]⧘  🟢 pid 10021  echo 41
-      ⧙[⧘⧙H⧘⧙]⧘  🟢 pid 10022  echo 42
-      ⧙[⧘⧙I⧘⧙]⧘  🟢 pid 10023  echo 43
-      ⧙[⧘⧙J⧘⧙]⧘  🟢 pid 10024  echo 44
-      ⧙[⧘⧙K⧘⧙]⧘  🟢 pid 10025  echo 45
-      ⧙[⧘⧙L⧘⧙]⧘  🟢 pid 10026  echo 46
-      ⧙[⧘⧙M⧘⧙]⧘  🟢 pid 10027  echo 47
-      ⧙[⧘⧙N⧘⧙]⧘  🟢 pid 10028  echo 48
-      ⧙[⧘⧙O⧘⧙]⧘  🟢 pid 10029  echo 49
-      ⧙[⧘⧙P⧘⧙]⧘  🟢 pid 10030  echo 50
-      ⧙[⧘⧙Q⧘⧙]⧘  🟢 pid 10031  echo 51
-      ⧙[⧘⧙R⧘⧙]⧘  🟢 pid 10032  echo 52
-      ⧙[⧘⧙S⧘⧙]⧘  🟢 pid 10033  echo 53
-      ⧙[⧘⧙T⧘⧙]⧘  🟢 pid 10034  echo 54
-      ⧙[⧘⧙U⧘⧙]⧘  🟢 pid 10035  echo 55
-      ⧙[⧘⧙V⧘⧙]⧘  🟢 pid 10036  echo 56
-      ⧙[⧘⧙W⧘⧙]⧘  🟢 pid 10037  echo 57
-      ⧙[⧘⧙X⧘⧙]⧘  🟢 pid 10038  echo 58
-      ⧙[⧘⧙Y⧘⧙]⧘  🟢 pid 10039  echo 59
-      ⧙[⧘⧙Z⧘⧙]⧘  🟢 pid 10040  echo 60
-      ⧙[⧘⧙ ⧘⧙]⧘  🟢 pid 10041  echo 61
+      ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  echo 0⧘
+      ⧙[⧘⧙2⧘⧙]⧘  🟢⧘  echo 1⧘
+      ⧙[⧘⧙3⧘⧙]⧘  🟢⧘  echo 2⧘
+      ⧙[⧘⧙4⧘⧙]⧘  🟢⧘  echo 3⧘
+      ⧙[⧘⧙5⧘⧙]⧘  🟢⧘  echo 4⧘
+      ⧙[⧘⧙6⧘⧙]⧘  🟢⧘  echo 5⧘
+      ⧙[⧘⧙7⧘⧙]⧘  🟢⧘  echo 6⧘
+      ⧙[⧘⧙8⧘⧙]⧘  🟢⧘  echo 7⧘
+      ⧙[⧘⧙9⧘⧙]⧘  🟢⧘  echo 8⧘
+      ⧙[⧘⧙a⧘⧙]⧘  🟢⧘  echo 9⧘
+      ⧙[⧘⧙b⧘⧙]⧘  🟢⧘  echo 10⧘
+      ⧙[⧘⧙c⧘⧙]⧘  🟢⧘  echo 11⧘
+      ⧙[⧘⧙d⧘⧙]⧘  🟢⧘  echo 12⧘
+      ⧙[⧘⧙e⧘⧙]⧘  🟢⧘  echo 13⧘
+      ⧙[⧘⧙f⧘⧙]⧘  🟢⧘  echo 14⧘
+      ⧙[⧘⧙g⧘⧙]⧘  🟢⧘  echo 15⧘
+      ⧙[⧘⧙h⧘⧙]⧘  🟢⧘  echo 16⧘
+      ⧙[⧘⧙i⧘⧙]⧘  🟢⧘  echo 17⧘
+      ⧙[⧘⧙j⧘⧙]⧘  🟢⧘  echo 18⧘
+      ⧙[⧘⧙k⧘⧙]⧘  🟢⧘  echo 19⧘
+      ⧙[⧘⧙l⧘⧙]⧘  🟢⧘  echo 20⧘
+      ⧙[⧘⧙m⧘⧙]⧘  🟢⧘  echo 21⧘
+      ⧙[⧘⧙n⧘⧙]⧘  🟢⧘  echo 22⧘
+      ⧙[⧘⧙o⧘⧙]⧘  🟢⧘  echo 23⧘
+      ⧙[⧘⧙p⧘⧙]⧘  🟢⧘  echo 24⧘
+      ⧙[⧘⧙q⧘⧙]⧘  🟢⧘  echo 25⧘
+      ⧙[⧘⧙r⧘⧙]⧘  🟢⧘  echo 26⧘
+      ⧙[⧘⧙s⧘⧙]⧘  🟢⧘  echo 27⧘
+      ⧙[⧘⧙t⧘⧙]⧘  🟢⧘  echo 28⧘
+      ⧙[⧘⧙u⧘⧙]⧘  🟢⧘  echo 29⧘
+      ⧙[⧘⧙v⧘⧙]⧘  🟢⧘  echo 30⧘
+      ⧙[⧘⧙w⧘⧙]⧘  🟢⧘  echo 31⧘
+      ⧙[⧘⧙x⧘⧙]⧘  🟢⧘  echo 32⧘
+      ⧙[⧘⧙y⧘⧙]⧘  🟢⧘  echo 33⧘
+      ⧙[⧘⧙z⧘⧙]⧘  🟢⧘  echo 34⧘
+      ⧙[⧘⧙A⧘⧙]⧘  🟢⧘  echo 35⧘
+      ⧙[⧘⧙B⧘⧙]⧘  🟢⧘  echo 36⧘
+      ⧙[⧘⧙C⧘⧙]⧘  🟢⧘  echo 37⧘
+      ⧙[⧘⧙D⧘⧙]⧘  🟢⧘  echo 38⧘
+      ⧙[⧘⧙E⧘⧙]⧘  🟢⧘  echo 39⧘
+      ⧙[⧘⧙F⧘⧙]⧘  🟢⧘  echo 40⧘
+      ⧙[⧘⧙G⧘⧙]⧘  🟢⧘  echo 41⧘
+      ⧙[⧘⧙H⧘⧙]⧘  🟢⧘  echo 42⧘
+      ⧙[⧘⧙I⧘⧙]⧘  🟢⧘  echo 43⧘
+      ⧙[⧘⧙J⧘⧙]⧘  🟢⧘  echo 44⧘
+      ⧙[⧘⧙K⧘⧙]⧘  🟢⧘  echo 45⧘
+      ⧙[⧘⧙L⧘⧙]⧘  🟢⧘  echo 46⧘
+      ⧙[⧘⧙M⧘⧙]⧘  🟢⧘  echo 47⧘
+      ⧙[⧘⧙N⧘⧙]⧘  🟢⧘  echo 48⧘
+      ⧙[⧘⧙O⧘⧙]⧘  🟢⧘  echo 49⧘
+      ⧙[⧘⧙P⧘⧙]⧘  🟢⧘  echo 50⧘
+      ⧙[⧘⧙Q⧘⧙]⧘  🟢⧘  echo 51⧘
+      ⧙[⧘⧙R⧘⧙]⧘  🟢⧘  echo 52⧘
+      ⧙[⧘⧙S⧘⧙]⧘  🟢⧘  echo 53⧘
+      ⧙[⧘⧙T⧘⧙]⧘  🟢⧘  echo 54⧘
+      ⧙[⧘⧙U⧘⧙]⧘  🟢⧘  echo 55⧘
+      ⧙[⧘⧙V⧘⧙]⧘  🟢⧘  echo 56⧘
+      ⧙[⧘⧙W⧘⧙]⧘  🟢⧘  echo 57⧘
+      ⧙[⧘⧙X⧘⧙]⧘  🟢⧘  echo 58⧘
+      ⧙[⧘⧙Y⧘⧙]⧘  🟢⧘  echo 59⧘
+      ⧙[⧘⧙Z⧘⧙]⧘  🟢⧘  echo 60⧘
+      ⧙[⧘⧙ ⧘⧙]⧘  🟢⧘  echo 61⧘
 
       ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all␊
+
+    `);
+  });
+});
+
+describe("focused command", () => {
+  /**
+   * @param {(command: import("../run-pty").CommandText) => string} f
+   * @param {string} formattedCommandWithTitle
+   * @param {string} title
+   * @param {string} cwd
+   * @returns {string}
+   */
+  function render(f, formattedCommandWithTitle, title, cwd) {
+    return replaceAnsi(f({ formattedCommandWithTitle, title, cwd }));
+  }
+
+  test("just a command", () => {
+    expect(render(historyStart, "npm start", "npm start", "./"))
+      .toMatchInlineSnapshot(`
+      🟢 npm start⧘␊
+
+    `);
+  });
+
+  test("title with command and changed cwd", () => {
+    expect(
+      render(historyStart, "frontend: npm start", "frontend", "web/frontend")
+    ).toMatchInlineSnapshot(`
+      🟢 frontend: npm start⧘
+      📂 ⧙web/frontend⧘␊
+
+    `);
+  });
+
+  test("cwd not shown if same as title", () => {
+    expect(render(historyStart, "frontend: npm start", "frontend", "frontend"))
+      .toMatchInlineSnapshot(`
+      🟢 frontend: npm start⧘␊
+
+    `);
+  });
+
+  test("running text includes pid", () => {
+    expect(replaceAnsi(runningText(12345))).toMatchInlineSnapshot(`
+      ␊
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+
+
+    `);
+  });
+
+  test("killing without cwd", () => {
+    expect(
+      render(
+        (command) => killingText(command, 12345),
+        "frontend: npm start",
+        "frontend",
+        "./x/.."
+      )
+    ).toMatchInlineSnapshot(`
+      ␊
+      ⭕ frontend: npm start⧘
+      killing…
+
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill ⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+
+    `);
+  });
+
+  test("killing with cwd", () => {
+    expect(
+      render(
+        (command) => killingText(command, 12345),
+        "frontend: npm start",
+        "frontend",
+        "web/frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      ␊
+      ⭕ frontend: npm start⧘
+      📂 ⧙web/frontend⧘
+      killing…
+
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill ⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+
+    `);
+  });
+
+  test("exit 0 with cwd", () => {
+    expect(
+      render(
+        (command) => exitText([], command, 0),
+        "frontend: npm start",
+        "frontend",
+        "web/frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      ␊
+      ⚪ frontend: npm start⧘
+      📂 ⧙web/frontend⧘
+      exit 0
+
+      ⧙[⧘⧙enter⧘⧙]⧘  restart
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+
+    `);
+  });
+
+  test("exit 1 without cwd", () => {
+    expect(
+      render(
+        (command) => exitText([], command, 0),
+        "frontend: npm start",
+        "frontend",
+        "frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      ␊
+      ⚪ frontend: npm start⧘
+      exit 0
+
+      ⧙[⧘⧙enter⧘⧙]⧘  restart
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
 
     `);
   });
@@ -322,36 +493,42 @@ describe("parse args", () => {
     expect(parseArgs(["--help"])).toStrictEqual({ tag: "Help" });
   });
 
-  test("missing separator", () => {
-    const error = parseArgs(["npm", "start"]);
-    expect(error).toMatchInlineSnapshot(`
-      Object {
-        message: The first argument is the delimiter to use between commands.
-      It must not be empty or a-z/0-9/underscores/dashes only.
-      Maybe try % as delimiter?,
-        tag: Error,
-      }
-    `);
-    expect(parseArgs([""])).toStrictEqual(error);
-    expect(parseArgs(["Weird-command_1"])).toStrictEqual(error);
-  });
-
   test("no commands", () => {
     const error = parseArgs(["%"]);
     expect(error).toMatchInlineSnapshot(`
       Object {
-        message: You must specify at least one command to run.,
+        message: The first argument is either the delimiter to use between commands,
+      or the path to a JSON file that describes the commands.
+      If you meant to use a file, make sure it exists.
+      Otherwise, choose a delimiter like % and provide at least one command.
+      ENOENT: no such file or directory, open '%',
         tag: Error,
       }
     `);
-    expect(parseArgs(["%", "%", "%"])).toStrictEqual(error);
+    expect(parseArgs(["%", "%", "%"])).toStrictEqual({ tag: "NoCommands" });
   });
 
   test("commands", () => {
-    expect(parseArgs(["%", "npm", "start"])).toStrictEqual({
-      tag: "Parsed",
-      commands: [["npm", "start"]],
-    });
+    /**
+     * @param {Array<Array<string>>} commands
+     * @returns {import("../run-pty").ParseResult}
+     */
+    function parsedCommands(commands) {
+      return {
+        tag: "Parsed",
+        commands: commands.map((command) => ({
+          command,
+          cwd: ".",
+          defaultStatus: undefined,
+          status: [],
+          title: commandToPresentationName(command),
+        })),
+      };
+    }
+
+    expect(parseArgs(["%", "npm", "start"])).toStrictEqual(
+      parsedCommands([["npm", "start"]])
+    );
 
     expect(
       parseArgs([
@@ -363,13 +540,12 @@ describe("parse args", () => {
         "--entry",
         "/entry/file",
       ])
-    ).toStrictEqual({
-      tag: "Parsed",
-      commands: [
+    ).toStrictEqual(
+      parsedCommands([
         ["npm", "start"],
         ["webpack-dev-server", "--entry", "/entry/file"],
-      ],
-    });
+      ])
+    );
 
     expect(
       parseArgs([
@@ -383,17 +559,142 @@ describe("parse args", () => {
         "ping",
         "localhost",
       ])
-    ).toStrictEqual({
-      tag: "Parsed",
-      commands: [
+    ).toStrictEqual(
+      parsedCommands([
         ["./report_progress.bash", "--root", "/", "--unit", "%"],
         ["ping", "localhost"],
+      ])
+    );
+
+    expect(parseArgs(["+", "one", "+", "+", "+two", "+"])).toStrictEqual(
+      parsedCommands([["one"], ["+two"]])
+    );
+  });
+});
+
+describe("parse json", () => {
+  /**
+   * @param {string} name
+   * @returns {import("../run-pty").ParseResult}
+   */
+  function testJson(name) {
+    return parseArgs([path.join(__dirname, "fixtures", name)]);
+  }
+
+  /**
+   * @param {string} name
+   * @returns {string}
+   */
+  function testJsonError(name) {
+    const result = testJson(name);
+    if (result.tag === "Error") {
+      return result.message;
+    }
+    expect(result).toBe({ tag: "Error" });
+    throw new Error("Expected Error!");
+  }
+
+  test("invalid json syntax", () => {
+    expect(testJsonError("invalid-json-syntax.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Unexpected token ] in JSON at position 91
+    `);
+  });
+
+  test("invalid ndjson syntax", () => {
+    expect(testJsonError("invalid-ndjson-syntax.ndjson"))
+      .toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Line 2: Unexpected token } in JSON at position 40
+    `);
+  });
+
+  test("bad json type", () => {
+    expect(testJsonError("bad-json-type.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Expected input to start with [ or { but got: n
+    `);
+  });
+
+  test("empty list of commands", () => {
+    expect(testJson("empty-array.json")).toStrictEqual({ tag: "NoCommands" });
+  });
+
+  test("empty NDJSON", () => {
+    expect(testJsonError("empty.ndjson")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Expected input to start with [ or { but got: nothing
+    `);
+  });
+
+  test("empty command", () => {
+    expect(testJsonError("empty-command.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Index 0: command: Expected a non-empty array
+    `);
+  });
+
+  test("missing command", () => {
+    expect(testJsonError("missing-command.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Index 0: command: This field is required, but was not provided.
+    `);
+  });
+
+  test("wrong command type", () => {
+    expect(testJsonError("wrong-command-type.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Index 0: command: Expected an array but got: "npm run frontend"
+    `);
+  });
+
+  test("invalid regex", () => {
+    expect(testJsonError("invalid-regex.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Index 0: status["{}"]: This key is not a valid regex: Invalid regular expression: /{}/: Lone quantifier brackets
+    `);
+  });
+
+  test("key typo", () => {
+    expect(testJsonError("key-typo.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Index 0: Unknown key: titel
+    `);
+  });
+
+  test("kitchen sink", () => {
+    const parsed = testJson("kitchen-sink.json");
+
+    expect(parsed).toStrictEqual({
+      tag: "Parsed",
+      commands: [
+        {
+          command: ["node"],
+          title: "node",
+          cwd: ".",
+          defaultStatus: undefined,
+          status: [],
+        },
+        {
+          command: ["npm", "start"],
+          title: "Backend",
+          cwd: ".",
+          defaultStatus: undefined,
+          status: [],
+        },
+        {
+          command: ["npm", "run", "parcel"],
+          title: "Parcel",
+          cwd: "frontend",
+          status: [
+            [/🚨/u, ["🚨", "E"]],
+            [/✨/u, undefined],
+          ],
+          defaultStatus: ["⏳", "S"],
+        },
       ],
     });
 
-    expect(parseArgs(["+", "one", "+", "+", "+two", "+"])).toStrictEqual({
-      tag: "Parsed",
-      commands: [["one"], ["+two"]],
-    });
+    expect(testJson("kitchen-sink.ndjson")).toStrictEqual(parsed);
   });
 });

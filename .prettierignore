@@ -1,3 +1,4 @@
 .cache
 .vscode
 dist
+invalid-*-syntax.*

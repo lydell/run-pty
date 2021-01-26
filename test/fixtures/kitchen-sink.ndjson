@@ -1,0 +1,6 @@
+{ "command": ["node"] }
+
+  { "command": ["npm", "start"], "title": "Backend", "defaultStatus": null }
+  
+  
+{ "command": ["npm", "run", "parcel"], "title": "Parcel", "cwd": "frontend", "status": { "🚨": ["🚨", "E"], "✨": null }, "defaultStatus": ["⏳", "S"] } 

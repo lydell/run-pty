@@ -1,0 +1,9 @@
+[
+  {
+    "command": ["node"],
+    "status": {
+      "one": null,
+      "{}": null
+    }
+  }
+]

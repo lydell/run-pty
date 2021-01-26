@@ -1,0 +1,28 @@
+[
+  {
+    "title": "pinger",
+    "command": ["ping", "localhost"],
+    "defaultStatus": ["", ""]
+  },
+  {
+    "command": ["node", "test-keys.js"],
+    "status": {
+      "keypress": ["⌨️", "\u001B[96mK"],
+      "backspace": null
+    },
+    "defaultStatus": ["⚡️", "\u001B[93mS"]
+  },
+  {
+    "title": "ls demo",
+    "command": ["node", "-p", "fs.readdirSync('.')"],
+    "cwd": "demo"
+  },
+  {
+    "title": "node \u001B[91mLorem ipsum dolor sit amet \u001B[92mconsectetur adipiscing elit ac \u001B[93mfaucibus, senectus neque \u001B[94metiam tempus tortor suscipit \u001B[95mquis auctor, id ad fusce \u001B[96meleifend lobortis integer elementum praesent. \u001B[91mSodales quam elementum dui conubia purus \u001B[92maliquam facilisi bibendum senectus, \u001B[93mnetus consequat nec felis posuere \u001B[94merat himenaeos. Vitae conubia nisi \u001B[95minterdum vestibulum neque est quisque, \u001B[96mfacilisis elementum ultricies commodo feugiat \u001B[91mnatoque mi, eu potenti posuere \u001B[92meros condimentum ridiculus",
+    "command": ["node"],
+    "defaultStatus": [
+      "status Lorem ipsum dolor sit amet consectetur adipiscing elit ac faucibus, senectus neque etiam tempus tortor suscipit quis auctor, id ad fusce eleifend lobortis integer elementum praesent. Sodales quam elementum dui conubia purus aliquam facilisi bibendum senectus, netus consequat nec felis posuere erat himenaeos. Vitae conubia nisi interdum vestibulum neque est quisque, facilisis elementum ultricies commodo feugiat natoque mi, eu potenti posuere eros condimentum ridiculus",
+      "status Lorem ipsum dolor sit amet consectetur adipiscing elit ac faucibus, senectus neque etiam tempus tortor suscipit quis auctor, id ad fusce eleifend lobortis integer elementum praesent. Sodales quam elementum dui conubia purus aliquam facilisi bibendum senectus, netus consequat nec felis posuere erat himenaeos. Vitae conubia nisi interdum vestibulum neque est quisque, facilisis elementum ultricies commodo feugiat natoque mi, eu potenti posuere eros condimentum ridiculus"
+    ]
+  }
+]

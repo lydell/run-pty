@@ -1,0 +1,4 @@
+[
+  { "command": ["npm", "run", "frontend"] },
+  { "command": ["npm", "run", "backend"] },
+]
