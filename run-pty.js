@@ -275,12 +275,13 @@ const historyStart = (command) =>
     command.formattedCommandWithTitle
   }${RESET_COLOR}\n${cwdText(command)}`;
 
-// Newlines at the start/end are wanted here.
 /**
  * @param {number} pid
  * @returns {string}
  */
-const runningText = (pid) => `
+const runningText = (pid) =>
+  // Newlines at the start/end are wanted here.
+  `
 ${shortcut(KEYS.kill)} kill ${dim(`(pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
 
