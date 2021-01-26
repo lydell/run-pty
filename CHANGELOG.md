@@ -1,3 +1,10 @@
+### Version 2.2.0 (2021-01-26)
+
+- Added: You can now optionally provide the commands to run via a JSON (or NDJSON) file instead of directly at the command line. The JSON format lets you configure more things, such as custom status indicators.
+- Changed: Calling `run-pty` with a single argument now expects that argument to be the path to a JSON file (as mentioned above), rather than always being an error. In other words, the logic around command parsing and errors is slightly changed in edge cases.
+- Changed: Pids are no longer shown in the dashboard. They are rarely used and clutter the view. Now, you need to focus a command to see the pid. It’s at the keyboard shortcut for killing: `[ctrl+c] kill (pid 12345)`.
+- Fixed: Emojis should now consistently render using 2 character slots in the terminal. I’ve noticed iTerm2 being a bit buggy about this (sometimes only using 1 slot, which looks bad).
+
 ### Version 2.1.1 (2020-09-10)
 
 Fixed: The first line of output and keyboard shortcuts now show up as they should on Windows ([#3](https://github.com/lydell/run-pty/issues/3)).
