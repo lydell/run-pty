@@ -1,8 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "start": "sleep 1 && run-pty % npm run frontend % npm run backend",
-    "start-advanced": "sleep 1 && run-pty run-pty.json",
+    "start": "run-pty % npm run frontend % npm run backend",
+    "start-advanced": "run-pty run-pty.json",
     "frontend": "parcel watch index.html --log-level 4",
     "backend": "nodemon server.js"
   },
