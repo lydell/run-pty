@@ -399,7 +399,7 @@ describe("focused command", () => {
       ⭕ frontend: npm start⧘
       killing…
 
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) ⧘⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
 
     `);
@@ -419,7 +419,7 @@ describe("focused command", () => {
       📂 ⧙web/frontend⧘
       killing…
 
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) ⧘⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
 
     `);
