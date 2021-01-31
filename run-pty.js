@@ -1066,7 +1066,7 @@ const runCommands = (commandDescriptions) => {
    * @param {number} delta
    * @returns {void}
    */
-  const setCursor = (delta) => {
+  const moveCursor = (delta) => {
     if (cursorIndex === undefined) {
       cursorIndex =
         delta === 0
@@ -1195,7 +1195,7 @@ const runCommands = (commandDescriptions) => {
       switchToDashboard,
       switchToCommand,
       switchToCommandAtCursor,
-      setCursor,
+      moveCursor,
       killAll,
       printHistoryAndExtraText
     );
@@ -1243,7 +1243,7 @@ const runCommands = (commandDescriptions) => {
  * @param {() => void} switchToDashboard
  * @param {(index: number) => void} switchToCommand
  * @param {() => void} switchToCommandAtCursor
- * @param {(delta: number) => void} setCursor
+ * @param {(delta: number) => void} moveCursor
  * @param {() => void} killAll
  * @param {(command: Command) => void} printHistoryAndExtraText
  * @returns {undefined}
@@ -1255,7 +1255,7 @@ const onStdin = (
   switchToDashboard,
   switchToCommand,
   switchToCommandAtCursor,
-  setCursor,
+  moveCursor,
   killAll,
   printHistoryAndExtraText
 ) => {
@@ -1313,12 +1313,12 @@ const onStdin = (
 
         case KEY_CODES.up:
         case KEY_CODES.upVim:
-          setCursor(-1);
+          moveCursor(-1);
           return undefined;
 
         case KEY_CODES.down:
         case KEY_CODES.downVim:
-          setCursor(1);
+          moveCursor(1);
           return undefined;
 
         default: {
