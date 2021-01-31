@@ -49,9 +49,12 @@ const KEY_CODES = {
   kill: "\x03",
   restart: "\r",
   dashboard: "\x1a",
+  // https://vi.stackexchange.com/questions/15324/up-arrow-key-code-why-a-becomes-oa
   up: "\x1B[A",
+  upAlt: "\x1BOA",
   upVim: "k",
   down: "\x1B[B",
+  downAlt: "\x1BOB",
   downVim: "j",
   enter: "\r",
   enterVim: "o",
@@ -1312,11 +1315,13 @@ const onStdin = (
           return undefined;
 
         case KEY_CODES.up:
+        case KEY_CODES.upAlt:
         case KEY_CODES.upVim:
           moveCursor(-1);
           return undefined;
 
         case KEY_CODES.down:
+        case KEY_CODES.downAlt:
         case KEY_CODES.downVim:
           moveCursor(1);
           return undefined;
