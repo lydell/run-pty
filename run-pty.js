@@ -36,12 +36,20 @@ const KEYS = {
   kill: "ctrl+c",
   restart: "enter",
   dashboard: "ctrl+z",
+  navigate: "↑/↓",
+  enter: "enter",
 };
 
 const KEY_CODES = {
   kill: "\x03",
   restart: "\r",
   dashboard: "\x1a",
+  up: "\x1B[A",
+  upVim: "k",
+  down: "\x1B[B",
+  downVim: "j",
+  enter: "\r",
+  enterVim: "o",
 };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
@@ -109,11 +117,18 @@ const dim = (string) => (NO_COLOR ? string : `\x1B[2m${string}${RESET_COLOR}`);
 
 /**
  * @param {string} string
- * @param {{ pad?: boolean }} pad
+ * @returns {string}
  */
-const shortcut = (string, { pad = true } = {}) =>
+const invert = (string) =>
+  NO_COLOR ? string : `\x1B[7m${string}${RESET_COLOR}`;
+
+/**
+ * @param {string} string
+ * @param {{ pad?: boolean, highlight?: boolean }} pad
+ */
+const shortcut = (string, { pad = true, highlight = false } = {}) =>
   dim("[") +
-  bold(string) +
+  bold(highlight ? invert(string) : string) +
   dim("]") +
   (pad ? " ".repeat(Math.max(0, KEYS.kill.length - string.length)) : "");
 
@@ -197,13 +212,17 @@ const killAllLabel = (commands) =>
 /**
  * @param {Array<Command>} commands
  * @param {number} width
- * @param {boolean} attemptedKillAll
+ * @param {number | undefined} cursorIndex
+ * @returns {Array<{ line: string, length: number }>}
  */
-const drawDashboard = (commands, width, attemptedKillAll) => {
-  const lines = commands.map((command) => {
+const drawDashboardCommandLines = (commands, width, cursorIndex) => {
+  const lines = commands.map((command, index) => {
     const [icon, status] = statusText(command.status, command.statusFromRules);
     return {
-      label: shortcut(command.label || " ", { pad: false }),
+      label: shortcut(command.label || " ", {
+        pad: false,
+        highlight: index === cursorIndex,
+      }),
       icon,
       status,
       title: command.title,
@@ -215,39 +234,62 @@ const drawDashboard = (commands, width, attemptedKillAll) => {
     ...lines.map(({ status }) => (status === undefined ? 0 : status.length))
   );
 
-  const finalLines = lines
-    .map(({ label, icon, status, title }) => {
-      const separator = "  ";
-      const start = truncate(`${label}${separator}${icon}`, width);
-      const startLength =
-        removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
-      const end =
-        status === undefined
-          ? title
-          : `${status.padEnd(widestStatus, " ")}${separator}${title}`;
-      return `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
+  return lines.map(({ label, icon, status, title }) => {
+    const separator = "  ";
+    const start = truncate(`${label}${separator}${icon}`, width);
+    const startLength =
+      removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
+    const end =
+      status === undefined
+        ? title
+        : `${status.padEnd(widestStatus, " ")}${separator}${title}`;
+    const truncatedEnd = truncate(end, width - startLength - separator.length);
+    const length =
+      startLength +
+      separator.length +
+      removeGraphicRenditions(truncatedEnd).length;
+    return {
+      line: `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1
-      )}${CLEAR_RIGHT}${separator}${truncate(
-        end,
-        width - startLength - separator.length
-      )}${RESET_COLOR}`;
-    })
+      )}${CLEAR_RIGHT}${separator}${truncatedEnd}${RESET_COLOR}`,
+      length,
+    };
+  });
+};
+
+/**
+ * @param {Array<Command>} commands
+ * @param {number} width
+ * @param {boolean} attemptedKillAll
+ * @param {number | undefined} cursorIndex
+ * @returns {string}
+ */
+const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
+  const done =
+    attemptedKillAll &&
+    commands.every((command) => command.status.tag === "Exit");
+
+  const finalLines = drawDashboardCommandLines(
+    commands,
+    width,
+    done ? undefined : cursorIndex
+  )
+    .map(({ line }) => line)
     .join("\n");
 
-  const label = summarizeLabels(commands.map((command) => command.label));
-
-  if (
-    attemptedKillAll &&
-    commands.every((command) => command.status.tag === "Exit")
-  ) {
+  if (done) {
     return `${finalLines}\n`;
   }
+
+  const label = summarizeLabels(commands.map((command) => command.label));
 
   // Newlines at the end are wanted here.
   return `
 ${finalLines}
 
 ${shortcut(label)} focus command
+${shortcut(KEYS.enter)} focus selected command
+${shortcut(KEYS.navigate)} move selection
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 `.trimStart();
 };
@@ -924,6 +966,8 @@ const runCommands = (commandDescriptions) => {
   /** @type {Current} */
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
+  /** @type {number | undefined} */
+  let cursorIndex = undefined;
 
   /**
    * @param {Command} command
@@ -982,7 +1026,12 @@ const runCommands = (commandDescriptions) => {
         ENABLE_MOUSE +
         RESET_COLOR +
         CLEAR +
-        drawDashboard(commands, process.stdout.columns, attemptedKillAll)
+        drawDashboard(
+          commands,
+          process.stdout.columns,
+          attemptedKillAll,
+          cursorIndex
+        )
     );
   };
 
@@ -994,6 +1043,39 @@ const runCommands = (commandDescriptions) => {
     const command = commands[index];
     current = { tag: "Command", index };
     printHistoryAndExtraText(command);
+  };
+
+  /**
+   * @returns {void}
+   */
+  const switchToCommandAtCursor = () => {
+    if (cursorIndex !== undefined) {
+      const command = commands[cursorIndex];
+      current = { tag: "Command", index: cursorIndex };
+      printHistoryAndExtraText(command);
+    }
+  };
+
+  /**
+   * @param {number} delta
+   * @returns {void}
+   */
+  const setCursor = (delta) => {
+    if (cursorIndex === undefined) {
+      cursorIndex =
+        delta === 0
+          ? undefined
+          : delta > 0
+          ? delta - 1
+          : commands.length + delta;
+    } else {
+      cursorIndex = (cursorIndex + delta) % commands.length;
+      if (cursorIndex < 0) {
+        cursorIndex = commands.length + cursorIndex;
+      }
+    }
+    // Redraw dashboard.
+    switchToDashboard();
   };
 
   /**
@@ -1106,6 +1188,8 @@ const runCommands = (commandDescriptions) => {
       commands,
       switchToDashboard,
       switchToCommand,
+      switchToCommandAtCursor,
+      setCursor,
       killAll,
       printHistoryAndExtraText
     );
@@ -1148,6 +1232,8 @@ const runCommands = (commandDescriptions) => {
  * @param {Array<Command>} commands
  * @param {() => void} switchToDashboard
  * @param {(index: number) => void} switchToCommand
+ * @param {() => void} switchToCommandAtCursor
+ * @param {(delta: number) => void} setCursor
  * @param {() => void} killAll
  * @param {(command: Command) => void} printHistoryAndExtraText
  * @returns {undefined}
@@ -1158,6 +1244,8 @@ const onStdin = (
   commands,
   switchToDashboard,
   switchToCommand,
+  switchToCommandAtCursor,
+  setCursor,
   killAll,
   printHistoryAndExtraText
 ) => {
@@ -1208,6 +1296,21 @@ const onStdin = (
           killAll();
           return undefined;
 
+        case KEY_CODES.enter:
+        case KEY_CODES.enterVim:
+          switchToCommandAtCursor();
+          return undefined;
+
+        case KEY_CODES.up:
+        case KEY_CODES.upVim:
+          setCursor(-1);
+          return undefined;
+
+        case KEY_CODES.down:
+        case KEY_CODES.downVim:
+          setCursor(1);
+          return undefined;
+
         default: {
           const commandIndex = commands.findIndex(
             (command) => command.label === data
@@ -1219,9 +1322,19 @@ const onStdin = (
 
           const mouseupPosition = parseMouseup(data);
           if (mouseupPosition !== undefined) {
-            const { y } = mouseupPosition;
-            if (y >= 0 && y < commands.length) {
-              switchToCommand(y);
+            const { x, y } = mouseupPosition;
+            const lines = drawDashboardCommandLines(
+              commands,
+              process.stdout.columns,
+              undefined
+            );
+            if (y >= 0 && y < lines.length) {
+              const max = Math.max(
+                ...lines.map((otherLine) => otherLine.length)
+              );
+              if (x >= 0 && x < max) {
+                switchToCommand(y);
+              }
             }
           }
 
@@ -1236,7 +1349,7 @@ const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)M/;
 
 /**
  * @param {string} string
- * @returns {{x: number, y: number} | undefined}
+ * @returns {{ x: number, y: number } | undefined}
  */
 const parseMouseup = (string) => {
   const match = MOUSEUP_REGEX.exec(string);
