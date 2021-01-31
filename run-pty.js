@@ -52,6 +52,8 @@ const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
+const ENABLE_MOUSE = "\x1B[?1000;1006h";
+const DISABLE_MOUSE = "\x1B[?1000;1006l";
 const RESET_COLOR = "\x1B[m";
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
@@ -931,6 +933,7 @@ const runCommands = (commandDescriptions) => {
     process.stdout.write(
       SHOW_CURSOR +
         DISABLE_ALTERNATE_SCREEN +
+        DISABLE_MOUSE +
         RESET_COLOR +
         CLEAR +
         command.history
@@ -976,6 +979,7 @@ const runCommands = (commandDescriptions) => {
     process.stdout.write(
       HIDE_CURSOR +
         DISABLE_ALTERNATE_SCREEN +
+        ENABLE_MOUSE +
         RESET_COLOR +
         CLEAR +
         drawDashboard(commands, process.stdout.columns, attemptedKillAll)
@@ -1127,7 +1131,7 @@ const runCommands = (commandDescriptions) => {
 
   process.on("exit", () => {
     process.stdout.write(
-      SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + RESET_COLOR
+      SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + DISABLE_MOUSE + RESET_COLOR
     );
   });
 
@@ -1210,11 +1214,37 @@ const onStdin = (
           );
           if (commandIndex !== -1) {
             switchToCommand(commandIndex);
+            return undefined;
           }
+
+          const mouseupPosition = parseMouseup(data);
+          if (mouseupPosition !== undefined) {
+            const { y } = mouseupPosition;
+            if (y >= 0 && y < commands.length) {
+              switchToCommand(y);
+            }
+          }
+
           return undefined;
         }
       }
   }
+};
+
+// eslint-disable-next-line no-control-regex
+const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)M/;
+
+/**
+ * @param {string} string
+ * @returns {{x: number, y: number} | undefined}
+ */
+const parseMouseup = (string) => {
+  const match = MOUSEUP_REGEX.exec(string);
+  if (match === null) {
+    return undefined;
+  }
+  const [, x, y] = match;
+  return { x: Number(x) - 1, y: Number(y) - 1 };
 };
 
 /**
