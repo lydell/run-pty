@@ -209,6 +209,7 @@ describe("dashboard", () => {
               tag: "Killing",
               terminal: fakeTerminal({ pid: 12345 }),
               slow: false,
+              lastKillPress: undefined,
             },
             statusFromRules: "!", // Should be ignored.
           },
@@ -389,7 +390,7 @@ describe("focused command", () => {
       ⭕ frontend: npm start⧘
       killing…
 
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill ⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) ⧘⧙(pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
 
     `);
@@ -409,7 +410,7 @@ describe("focused command", () => {
       📂 ⧙web/frontend⧘
       killing…
 
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill ⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) ⧘⧙(pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
 
     `);

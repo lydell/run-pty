@@ -9,7 +9,7 @@ const pty = require("node-pty");
 /**
  * @typedef {
     | { tag: "Running", terminal: import("node-pty").IPty }
-    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean }
+    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined }
     | { tag: "Exit", exitCode: number }
    } Status
  *
@@ -19,8 +19,6 @@ const pty = require("node-pty");
    } Current
  */
 
-// node-pty does not support kill signals on Windows.
-// This is the same check that node-pty uses.
 const IS_WINDOWS = process.platform === "win32";
 
 const MAX_HISTORY_DEFAULT = 1000000;
@@ -188,8 +186,8 @@ Environment variables:
  * @returns {string}
  */
 const killAllLabel = (commands) =>
-  commands.some((command) => command.status.tag === "Killing")
-    ? "force kill all"
+  commands.some((command) => command.status.tag === "Killing") && !IS_WINDOWS
+    ? `kill all ${dim("(double-press to force) ")}`
     : commands.every((command) => command.status.tag === "Exit")
     ? "exit"
     : "kill all";
@@ -292,17 +290,19 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @param {number} pid
  * @returns {string}
  */
-const killingText = (command, pid) =>
+const killingText = (command, pid) => {
+  const force = IS_WINDOWS ? "" : dim("(double-press to force) ");
   // Newlines at the start/end are wanted here.
-  `
+  return `
 ${killingIndicator}${EMOJI_WIDTH_FIX} ${
     command.formattedCommandWithTitle
   }${RESET_COLOR}
 ${cwdText(command)}killing…
 
-${shortcut(KEYS.kill)} force kill ${dim(`(pid ${pid})`)}
+${shortcut(KEYS.kill)} kill ${force}${dim(`(pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
 `;
+};
 
 /**
  * @param {Array<Command>} commands
@@ -813,13 +813,13 @@ class Command {
    * @returns {undefined}
    */
   kill() {
-    // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     switch (this.status.tag) {
       case "Running":
         this.status = {
           tag: "Killing",
           terminal: this.status.terminal,
           slow: false,
+          lastKillPress: undefined,
         };
         setTimeout(() => {
           if (this.status.tag === "Killing") {
@@ -828,23 +828,23 @@ class Command {
             this.onData("", false);
           }
         }, 100);
-        if (IS_WINDOWS) {
-          this.status.terminal.kill();
-        } else {
-          // SIGHUP causes a silent exit for `npm run`.
-          this.status.terminal.kill("SIGHUP");
-          // SIGTERM is needed for some programs (but is noisy for `npm run`).
-          this.status.terminal.kill("SIGTERM");
-        }
+        this.status.terminal.write(KEY_CODES.kill);
         return undefined;
 
-      case "Killing":
-        if (IS_WINDOWS) {
-          this.status.terminal.kill();
-        } else {
+      case "Killing": {
+        const now = Date.now();
+        if (
+          !IS_WINDOWS &&
+          this.status.lastKillPress !== undefined &&
+          now - this.status.lastKillPress <= 500
+        ) {
           this.status.terminal.kill("SIGKILL");
+        } else {
+          this.status.terminal.write(KEY_CODES.kill);
         }
+        this.status.lastKillPress = now;
         return undefined;
+      }
 
       case "Exit":
         throw new Error(`Cannot kill already exited pty for: ${this.title}`);
@@ -1118,11 +1118,7 @@ const runCommands = (commandDescriptions) => {
       console.error(error);
       for (const command of commands) {
         if (command.status.tag !== "Exit") {
-          if (IS_WINDOWS) {
-            command.status.terminal.kill();
-          } else {
-            command.status.terminal.kill("SIGKILL");
-          }
+          command.status.terminal.write(KEY_CODES.kill);
         }
       }
       process.exit(1);
@@ -1166,20 +1162,6 @@ const onStdin = (
       const command = commands[current.index];
       switch (command.status.tag) {
         case "Running":
-          switch (data) {
-            case KEY_CODES.kill:
-              command.kill();
-              return undefined;
-
-            case KEY_CODES.dashboard:
-              switchToDashboard();
-              return undefined;
-
-            default:
-              command.status.terminal.write(data);
-              return undefined;
-          }
-
         case "Killing":
           switch (data) {
             case KEY_CODES.kill:
@@ -1191,6 +1173,7 @@ const onStdin = (
               return undefined;
 
             default:
+              command.status.terminal.write(data);
               return undefined;
           }
 
