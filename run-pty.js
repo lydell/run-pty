@@ -21,6 +21,11 @@ const pty = require("node-pty");
 
 const IS_WINDOWS = process.platform === "win32";
 
+const SLOW_KILL = 100; // ms
+
+// This is apparently what Windows uses for double clicks.
+const DOUBLE_PRESS = 500; // ms
+
 const MAX_HISTORY_DEFAULT = 1000000;
 
 const MAX_HISTORY = (() => {
@@ -869,7 +874,7 @@ class Command {
             // Ugly way to redraw:
             this.onData("", false);
           }
-        }, 100);
+        }, SLOW_KILL);
         this.status.terminal.write(KEY_CODES.kill);
         return undefined;
 
@@ -877,7 +882,7 @@ class Command {
         const now = Date.now();
         if (
           this.status.lastKillPress !== undefined &&
-          now - this.status.lastKillPress <= 500
+          now - this.status.lastKillPress <= DOUBLE_PRESS
         ) {
           if (IS_WINDOWS) {
             this.status.terminal.kill();
