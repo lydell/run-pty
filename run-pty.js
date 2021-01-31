@@ -1207,7 +1207,11 @@ const runCommands = (commandDescriptions) => {
       console.error(error);
       for (const command of commands) {
         if (command.status.tag !== "Exit") {
-          command.status.terminal.write(KEY_CODES.kill);
+          if (IS_WINDOWS) {
+            command.status.terminal.kill();
+          } else {
+            command.status.terminal.kill("SIGKILL");
+          }
         }
       }
       process.exit(1);
