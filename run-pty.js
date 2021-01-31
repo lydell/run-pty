@@ -127,9 +127,9 @@ const invert = (string) =>
  * @param {{ pad?: boolean, highlight?: boolean }} pad
  */
 const shortcut = (string, { pad = true, highlight = false } = {}) =>
-  dim("[") +
+  dim(NO_COLOR && highlight ? "<" : "[") +
   bold(highlight ? invert(string) : string) +
-  dim("]") +
+  dim(NO_COLOR && highlight ? ">" : "]") +
   (pad ? " ".repeat(Math.max(0, KEYS.kill.length - string.length)) : "");
 
 const runPty = bold("run-pty");
