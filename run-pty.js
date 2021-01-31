@@ -203,7 +203,7 @@ Environment variables:
  * @returns {string}
  */
 const killAllLabel = (commands) =>
-  commands.some((command) => command.status.tag === "Killing") && !IS_WINDOWS
+  commands.some((command) => command.status.tag === "Killing")
     ? `kill all ${dim("(double-press to force) ")}`
     : commands.every((command) => command.status.tag === "Exit")
     ? "exit"
@@ -334,19 +334,17 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @param {number} pid
  * @returns {string}
  */
-const killingText = (command, pid) => {
-  const force = IS_WINDOWS ? "" : dim("(double-press to force) ");
+const killingText = (command, pid) =>
   // Newlines at the start/end are wanted here.
-  return `
+  `
 ${killingIndicator}${EMOJI_WIDTH_FIX} ${
     command.formattedCommandWithTitle
   }${RESET_COLOR}
 ${cwdText(command)}killing…
 
-${shortcut(KEYS.kill)} kill ${force}${dim(`(pid ${pid})`)}
+${shortcut(KEYS.kill)} kill ${dim(`(double-press to force) (pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
 `;
-};
 
 /**
  * @param {Array<Command>} commands
@@ -878,11 +876,14 @@ class Command {
       case "Killing": {
         const now = Date.now();
         if (
-          !IS_WINDOWS &&
           this.status.lastKillPress !== undefined &&
           now - this.status.lastKillPress <= 500
         ) {
-          this.status.terminal.kill("SIGKILL");
+          if (IS_WINDOWS) {
+            this.status.terminal.kill();
+          } else {
+            this.status.terminal.kill("SIGKILL");
+          }
         } else {
           this.status.terminal.write(KEY_CODES.kill);
         }
