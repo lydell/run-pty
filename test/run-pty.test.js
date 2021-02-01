@@ -199,6 +199,11 @@ describe("dashboard", () => {
             statusFromRules: "!", // Should be ignored.
           },
           {
+            command: ["npm", "run", "server"],
+            status: { tag: "Exit", exitCode: 130 },
+            statusFromRules: "!", // Should be ignored.
+          },
+          {
             command: ["ping", "nope"],
             status: { tag: "Exit", exitCode: 68 },
             statusFromRules: "!", // Should be ignored.
@@ -234,13 +239,14 @@ describe("dashboard", () => {
         80
       )
     ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘   echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'hell…⧘
-      ⧙[⧘⧙2⧘⧙]⧘  🔴⧘  ⧙exit 68⧘  ping nope⧘
-      ⧙[⧘⧙3⧘⧙]⧘  ⭕⧘  ping localhost⧘
-      ⧙[⧘⧙4⧘⧙]⧘  🟢⧘  yes⧘
-      ⧙[⧘⧙5⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
+      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘    echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'hel…⧘
+      ⧙[⧘⧙2⧘⧙]⧘  ⚪⧘  ⧙exit 130⧘  npm run server⧘
+      ⧙[⧘⧙3⧘⧙]⧘  🔴⧘  ⧙exit 68⧘   ping nope⧘
+      ⧙[⧘⧙4⧘⧙]⧘  ⭕⧘  ping localhost⧘
+      ⧙[⧘⧙5⧘⧙]⧘  🟢⧘  yes⧘
+      ⧙[⧘⧙6⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
 
-      ⧙[⧘⧙1-5⧘⧙]⧘    focus command ⧙(or click)⧘
+      ⧙[⧘⧙1-6⧘⧙]⧘    focus command ⧙(or click)⧘
       ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘␊

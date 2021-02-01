@@ -91,7 +91,8 @@ const killingIndicator = NO_COLOR
  * @returns {string}
  */
 const exitIndicator = (exitCode) =>
-  exitCode === 0
+  // 130 commonly means exit by ctrl+c.
+  exitCode === 0 || exitCode === 130
     ? NO_COLOR
       ? "●"
       : IS_WINDOWS
