@@ -987,6 +987,8 @@ const runCommands = (commandDescriptions) => {
         command.history
     );
 
+    const maybeNewline = /[\r\n][^\S\r\n]*$/.test(command.history) ? "" : "\n";
+
     switch (command.status.tag) {
       case "Running":
         if (
@@ -994,7 +996,9 @@ const runCommands = (commandDescriptions) => {
           command.history.endsWith(`\n${RESET_COLOR}`)
         ) {
           process.stdout.write(
-            RESET_COLOR + runningText(command.status.terminal.pid)
+            RESET_COLOR +
+              maybeNewline +
+              runningText(command.status.terminal.pid)
           );
         }
         return undefined;
@@ -1004,6 +1008,7 @@ const runCommands = (commandDescriptions) => {
           process.stdout.write(
             HIDE_CURSOR +
               RESET_COLOR +
+              maybeNewline +
               killingText(command, command.status.terminal.pid)
           );
         }
@@ -1013,6 +1018,7 @@ const runCommands = (commandDescriptions) => {
         process.stdout.write(
           HIDE_CURSOR +
             RESET_COLOR +
+            maybeNewline +
             exitText(commands, command, command.status.exitCode)
         );
         return undefined;
