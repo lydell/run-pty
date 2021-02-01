@@ -55,11 +55,6 @@ describe("help", () => {
       Show output for one command at a time.
       Kill all at once.
 
-          ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command
-          ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-          ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill focused/all
-          ⧙[⧘⧙enter⧘⧙]⧘  restart killed/exited command
-
       Separate the commands with a character of choice:
 
           ⧙run-pty⧘ ⧙%⧘ npm start ⧙%⧘ make watch ⧙%⧘ some_command arg1 arg2 arg3
@@ -156,7 +151,7 @@ describe("dashboard", () => {
 
   test("empty", () => {
     expect(testDashboard([], 0)).toMatchInlineSnapshot(`
-      ⧙[⧘⧙⧘⧙]⧘       focus command
+      ⧙[⧘⧙⧘⧙]⧘       focus command ⧙(or click)⧘
       ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit␊
@@ -178,7 +173,7 @@ describe("dashboard", () => {
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘
 
-      ⧙[⧘⧙1⧘⧙]⧘      focus command
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit␊
@@ -245,7 +240,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙4⧘⧙]⧘  🟢⧘  yes⧘
       ⧙[⧘⧙5⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
 
-      ⧙[⧘⧙1-5⧘⧙]⧘    focus command
+      ⧙[⧘⧙1-5⧘⧙]⧘    focus command ⧙(or click)⧘
       ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘␊
@@ -329,7 +324,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙Z⧘⧙]⧘  🟢⧘  echo 60⧘
       ⧙[⧘⧙ ⧘⧙]⧘  🟢⧘  echo 61⧘
 
-      ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command
+      ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command ⧙(or click)⧘
       ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all␊

@@ -176,11 +176,6 @@ Run several commands concurrently.
 Show output for one command at a time.
 Kill all at once.
 
-    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} focus command
-    ${shortcut(KEYS.dashboard)} dashboard
-    ${shortcut(KEYS.kill)} kill focused/all
-    ${shortcut(KEYS.restart)} restart killed/exited command
-
 Separate the commands with a character of choice:
 
     ${runPty} ${pc} npm start ${pc} make watch ${pc} some_command arg1 arg2 arg3
@@ -295,7 +290,7 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
   return `
 ${finalLines}
 
-${shortcut(label)} focus command
+${shortcut(label)} focus command ${dim("(or click)")}
 ${shortcut(KEYS.enter)} focus selected command
 ${shortcut(KEYS.navigate)} move selection
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
