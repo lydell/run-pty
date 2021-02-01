@@ -35,7 +35,9 @@ $ npm start
 [1]  🟢  npm run frontend
 [2]  🟢  npm run backend
 
-[1-2]    focus command
+[1-2]    focus command (or click)
+[enter]  focus selected command
+[↑/↓]    move selection
 [ctrl+c] kill all
 ```
 
@@ -89,7 +91,9 @@ exit 0
 [1]  ⚪  exit 0  npm run frontend
 [2]  🟢  npm run backend
 
-[1-2]    focus command
+[1-2]    focus command (or click)
+[enter]  focus selected command
+[↑/↓]    move selection
 [ctrl+c] kill all
 ```
 
