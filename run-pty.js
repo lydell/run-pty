@@ -398,7 +398,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 const EMPTY_LAST_LINE = RegExp(
-  `[\\r\\n](?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
+  `(?:^|[\\r\\n])(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
 );
 
 /**
@@ -1006,7 +1006,7 @@ const runCommands = (commandDescriptions) => {
 
     switch (command.status.tag) {
       case "Running":
-        if (maybeNewline !== "") {
+        if (maybeNewline === "") {
           process.stdout.write(
             RESET_COLOR +
               maybeNewline +
