@@ -398,7 +398,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 const EMPTY_LAST_LINE = RegExp(
-  `(?:^|[\\r\\n])(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
+  `(?:^|[\\r\\n])(?:[^\\S\\r\\n]|\\x1B\\[\\?25[hl]|\\x1B\\][012];[^\\r\\n]*\\x07|${GRAPHIC_RENDITIONS.source})*$`
 );
 
 /**
