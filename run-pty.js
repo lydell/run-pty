@@ -223,15 +223,9 @@ const killAllLabel = (commands) =>
  * @param {Array<Command>} commands
  * @param {number} width
  * @param {number | undefined} cursorIndex
- * @param {number | undefined} mousedownIndex
  * @returns {Array<{ line: string, length: number }>}
  */
-const drawDashboardCommandLines = (
-  commands,
-  width,
-  cursorIndex,
-  mousedownIndex
-) => {
+const drawDashboardCommandLines = (commands, width, cursorIndex) => {
   const lines = commands.map((command) => {
     const [icon, status] = statusText(command.status, command.statusFromRules);
     return {
@@ -263,7 +257,7 @@ const drawDashboardCommandLines = (
       separator.length +
       removeGraphicRenditions(truncatedEnd).length;
     const finalEnd =
-      index === cursorIndex || index === mousedownIndex
+      index === cursorIndex
         ? NO_COLOR
           ? `${separator.slice(0, -1)}→${truncatedEnd}`
           : `${separator}${invert(truncatedEnd)}`
@@ -282,16 +276,9 @@ const drawDashboardCommandLines = (
  * @param {number} width
  * @param {boolean} attemptedKillAll
  * @param {number | undefined} cursorIndex
- * @param {number | undefined} mousedownIndex
  * @returns {string}
  */
-const drawDashboard = (
-  commands,
-  width,
-  attemptedKillAll,
-  cursorIndex,
-  mousedownIndex
-) => {
+const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
   const done =
     attemptedKillAll &&
     commands.every((command) => command.status.tag === "Exit");
@@ -299,8 +286,7 @@ const drawDashboard = (
   const finalLines = drawDashboardCommandLines(
     commands,
     width,
-    done ? undefined : cursorIndex,
-    done ? undefined : mousedownIndex
+    done ? undefined : cursorIndex
   )
     .map(({ line }) => line)
     .join("\n");
@@ -1001,8 +987,6 @@ const runCommands = (commandDescriptions) => {
   let attemptedKillAll = false;
   /** @type {number | undefined} */
   let cursorIndex = undefined;
-  /** @type {number | undefined} */
-  let mousedownIndex = undefined;
 
   /**
    * @param {Command} command
@@ -1068,8 +1052,7 @@ const runCommands = (commandDescriptions) => {
           commands,
           process.stdout.columns,
           attemptedKillAll,
-          cursorIndex,
-          mousedownIndex
+          cursorIndex
         )
     );
   };
@@ -1078,10 +1061,12 @@ const runCommands = (commandDescriptions) => {
    * @param {number} index
    * @returns {void}
    */
-  const switchToCommand = (index) => {
+  const switchToCommand = (index, { viaMouse = false } = {}) => {
     const command = commands[index];
     current = { tag: "Command", index };
-    mousedownIndex = undefined;
+    if (viaMouse) {
+      cursorIndex = undefined;
+    }
     printHistoryAndExtraText(command);
   };
 
@@ -1123,8 +1108,7 @@ const runCommands = (commandDescriptions) => {
    * @returns {void}
    */
   const mousedown = (index) => {
-    cursorIndex = undefined;
-    mousedownIndex = index;
+    cursorIndex = index;
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1133,7 +1117,7 @@ const runCommands = (commandDescriptions) => {
    * @returns {void}
    */
   const mouseup = () => {
-    mousedownIndex = undefined;
+    cursorIndex = undefined;
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1246,7 +1230,7 @@ const runCommands = (commandDescriptions) => {
       data.toString("utf8"),
       current,
       commands,
-      mousedownIndex,
+      cursorIndex,
       switchToDashboard,
       switchToCommand,
       switchToCommandAtCursor,
@@ -1297,9 +1281,9 @@ const runCommands = (commandDescriptions) => {
  * @param {string} data
  * @param {Current} current
  * @param {Array<Command>} commands
- * @param {number | undefined} mousedownIndex
+ * @param {number | undefined} cursorIndex
  * @param {() => void} switchToDashboard
- * @param {(index: number) => void} switchToCommand
+ * @param {(index: number, options?: { viaMouse?: boolean }) => void} switchToCommand
  * @param {() => void} switchToCommandAtCursor
  * @param {(delta: number) => void} moveCursor
  * @param {(index: number) => void} mousedown
@@ -1312,7 +1296,7 @@ const onStdin = (
   data,
   current,
   commands,
-  mousedownIndex,
+  cursorIndex,
   switchToDashboard,
   switchToCommand,
   switchToCommandAtCursor,
@@ -1413,9 +1397,9 @@ const onStdin = (
               return undefined;
 
             case "mouseup": {
-              if (index !== undefined && index === mousedownIndex) {
-                switchToCommand(index);
-              } else if (mousedownIndex !== undefined) {
+              if (index !== undefined && index === cursorIndex) {
+                switchToCommand(index, { viaMouse: true });
+              } else if (cursorIndex !== undefined) {
                 mouseup();
               }
               return undefined;
@@ -1453,7 +1437,6 @@ const getCommandIndexFromMousePosition = (commands, { x, y }) => {
   const lines = drawDashboardCommandLines(
     commands,
     process.stdout.columns,
-    undefined,
     undefined
   );
 
