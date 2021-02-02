@@ -397,8 +397,9 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 };
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
+const WINDOWS_HACK = IS_WINDOWS ? "\\0" : "";
 const EMPTY_LAST_LINE = RegExp(
-  `(?:^|[\\r\\n])(?:[^\\S\\r\\n]|\\x1B\\[\\?25[hl]|\\x1B\\][012];[^\\r\\n]*\\x07|${GRAPHIC_RENDITIONS.source})*$`
+  `(?:^|[${WINDOWS_HACK}\\r\\n])(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
 );
 
 /**
@@ -769,6 +770,7 @@ class Command {
   /**
    * @param {{
       label: string,
+      focusOnlyCommand: boolean,
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onExit: () => undefined,
@@ -776,6 +778,7 @@ class Command {
    */
   constructor({
     label,
+    focusOnlyCommand,
     commandDescription: {
       title,
       cwd,
@@ -811,13 +814,14 @@ class Command {
     this.defaultStatus = defaultStatus;
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
-    this.start();
+    this.start({ isFocused: focusOnlyCommand });
   }
 
   /**
+   * @param {{ isFocused: boolean }} options
    * @returns {void}
    */
-  start() {
+  start({ isFocused }) {
     if (this.status.tag !== "Exit") {
       throw new Error(
         `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.title}`
@@ -835,6 +839,15 @@ class Command {
             "/s",
             "/q",
             "/c",
+            ...(!isFocused
+              ? [
+                  "node",
+                  "-e",
+                  cmdEscapeArg("process.stdout.write('\\0')"),
+                  // "echo:",
+                  "&&",
+                ]
+              : []),
             cmdEscapeMetaChars(this.file),
             ...this.args.map(cmdEscapeArg),
           ].join(" "),
@@ -848,9 +861,9 @@ class Command {
       conptyInheritCursor: true,
     });
 
-    if (IS_WINDOWS) {
-      // Needed when using `conptyInheritCursor`. Otherwise the spawned
-      // terminals hang and will not run their command.
+    if (IS_WINDOWS && !isFocused) {
+      // Needed when using `conptyInheritCursor`. Otherwise terminals spawned in
+      // the background hang and will not run their command until focused.
       terminal.write("\x1B[1;1R");
     }
 
@@ -924,6 +937,13 @@ class Command {
     if (this.history.length > MAX_HISTORY) {
       this.history = this.history.slice(-MAX_HISTORY);
     }
+    fs.writeFileSync(
+      "history.txt",
+      this.history.replace(
+        /[\x00-\x09\x0B\x0C\x0E-\x1f]/g,
+        (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`
+      )
+    );
     return statusFromRulesChanged;
   }
 
@@ -1100,11 +1120,14 @@ const runCommands = (commandDescriptions) => {
     }
   };
 
+  const focusOnlyCommand = commandDescriptions.length === 1;
+
   /** @type {Array<Command>} */
   const commands = commandDescriptions.map(
     (commandDescription, index) =>
       new Command({
         label: ALL_LABELS[index] || "",
+        focusOnlyCommand,
         commandDescription,
         onData: (data, statusFromRulesChanged) => {
           switch (current.tag) {
@@ -1225,7 +1248,7 @@ const runCommands = (commandDescriptions) => {
     );
   });
 
-  if (commands.length === 1) {
+  if (focusOnlyCommand) {
     switchToCommand(0);
   } else {
     switchToDashboard();
@@ -1286,7 +1309,7 @@ const onStdin = (
               return undefined;
 
             case KEY_CODES.restart:
-              command.start();
+              command.start({ isFocused: true });
               printHistoryAndExtraText(command);
               return undefined;
 
