@@ -1082,42 +1082,11 @@ const runCommands = (commandDescriptions) => {
   };
 
   /**
-   * @param {number} delta
+   * @param {number | undefined} index
    * @returns {void}
    */
-  const moveCursor = (delta) => {
-    if (cursorIndex === undefined) {
-      cursorIndex =
-        delta === 0
-          ? undefined
-          : delta > 0
-          ? delta - 1
-          : commands.length + delta;
-    } else {
-      cursorIndex = (cursorIndex + delta) % commands.length;
-      if (cursorIndex < 0) {
-        cursorIndex = commands.length + cursorIndex;
-      }
-    }
-    // Redraw dashboard.
-    switchToDashboard();
-  };
-
-  /**
-   * @param {number} index
-   * @returns {void}
-   */
-  const mousedown = (index) => {
+  const setCursor = (index) => {
     cursorIndex = index;
-    // Redraw dashboard.
-    switchToDashboard();
-  };
-
-  /**
-   * @returns {void}
-   */
-  const mouseup = () => {
-    cursorIndex = undefined;
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1234,9 +1203,7 @@ const runCommands = (commandDescriptions) => {
       switchToDashboard,
       switchToCommand,
       switchToCommandAtCursor,
-      moveCursor,
-      mousedown,
-      mouseup,
+      setCursor,
       killAll,
       printHistoryAndExtraText
     );
@@ -1285,9 +1252,7 @@ const runCommands = (commandDescriptions) => {
  * @param {() => void} switchToDashboard
  * @param {(index: number, options?: { viaMouse?: boolean }) => void} switchToCommand
  * @param {() => void} switchToCommandAtCursor
- * @param {(delta: number) => void} moveCursor
- * @param {(index: number) => void} mousedown
- * @param {() => void} mouseup
+ * @param {(index: number | undefined) => void} setCursor
  * @param {() => void} killAll
  * @param {(command: Command) => void} printHistoryAndExtraText
  * @returns {undefined}
@@ -1300,9 +1265,7 @@ const onStdin = (
   switchToDashboard,
   switchToCommand,
   switchToCommandAtCursor,
-  moveCursor,
-  mousedown,
-  mouseup,
+  setCursor,
   killAll,
   printHistoryAndExtraText
 ) => {
@@ -1361,13 +1324,21 @@ const onStdin = (
         case KEY_CODES.up:
         case KEY_CODES.upAlt:
         case KEY_CODES.upVim:
-          moveCursor(-1);
+          setCursor(
+            cursorIndex === undefined || cursorIndex === 0
+              ? commands.length - 1
+              : cursorIndex - 1
+          );
           return undefined;
 
         case KEY_CODES.down:
         case KEY_CODES.downAlt:
         case KEY_CODES.downVim:
-          moveCursor(1);
+          setCursor(
+            cursorIndex === undefined || cursorIndex === commands.length - 1
+              ? 0
+              : cursorIndex + 1
+          );
           return undefined;
 
         default: {
@@ -1392,7 +1363,7 @@ const onStdin = (
           switch (mouseupPosition.type) {
             case "mousedown":
               if (index !== undefined) {
-                mousedown(index);
+                setCursor(index);
               }
               return undefined;
 
@@ -1400,7 +1371,7 @@ const onStdin = (
               if (index !== undefined && index === cursorIndex) {
                 switchToCommand(index, { viaMouse: true });
               } else if (cursorIndex !== undefined) {
-                mouseup();
+                setCursor(undefined);
               }
               return undefined;
             }
