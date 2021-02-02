@@ -1362,7 +1362,7 @@ const onStdin = (
 };
 
 // eslint-disable-next-line no-control-regex
-const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)M/;
+const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)m/;
 
 /**
  * @param {string} string
