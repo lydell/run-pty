@@ -95,29 +95,33 @@ describe("dashboard", () => {
   function testDashboard(items, width) {
     return replaceAnsi(
       drawDashboard(
-        items.map((item, index) => ({
-          label: ALL_LABELS[index] || "",
-          title:
+        items.map((item, index) => {
+          const title =
             item.title === undefined
               ? commandToPresentationName(item.command)
-              : item.title,
-          formattedCommandWithTitle: commandToPresentationName(item.command),
-          status: item.status,
-          // Unused in this case:
-          file: "file",
-          args: [],
-          cwd: ".",
-          history: "",
-          statusFromRules: item.statusFromRules,
-          defaultStatus: undefined,
-          statusRules: [],
-          onData: () => notCalled("onData"),
-          onExit: () => notCalled("onExit"),
-          pushHistory: () => notCalled("pushHistory"),
-          start: () => notCalled("start"),
-          kill: () => notCalled("kill"),
-          updateStatusFromRules: () => notCalled("updateStatusFromRules"),
-        })),
+              : item.title;
+          return {
+            label: ALL_LABELS[index] || "",
+            title,
+            titleWithGraphicRenditions: title,
+            formattedCommandWithTitle: commandToPresentationName(item.command),
+            status: item.status,
+            // Unused in this case:
+            file: "file",
+            args: [],
+            cwd: ".",
+            history: "",
+            statusFromRules: item.statusFromRules,
+            defaultStatus: undefined,
+            statusRules: [],
+            onData: () => notCalled("onData"),
+            onExit: () => notCalled("onExit"),
+            pushHistory: () => notCalled("pushHistory"),
+            start: () => notCalled("start"),
+            kill: () => notCalled("kill"),
+            updateStatusFromRules: () => notCalled("updateStatusFromRules"),
+          };
+        }),
         width,
         false,
         undefined
