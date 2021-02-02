@@ -71,6 +71,7 @@ const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
 const DISABLE_MOUSE = "\x1B[?1000;1006l";
 const RESET_COLOR = "\x1B[m";
+const RESET_COLOR_REGEX = /(\x1B\[0?m)/;
 const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
 
@@ -128,17 +129,22 @@ const dim = (string) => (NO_COLOR ? string : `\x1B[2m${string}${RESET_COLOR}`);
  * @param {string} string
  * @returns {string}
  */
-const invert = (string) =>
-  NO_COLOR ? string : `\x1B[7m${string}${RESET_COLOR}`;
+const invert = (string) => {
+  const inverted = string
+    .split(RESET_COLOR_REGEX)
+    .map((part, index) => (index % 2 === 0 ? `\x1B[7m${part}` : part))
+    .join("");
+  return NO_COLOR ? string : `${inverted}${RESET_COLOR}`;
+};
 
 /**
  * @param {string} string
  * @param {{ pad?: boolean, highlight?: boolean }} pad
  */
-const shortcut = (string, { pad = true, highlight = false } = {}) =>
-  dim(NO_COLOR && highlight ? "<" : "[") +
-  bold(highlight ? invert(string) : string) +
-  dim(NO_COLOR && highlight ? ">" : "]") +
+const shortcut = (string, { pad = true } = {}) =>
+  dim("[") +
+  bold(string) +
+  dim("]") +
   (pad ? " ".repeat(Math.max(0, KEYS.kill.length - string.length)) : "");
 
 const runPty = bold("run-pty");
@@ -220,26 +226,24 @@ const killAllLabel = (commands) =>
  * @returns {Array<{ line: string, length: number }>}
  */
 const drawDashboardCommandLines = (commands, width, cursorIndex) => {
-  const lines = commands.map((command, index) => {
+  const lines = commands.map((command) => {
     const [icon, status] = statusText(command.status, command.statusFromRules);
     return {
-      label: shortcut(command.label || " ", {
-        pad: false,
-        highlight: index === cursorIndex,
-      }),
+      label: shortcut(command.label || " ", { pad: false }),
       icon,
       status,
       title: command.title,
     };
   });
 
+  const separator = "  ";
+
   const widestStatus = Math.max(
     0,
     ...lines.map(({ status }) => (status === undefined ? 0 : status.length))
   );
 
-  return lines.map(({ label, icon, status, title }) => {
-    const separator = "  ";
+  return lines.map(({ label, icon, status, title }, index) => {
     const start = truncate(`${label}${separator}${icon}`, width);
     const startLength =
       removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
@@ -252,10 +256,16 @@ const drawDashboardCommandLines = (commands, width, cursorIndex) => {
       startLength +
       separator.length +
       removeGraphicRenditions(truncatedEnd).length;
+    const finalEnd =
+      index === cursorIndex
+        ? NO_COLOR
+          ? `${separator.slice(0, -1)}→${truncatedEnd}`
+          : `${separator}${invert(truncatedEnd)}`
+        : `${separator}${truncatedEnd}`;
     return {
       line: `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1
-      )}${CLEAR_RIGHT}${separator}${truncatedEnd}${RESET_COLOR}`,
+      )}${CLEAR_RIGHT}${finalEnd}${RESET_COLOR}`,
       length,
     };
   });
@@ -307,8 +317,7 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
  * @returns {string}
  */
 const cwdText = (command) =>
-  path.resolve(command.cwd) === process.cwd() ||
-  command.cwd === removeGraphicRenditions(command.title)
+  path.resolve(command.cwd) === process.cwd() || command.cwd === command.title
     ? ""
     : `${folder}${EMOJI_WIDTH_FIX} ${dim(command.cwd)}\n`;
 
@@ -387,8 +396,10 @@ const statusText = (status, statusFromRules = runningIndicator) => {
   }
 };
 
-// eslint-disable-next-line no-control-regex
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
+const EMPTY_LAST_LINE = RegExp(
+  `[\\r\\n](?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
+);
 
 /**
  * @param {string} string
@@ -780,10 +791,12 @@ class Command {
     this.file = file;
     this.args = args;
     this.cwd = cwd;
-    this.title = title;
+    this.title = removeGraphicRenditions(title);
     this.formattedCommandWithTitle =
       title === formattedCommand
         ? formattedCommand
+        : NO_COLOR
+        ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
         : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
     this.onData = onData;
     this.onExit = onExit;
@@ -988,14 +1001,11 @@ const runCommands = (commandDescriptions) => {
         command.history
     );
 
-    const maybeNewline = /[\r\n][^\S\r\n]*$/.test(command.history) ? "" : "\n";
+    const maybeNewline = EMPTY_LAST_LINE.test(command.history) ? "" : "\n";
 
     switch (command.status.tag) {
       case "Running":
-        if (
-          command.history.endsWith("\n") ||
-          command.history.endsWith(`\n${RESET_COLOR}`)
-        ) {
+        if (maybeNewline !== "") {
           process.stdout.write(
             RESET_COLOR +
               maybeNewline +
@@ -1346,10 +1356,8 @@ const onStdin = (
               undefined
             );
             if (y >= 0 && y < lines.length) {
-              const max = Math.max(
-                ...lines.map((otherLine) => otherLine.length)
-              );
-              if (x >= 0 && x < max) {
+              const line = lines[y];
+              if (x >= 0 && x < line.length) {
                 switchToCommand(y);
               }
             }
@@ -1361,7 +1369,6 @@ const onStdin = (
   }
 };
 
-// eslint-disable-next-line no-control-regex
 const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)m/;
 
 /**

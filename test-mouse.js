@@ -19,9 +19,7 @@ process.stdin.on("data", (buffer) => {
   }
 });
 
-// eslint-disable-next-line no-control-regex
 const REGEX = /\x1B\[M([ #])(.+)/;
-// eslint-disable-next-line no-control-regex
 const REGEX_2 = /\x1B\[<0;(\d+);(\d+)([Mm])/;
 
 /**
