@@ -223,16 +223,22 @@ const killAllLabel = (commands) =>
  * @param {Array<Command>} commands
  * @param {number} width
  * @param {number | undefined} cursorIndex
+ * @param {number | undefined} mousedownIndex
  * @returns {Array<{ line: string, length: number }>}
  */
-const drawDashboardCommandLines = (commands, width, cursorIndex) => {
+const drawDashboardCommandLines = (
+  commands,
+  width,
+  cursorIndex,
+  mousedownIndex
+) => {
   const lines = commands.map((command) => {
     const [icon, status] = statusText(command.status, command.statusFromRules);
     return {
       label: shortcut(command.label || " ", { pad: false }),
       icon,
       status,
-      title: command.title,
+      title: command.titleWithGraphicRenditions,
     };
   });
 
@@ -257,7 +263,7 @@ const drawDashboardCommandLines = (commands, width, cursorIndex) => {
       separator.length +
       removeGraphicRenditions(truncatedEnd).length;
     const finalEnd =
-      index === cursorIndex
+      index === cursorIndex || index === mousedownIndex
         ? NO_COLOR
           ? `${separator.slice(0, -1)}→${truncatedEnd}`
           : `${separator}${invert(truncatedEnd)}`
@@ -276,9 +282,16 @@ const drawDashboardCommandLines = (commands, width, cursorIndex) => {
  * @param {number} width
  * @param {boolean} attemptedKillAll
  * @param {number | undefined} cursorIndex
+ * @param {number | undefined} mousedownIndex
  * @returns {string}
  */
-const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
+const drawDashboard = (
+  commands,
+  width,
+  attemptedKillAll,
+  cursorIndex,
+  mousedownIndex
+) => {
   const done =
     attemptedKillAll &&
     commands.every((command) => command.status.tag === "Exit");
@@ -286,7 +299,8 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
   const finalLines = drawDashboardCommandLines(
     commands,
     width,
-    done ? undefined : cursorIndex
+    done ? undefined : cursorIndex,
+    done ? undefined : mousedownIndex
   )
     .map(({ line }) => line)
     .join("\n");
@@ -792,6 +806,7 @@ class Command {
     this.args = args;
     this.cwd = cwd;
     this.title = removeGraphicRenditions(title);
+    this.titleWithGraphicRenditions = title;
     this.formattedCommandWithTitle =
       title === formattedCommand
         ? formattedCommand
@@ -986,6 +1001,8 @@ const runCommands = (commandDescriptions) => {
   let attemptedKillAll = false;
   /** @type {number | undefined} */
   let cursorIndex = undefined;
+  /** @type {number | undefined} */
+  let mousedownIndex = undefined;
 
   /**
    * @param {Command} command
@@ -1051,7 +1068,8 @@ const runCommands = (commandDescriptions) => {
           commands,
           process.stdout.columns,
           attemptedKillAll,
-          cursorIndex
+          cursorIndex,
+          mousedownIndex
         )
     );
   };
@@ -1063,6 +1081,7 @@ const runCommands = (commandDescriptions) => {
   const switchToCommand = (index) => {
     const command = commands[index];
     current = { tag: "Command", index };
+    mousedownIndex = undefined;
     printHistoryAndExtraText(command);
   };
 
@@ -1095,6 +1114,26 @@ const runCommands = (commandDescriptions) => {
         cursorIndex = commands.length + cursorIndex;
       }
     }
+    // Redraw dashboard.
+    switchToDashboard();
+  };
+
+  /**
+   * @param {number} index
+   * @returns {void}
+   */
+  const mousedown = (index) => {
+    cursorIndex = undefined;
+    mousedownIndex = index;
+    // Redraw dashboard.
+    switchToDashboard();
+  };
+
+  /**
+   * @returns {void}
+   */
+  const mouseup = () => {
+    mousedownIndex = undefined;
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1207,10 +1246,13 @@ const runCommands = (commandDescriptions) => {
       data.toString("utf8"),
       current,
       commands,
+      mousedownIndex,
       switchToDashboard,
       switchToCommand,
       switchToCommandAtCursor,
       moveCursor,
+      mousedown,
+      mouseup,
       killAll,
       printHistoryAndExtraText
     );
@@ -1255,10 +1297,13 @@ const runCommands = (commandDescriptions) => {
  * @param {string} data
  * @param {Current} current
  * @param {Array<Command>} commands
+ * @param {number | undefined} mousedownIndex
  * @param {() => void} switchToDashboard
  * @param {(index: number) => void} switchToCommand
  * @param {() => void} switchToCommandAtCursor
  * @param {(delta: number) => void} moveCursor
+ * @param {(index: number) => void} mousedown
+ * @param {() => void} mouseup
  * @param {() => void} killAll
  * @param {(command: Command) => void} printHistoryAndExtraText
  * @returns {undefined}
@@ -1267,10 +1312,13 @@ const onStdin = (
   data,
   current,
   commands,
+  mousedownIndex,
   switchToDashboard,
   switchToCommand,
   switchToCommandAtCursor,
   moveCursor,
+  mousedown,
+  mouseup,
   killAll,
   printHistoryAndExtraText
 ) => {
@@ -1347,41 +1395,76 @@ const onStdin = (
             return undefined;
           }
 
-          const mouseupPosition = parseMouseup(data);
-          if (mouseupPosition !== undefined) {
-            const { x, y } = mouseupPosition;
-            const lines = drawDashboardCommandLines(
-              commands,
-              process.stdout.columns,
-              undefined
-            );
-            if (y >= 0 && y < lines.length) {
-              const line = lines[y];
-              if (x >= 0 && x < line.length) {
-                switchToCommand(y);
-              }
-            }
+          const mouseupPosition = parseMouse(data);
+          if (mouseupPosition === undefined) {
+            return undefined;
           }
 
-          return undefined;
+          const index = getCommandIndexFromMousePosition(
+            commands,
+            mouseupPosition
+          );
+
+          switch (mouseupPosition.type) {
+            case "mousedown":
+              if (index !== undefined) {
+                mousedown(index);
+              }
+              return undefined;
+
+            case "mouseup": {
+              if (index !== undefined && index === mousedownIndex) {
+                switchToCommand(index);
+              } else if (mousedownIndex !== undefined) {
+                mouseup();
+              }
+              return undefined;
+            }
+          }
         }
       }
   }
 };
 
-const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)m/;
+const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)([Mm])/;
 
 /**
  * @param {string} string
- * @returns {{ x: number, y: number } | undefined}
+ * @returns {{ type: "mousedown" | "mouseup", x: number, y: number } | undefined}
  */
-const parseMouseup = (string) => {
+const parseMouse = (string) => {
   const match = MOUSEUP_REGEX.exec(string);
   if (match === null) {
     return undefined;
   }
-  const [, x, y] = match;
-  return { x: Number(x) - 1, y: Number(y) - 1 };
+  const [, x, y, type] = match;
+  return {
+    type: type === "M" ? "mousedown" : "mouseup",
+    x: Number(x) - 1,
+    y: Number(y) - 1,
+  };
+};
+
+/**
+ * @param {Array<Command>} commands
+ * @param {{ x: number, y: number }} mousePosition
+ */
+const getCommandIndexFromMousePosition = (commands, { x, y }) => {
+  const lines = drawDashboardCommandLines(
+    commands,
+    process.stdout.columns,
+    undefined,
+    undefined
+  );
+
+  if (y >= 0 && y < lines.length) {
+    const line = lines[y];
+    if (x >= 0 && x < line.length) {
+      return y;
+    }
+  }
+
+  return undefined;
 };
 
 /**
