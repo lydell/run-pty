@@ -1071,17 +1071,6 @@ const runCommands = (commandDescriptions) => {
   };
 
   /**
-   * @returns {void}
-   */
-  const switchToCommandAtCursor = () => {
-    if (cursorIndex !== undefined) {
-      const command = commands[cursorIndex];
-      current = { tag: "Command", index: cursorIndex };
-      printHistoryAndExtraText(command);
-    }
-  };
-
-  /**
    * @param {number | undefined} index
    * @returns {void}
    */
@@ -1202,7 +1191,6 @@ const runCommands = (commandDescriptions) => {
       cursorIndex,
       switchToDashboard,
       switchToCommand,
-      switchToCommandAtCursor,
       setCursor,
       killAll,
       printHistoryAndExtraText
@@ -1251,7 +1239,6 @@ const runCommands = (commandDescriptions) => {
  * @param {number | undefined} cursorIndex
  * @param {() => void} switchToDashboard
  * @param {(index: number, options?: { viaMouse?: boolean }) => void} switchToCommand
- * @param {() => void} switchToCommandAtCursor
  * @param {(index: number | undefined) => void} setCursor
  * @param {() => void} killAll
  * @param {(command: Command) => void} printHistoryAndExtraText
@@ -1264,7 +1251,6 @@ const onStdin = (
   cursorIndex,
   switchToDashboard,
   switchToCommand,
-  switchToCommandAtCursor,
   setCursor,
   killAll,
   printHistoryAndExtraText
@@ -1318,7 +1304,9 @@ const onStdin = (
 
         case KEY_CODES.enter:
         case KEY_CODES.enterVim:
-          switchToCommandAtCursor();
+          if (cursorIndex !== undefined) {
+            switchToCommand(cursorIndex);
+          }
           return undefined;
 
         case KEY_CODES.up:
