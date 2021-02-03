@@ -1026,11 +1026,9 @@ const runCommands = (commandDescriptions) => {
 
     switch (command.status.tag) {
       case "Running":
-        if (maybeNewline === "") {
+        if (command.history.endsWith("\n")) {
           process.stdout.write(
-            RESET_COLOR +
-              maybeNewline +
-              runningText(command.status.terminal.pid)
+            RESET_COLOR + runningText(command.status.terminal.pid)
           );
         }
         return undefined;
