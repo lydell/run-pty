@@ -937,13 +937,6 @@ class Command {
     if (this.history.length > MAX_HISTORY) {
       this.history = this.history.slice(-MAX_HISTORY);
     }
-    fs.writeFileSync(
-      "history.txt",
-      this.history.replace(
-        /[\x00-\x09\x0B\x0C\x0E-\x1f]/g,
-        (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`
-      )
-    );
     return statusFromRulesChanged;
   }
 
