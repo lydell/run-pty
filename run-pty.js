@@ -66,6 +66,7 @@ const ALL_LABELS = LABEL_GROUPS.join("");
 
 const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
+const CURSOR_UP = "\x1B[A";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
@@ -432,6 +433,16 @@ const truncate = (string, maxLength) => {
   }
   return result;
 };
+
+/**
+ * Assumes that `string` ends with a newline, the cursor is at the start of
+ * the line and that it’s fine to clear even the first line.
+ *
+ * @param {string} string
+ * @returns {string}
+ */
+const erase = (string) =>
+  `${CURSOR_UP}${CLEAR_RIGHT}`.repeat(string.split("\n").length - 1);
 
 /**
  * @param {Array<string>} command
@@ -1000,51 +1011,47 @@ const runCommands = (commandDescriptions) => {
   let attemptedKillAll = false;
   /** @type {number | undefined} */
   let cursorIndex = undefined;
+  /** @type {string | undefined} */
+  let lastExtraText = undefined;
 
   /**
    * @param {Command} command
+   * @param {string} data
    * @returns {undefined}
    */
-  const printHistoryAndExtraText = (command) => {
-    process.stdout.write(
-      SHOW_CURSOR +
-        DISABLE_ALTERNATE_SCREEN +
-        DISABLE_MOUSE +
-        RESET_COLOR +
-        CLEAR +
-        command.history
-    );
-
-    const maybeNewline = EMPTY_LAST_LINE.test(command.history) ? "" : "\n";
+  const printExtraText = (command, data) => {
+    const eraser = lastExtraText === undefined ? "" : erase(lastExtraText);
 
     switch (command.status.tag) {
       case "Running":
-        if (command.history.endsWith("\n")) {
-          process.stdout.write(
-            RESET_COLOR + runningText(command.status.terminal.pid)
-          );
-        }
+        lastExtraText = data.endsWith("\n")
+          ? RESET_COLOR + runningText(command.status.terminal.pid)
+          : undefined;
+        process.stdout.write(
+          eraser + data + (lastExtraText === undefined ? "" : lastExtraText)
+        );
         return undefined;
 
       case "Killing":
-        if (command.status.slow) {
-          process.stdout.write(
-            HIDE_CURSOR +
-              RESET_COLOR +
-              maybeNewline +
-              killingText(command, command.status.terminal.pid)
-          );
-        }
-        return undefined;
-
-      case "Exit":
+        lastExtraText =
+          data.endsWith("\n") && command.status.slow
+            ? RESET_COLOR + killingText(command, command.status.terminal.pid)
+            : undefined;
         process.stdout.write(
-          HIDE_CURSOR +
-            RESET_COLOR +
-            maybeNewline +
-            exitText(commands, command, command.status.exitCode)
+          eraser + data + (lastExtraText === undefined ? "" : lastExtraText)
         );
         return undefined;
+
+      case "Exit": {
+        const maybeNewline = EMPTY_LAST_LINE.test(command.history) ? "" : "\n";
+        lastExtraText =
+          HIDE_CURSOR +
+          RESET_COLOR +
+          maybeNewline +
+          exitText(commands, command, command.status.exitCode);
+        process.stdout.write(eraser + data + lastExtraText);
+        return undefined;
+      }
     }
   };
 
@@ -1078,7 +1085,18 @@ const runCommands = (commandDescriptions) => {
     if (viaMouse) {
       cursorIndex = undefined;
     }
-    printHistoryAndExtraText(command);
+
+    process.stdout.write(
+      SHOW_CURSOR +
+        DISABLE_ALTERNATE_SCREEN +
+        DISABLE_MOUSE +
+        RESET_COLOR +
+        CLEAR
+    );
+
+    lastExtraText = undefined;
+
+    printExtraText(command, command.history);
   };
 
   /**
@@ -1127,14 +1145,9 @@ const runCommands = (commandDescriptions) => {
                 const command = commands[index];
                 switch (command.status.tag) {
                   case "Running":
-                    process.stdout.write(data);
-                    return undefined;
-
                   case "Killing":
-                    // Redraw with killingText at the bottom.
-                    printHistoryAndExtraText(command);
+                    printExtraText(command, data);
                     return undefined;
-
                   case "Exit":
                     throw new Error(
                       `Received unexpected output from already exited pty for: ${command.title}\n${data}`
@@ -1165,8 +1178,7 @@ const runCommands = (commandDescriptions) => {
             case "Command":
               if (current.index === index) {
                 const command = commands[index];
-                // Redraw current command.
-                printHistoryAndExtraText(command);
+                printExtraText(command, "");
               }
               return undefined;
 
@@ -1206,8 +1218,7 @@ const runCommands = (commandDescriptions) => {
       switchToDashboard,
       switchToCommand,
       setCursor,
-      killAll,
-      printHistoryAndExtraText
+      killAll
     );
   });
 
@@ -1255,7 +1266,6 @@ const runCommands = (commandDescriptions) => {
  * @param {(index: number, options?: { viaMouse?: boolean }) => void} switchToCommand
  * @param {(index: number | undefined) => void} setCursor
  * @param {() => void} killAll
- * @param {(command: Command) => void} printHistoryAndExtraText
  * @returns {undefined}
  */
 const onStdin = (
@@ -1266,8 +1276,7 @@ const onStdin = (
   switchToDashboard,
   switchToCommand,
   setCursor,
-  killAll,
-  printHistoryAndExtraText
+  killAll
 ) => {
   switch (current.tag) {
     case "Command": {
@@ -1285,6 +1294,10 @@ const onStdin = (
               return undefined;
 
             default:
+              command.status = {
+                tag: "Running",
+                terminal: command.status.terminal,
+              };
               command.status.terminal.write(data);
               return undefined;
           }
@@ -1301,7 +1314,7 @@ const onStdin = (
 
             case KEY_CODES.restart:
               command.start({ isFocused: true });
-              printHistoryAndExtraText(command);
+              switchToCommand(current.index);
               return undefined;
 
             default:
