@@ -67,6 +67,7 @@ const ALL_LABELS = LABEL_GROUPS.join("");
 const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
 const CURSOR_UP = "\x1B[A";
+const ENABLE_ALTERNATE_SCREEN = "\x1B[?1049h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
@@ -1043,12 +1044,27 @@ const runCommands = (commandDescriptions) => {
         return undefined;
 
       case "Exit": {
-        const maybeNewline = EMPTY_LAST_LINE.test(command.history) ? "" : "\n";
+        const isOnAlternateScreen =
+          command.history.lastIndexOf(ENABLE_ALTERNATE_SCREEN) >
+          command.history.lastIndexOf(DISABLE_ALTERNATE_SCREEN);
+
+        const maybeNewline =
+          !isOnAlternateScreen && EMPTY_LAST_LINE.test(command.history)
+            ? ""
+            : "\n";
+
+        // This has the side effect of moving the cursor, so only do it if needed.
+        const disableAlternateScreen = isOnAlternateScreen
+          ? DISABLE_ALTERNATE_SCREEN
+          : "";
+
         lastExtraText =
           HIDE_CURSOR +
           RESET_COLOR +
+          disableAlternateScreen +
           maybeNewline +
           exitText(commands, command, command.status.exitCode);
+
         process.stdout.write(eraser + data + lastExtraText);
         return undefined;
       }
