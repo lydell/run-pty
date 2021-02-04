@@ -401,7 +401,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 const WINDOWS_HACK = IS_WINDOWS ? "\\0" : "";
 const EMPTY_LAST_LINE = RegExp(
-  `(?:^|[${WINDOWS_HACK}\\r\\n])(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
+  `(?:^|[${WINDOWS_HACK}\\r\\n])(?:(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*|\\^C)$`
 );
 
 /**
@@ -1035,7 +1035,7 @@ const runCommands = (commandDescriptions) => {
 
       case "Killing":
         lastExtraText =
-          data.endsWith("\n") && command.status.slow
+          data === "" && command.status.slow
             ? RESET_COLOR + killingText(command, command.status.terminal.pid)
             : undefined;
         process.stdout.write(
