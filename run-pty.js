@@ -67,6 +67,7 @@ const ALL_LABELS = LABEL_GROUPS.join("");
 const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
 const CURSOR_UP = "\x1B[A";
+const CURSOR_DOWN = "\x1B[B";
 const ENABLE_ALTERNATE_SCREEN = "\x1B[?1049h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
@@ -299,7 +300,6 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
-  // Newlines at the end are wanted here.
   return `
 ${finalLines}
 
@@ -337,29 +337,20 @@ const historyStart = (command) =>
  * @returns {string}
  */
 const runningText = (pid) =>
-  // Newlines at the start/end are wanted here.
   `
 ${shortcut(KEYS.kill)} kill ${dim(`(pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
-
-`;
+`.trimEnd();
 
 /**
- * @param {CommandText} command
  * @param {number} pid
  * @returns {string}
  */
-const killingText = (command, pid) =>
-  // Newlines at the start/end are wanted here.
+const killingText = (pid) =>
   `
-${killingIndicator}${EMOJI_WIDTH_FIX} ${
-    command.formattedCommandWithTitle
-  }${RESET_COLOR}
-${cwdText(command)}killing…
-
 ${shortcut(KEYS.kill)} kill ${dim(`(double-press to force) (pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
-`;
+`.trimEnd();
 
 /**
  * @param {Array<Command>} commands
@@ -401,7 +392,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 const WINDOWS_HACK = IS_WINDOWS ? "\\0" : "";
 const EMPTY_LAST_LINE = RegExp(
-  `(?:^|[${WINDOWS_HACK}\\r\\n])(?:(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*|\\^C)$`
+  `(?:^|[${WINDOWS_HACK}\\r\\n])(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
 );
 
 /**
@@ -436,14 +427,25 @@ const truncate = (string, maxLength) => {
 };
 
 /**
- * Assumes that `string` ends with a newline, the cursor is at the start of
- * the line and that it’s fine to clear even the first line.
+ * @param {string} string
+ * @returns {string}
+ */
+const moveBack = (string) =>
+  `${CURSOR_UP.repeat(string.split("\n").length - 1)}\r`;
+
+/**
+ * Assumes that `moveBack` has been run first and that the first line shouldn’t
+ * be cleared.
  *
  * @param {string} string
  * @returns {string}
  */
-const erase = (string) =>
-  `${CURSOR_UP}${CLEAR_RIGHT}`.repeat(string.split("\n").length - 1);
+const erase = (string) => {
+  const numLines = string.split("\n").length;
+  return `\r${`${CURSOR_DOWN}${CLEAR_RIGHT}`.repeat(
+    numLines - 1
+  )}${CURSOR_UP.repeat(numLines - 1)}`;
+};
 
 /**
  * @param {Array<string>} command
@@ -1025,23 +1027,36 @@ const runCommands = (commandDescriptions) => {
 
     switch (command.status.tag) {
       case "Running":
-        lastExtraText = data.endsWith("\n")
+        lastExtraText = command.history.endsWith("\n")
           ? RESET_COLOR + runningText(command.status.terminal.pid)
           : undefined;
         process.stdout.write(
-          eraser + data + (lastExtraText === undefined ? "" : lastExtraText)
+          eraser +
+            data +
+            (lastExtraText === undefined
+              ? ""
+              : lastExtraText + moveBack(lastExtraText))
         );
         return undefined;
 
-      case "Killing":
+      case "Killing": {
+        const match = /(?:\^C)+$/.exec(command.history);
+        const ctrlCs = match === null ? "" : match[0];
         lastExtraText =
-          data === "" && command.status.slow
-            ? RESET_COLOR + killingText(command, command.status.terminal.pid)
+          command.history.endsWith("\n") || match !== null
+            ? command.status.slow
+              ? RESET_COLOR + killingText(command.status.terminal.pid)
+              : RESET_COLOR + runningText(command.status.terminal.pid)
             : undefined;
         process.stdout.write(
-          eraser + data + (lastExtraText === undefined ? "" : lastExtraText)
+          eraser +
+            data +
+            (lastExtraText === undefined
+              ? ""
+              : lastExtraText + moveBack(lastExtraText) + ctrlCs)
         );
         return undefined;
+      }
 
       case "Exit": {
         const isOnAlternateScreen =
