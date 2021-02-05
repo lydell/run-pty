@@ -227,10 +227,10 @@ const killAllLabel = (commands) =>
 /**
  * @param {Array<Command>} commands
  * @param {number} width
- * @param {number | undefined} cursorIndex
+ * @param {Selection} selection
  * @returns {Array<{ line: string, length: number }>}
  */
-const drawDashboardCommandLines = (commands, width, cursorIndex) => {
+const drawDashboardCommandLines = (commands, width, selection) => {
   const lines = commands.map((command) => {
     const [icon, status] = statusText(command.status, command.statusFromRules);
     return {
@@ -262,7 +262,7 @@ const drawDashboardCommandLines = (commands, width, cursorIndex) => {
       separator.length +
       removeGraphicRenditions(truncatedEnd).length;
     const finalEnd =
-      index === cursorIndex
+      selection.tag !== "Invisible" && index === selection.index
         ? NO_COLOR
           ? `${separator.slice(0, -1)}→${truncatedEnd}`
           : `${separator}${invert(truncatedEnd)}`
@@ -280,10 +280,10 @@ const drawDashboardCommandLines = (commands, width, cursorIndex) => {
  * @param {Array<Command>} commands
  * @param {number} width
  * @param {boolean} attemptedKillAll
- * @param {number | undefined} cursorIndex
+ * @param {Selection} selection
  * @returns {string}
  */
-const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
+const drawDashboard = (commands, width, attemptedKillAll, selection) => {
   const done =
     attemptedKillAll &&
     commands.every((command) => command.status.tag === "Exit");
@@ -291,7 +291,7 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
   const finalLines = drawDashboardCommandLines(
     commands,
     width,
-    done ? undefined : cursorIndex
+    done ? { tag: "Invisible", index: 0 } : selection
   )
     .map(({ line }) => line)
     .join("\n");
@@ -303,7 +303,9 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
   const label = summarizeLabels(commands.map((command) => command.label));
 
   const pid =
-    cursorIndex === undefined ? undefined : getPid(commands[cursorIndex]);
+    selection.tag === "Keyboard"
+      ? getPid(commands[selection.index])
+      : undefined;
 
   const enter =
     pid === undefined
@@ -1035,6 +1037,13 @@ const getLastLine = (string) => {
   }
   return string.slice(index + 1);
 };
+/**
+ * @typedef {
+    | { tag: "Invisible", index: number }
+    | { tag: "Mousedown", index: number }
+    | { tag: "Keyboard", index: number }
+   } Selection
+ */
 
 /**
  * @param {Array<CommandDescription>} commandDescriptions
@@ -1044,8 +1053,8 @@ const runCommands = (commandDescriptions) => {
   /** @type {Current} */
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
-  /** @type {number | undefined} */
-  let cursorIndex = undefined;
+  /** @type {Selection} */
+  let selection = { tag: "Invisible", index: 0 };
   /** @type {string | undefined} */
   let lastExtraText = undefined;
 
@@ -1156,7 +1165,7 @@ const runCommands = (commandDescriptions) => {
           commands,
           process.stdout.columns,
           attemptedKillAll,
-          cursorIndex
+          selection
         )
     );
   };
@@ -1169,7 +1178,7 @@ const runCommands = (commandDescriptions) => {
     const command = commands[index];
     current = { tag: "Command", index };
     if (viaMouse) {
-      cursorIndex = undefined;
+      selection = { tag: "Invisible", index };
     }
 
     process.stdout.write(
@@ -1186,11 +1195,11 @@ const runCommands = (commandDescriptions) => {
   };
 
   /**
-   * @param {number | undefined} index
+   * @param {Selection} newSelection
    * @returns {void}
    */
-  const setCursor = (index) => {
-    cursorIndex = index;
+  const setSelection = (newSelection) => {
+    selection = newSelection;
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1314,10 +1323,10 @@ const runCommands = (commandDescriptions) => {
       data.toString("utf8"),
       current,
       commands,
-      cursorIndex,
+      selection,
       switchToDashboard,
       switchToCommand,
-      setCursor,
+      setSelection,
       killAll,
       restartExited
     );
@@ -1362,10 +1371,10 @@ const runCommands = (commandDescriptions) => {
  * @param {string} data
  * @param {Current} current
  * @param {Array<Command>} commands
- * @param {number | undefined} cursorIndex
+ * @param {Selection} selection
  * @param {() => void} switchToDashboard
  * @param {(index: number, options?: { viaMouse?: boolean }) => void} switchToCommand
- * @param {(index: number | undefined) => void} setCursor
+ * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
  * @param {() => void} restartExited
  * @returns {undefined}
@@ -1374,10 +1383,10 @@ const onStdin = (
   data,
   current,
   commands,
-  cursorIndex,
+  selection,
   switchToDashboard,
   switchToCommand,
-  setCursor,
+  setSelection,
   killAll,
   restartExited
 ) => {
@@ -1434,35 +1443,43 @@ const onStdin = (
 
         case KEY_CODES.enter:
         case KEY_CODES.enterVim:
-          if (cursorIndex === undefined) {
+          if (selection.tag === "Invisible") {
             restartExited();
           } else {
-            switchToCommand(cursorIndex);
+            switchToCommand(selection.index);
           }
           return undefined;
 
         case KEY_CODES.up:
         case KEY_CODES.upAlt:
         case KEY_CODES.upVim:
-          setCursor(
-            cursorIndex === undefined || cursorIndex === 0
-              ? commands.length - 1
-              : cursorIndex - 1
-          );
+          setSelection({
+            tag: "Keyboard",
+            index:
+              selection.tag === "Invisible"
+                ? selection.index
+                : selection.index === 0
+                ? commands.length - 1
+                : selection.index - 1,
+          });
           return undefined;
 
         case KEY_CODES.down:
         case KEY_CODES.downAlt:
         case KEY_CODES.downVim:
-          setCursor(
-            cursorIndex === undefined || cursorIndex === commands.length - 1
-              ? 0
-              : cursorIndex + 1
-          );
+          setSelection({
+            tag: "Keyboard",
+            index:
+              selection.tag === "Invisible"
+                ? selection.index
+                : selection.index === commands.length - 1
+                ? 0
+                : selection.index + 1,
+          });
           return undefined;
 
         case KEY_CODES.esc:
-          setCursor(undefined);
+          setSelection({ tag: "Invisible", index: selection.index });
           return undefined;
 
         default: {
@@ -1487,15 +1504,15 @@ const onStdin = (
           switch (mouseupPosition.type) {
             case "mousedown":
               if (index !== undefined) {
-                setCursor(index);
+                setSelection({ tag: "Mousedown", index });
               }
               return undefined;
 
             case "mouseup": {
-              if (index !== undefined && index === cursorIndex) {
+              if (index !== undefined && index === selection.index) {
                 switchToCommand(index, { viaMouse: true });
-              } else if (cursorIndex !== undefined) {
-                setCursor(undefined);
+              } else if (selection.tag !== "Invisible") {
+                setSelection({ tag: "Invisible", index: selection.index });
               }
               return undefined;
             }
@@ -1529,11 +1546,10 @@ const parseMouse = (string) => {
  * @param {{ x: number, y: number }} mousePosition
  */
 const getCommandIndexFromMousePosition = (commands, { x, y }) => {
-  const lines = drawDashboardCommandLines(
-    commands,
-    process.stdout.columns,
-    undefined
-  );
+  const lines = drawDashboardCommandLines(commands, process.stdout.columns, {
+    tag: "Invisible",
+    index: 0,
+  });
 
   if (y >= 0 && y < lines.length) {
     const line = lines[y];
