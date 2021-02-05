@@ -43,6 +43,7 @@ const KEYS = {
   dashboard: "ctrl+z",
   navigate: "↑/↓",
   enter: "enter",
+  unselect: "escape",
 };
 
 const KEY_CODES = {
@@ -309,7 +310,9 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
       ? commands.some((command) => command.status.tag === "Exit")
         ? `${shortcut(KEYS.enter)} restart exited`
         : ""
-      : `${shortcut(KEYS.enter)} focus selected${pid}`;
+      : `${shortcut(KEYS.enter)} focus selected${pid}\n${shortcut(
+          KEYS.unselect
+        )} unselect`;
 
   return `
 ${finalLines}
