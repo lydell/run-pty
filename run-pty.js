@@ -442,9 +442,9 @@ const moveBack = (string) =>
  */
 const erase = (string) => {
   const numLines = string.split("\n").length;
-  return `\r${`${CURSOR_DOWN}${CLEAR_RIGHT}`.repeat(
+  return `\r${`${CLEAR_RIGHT}${CURSOR_DOWN}`.repeat(
     numLines - 1
-  )}${CURSOR_UP.repeat(numLines - 1)}`;
+  )}${CLEAR_RIGHT}${CURSOR_UP.repeat(numLines - 1)}`;
 };
 
 /**
@@ -1040,20 +1040,20 @@ const runCommands = (commandDescriptions) => {
         return undefined;
 
       case "Killing": {
-        const match = /(?:\^C)+$/.exec(command.history);
-        const ctrlCs = match === null ? "" : match[0];
+        const match = /\n((?:\^C)*)$/.exec(command.history);
+        const lastLine = match === null ? "" : match[1];
         lastExtraText =
-          command.history.endsWith("\n") || match !== null
-            ? command.status.slow
-              ? RESET_COLOR + killingText(command.status.terminal.pid)
-              : RESET_COLOR + runningText(command.status.terminal.pid)
-            : undefined;
+          match === null
+            ? undefined
+            : command.status.slow
+            ? RESET_COLOR + killingText(command.status.terminal.pid)
+            : RESET_COLOR + runningText(command.status.terminal.pid);
         process.stdout.write(
           eraser +
             data +
             (lastExtraText === undefined
               ? ""
-              : lastExtraText + moveBack(lastExtraText) + ctrlCs)
+              : lastExtraText + moveBack(lastExtraText) + lastLine)
         );
         return undefined;
       }
