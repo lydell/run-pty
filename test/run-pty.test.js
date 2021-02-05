@@ -384,47 +384,36 @@ describe("focused command", () => {
       ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
-
     `);
   });
 
   test("killing without cwd", () => {
     expect(
       render(
-        (command) => killingText(command, 12345),
+        () => killingText(12345),
         "frontend: npm start",
         "frontend",
         "./x/.."
       )
     ).toMatchInlineSnapshot(`
       ␊
-      ⭕ frontend: npm start⧘
-      killing…
-
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 
   test("killing with cwd", () => {
     expect(
       render(
-        (command) => killingText(command, 12345),
+        () => killingText(12345),
         "frontend: npm start",
         "frontend",
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
       ␊
-      ⭕ frontend: npm start⧘
-      📂 ⧙web/frontend⧘
-      killing…
-
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 
@@ -445,7 +434,6 @@ describe("focused command", () => {
       ⧙[⧘⧙enter⧘⧙]⧘  restart
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 
@@ -465,7 +453,6 @@ describe("focused command", () => {
       ⧙[⧘⧙enter⧘⧙]⧘  restart
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 });
