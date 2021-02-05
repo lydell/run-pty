@@ -305,7 +305,11 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
     cursorIndex === undefined ? undefined : getPid(commands[cursorIndex]);
 
   const enter =
-    pid === undefined ? "" : `${shortcut(KEYS.enter)} focus selected${pid}`;
+    pid === undefined
+      ? commands.some((command) => command.status.tag === "Exit")
+        ? `${shortcut(KEYS.enter)} restart exited`
+        : ""
+      : `${shortcut(KEYS.enter)} focus selected${pid}`;
 
   return `
 ${finalLines}
@@ -1208,6 +1212,20 @@ const runCommands = (commandDescriptions) => {
     }
   };
 
+  /**
+   * @returns {void}
+   */
+  const restartExited = () => {
+    const exited = commands.filter((command) => command.status.tag === "Exit");
+    if (exited.length > 0) {
+      for (const command of exited) {
+        command.start({ isFocused: false });
+      }
+      // Redraw dashboard.
+      switchToDashboard();
+    }
+  };
+
   const focusOnlyCommand = commandDescriptions.length === 1;
 
   /** @type {Array<Command>} */
@@ -1297,7 +1315,8 @@ const runCommands = (commandDescriptions) => {
       switchToDashboard,
       switchToCommand,
       setCursor,
-      killAll
+      killAll,
+      restartExited
     );
   });
 
@@ -1345,6 +1364,7 @@ const runCommands = (commandDescriptions) => {
  * @param {(index: number, options?: { viaMouse?: boolean }) => void} switchToCommand
  * @param {(index: number | undefined) => void} setCursor
  * @param {() => void} killAll
+ * @param {() => void} restartExited
  * @returns {undefined}
  */
 const onStdin = (
@@ -1355,7 +1375,8 @@ const onStdin = (
   switchToDashboard,
   switchToCommand,
   setCursor,
-  killAll
+  killAll,
+  restartExited
 ) => {
   switch (current.tag) {
     case "Command": {
@@ -1410,7 +1431,9 @@ const onStdin = (
 
         case KEY_CODES.enter:
         case KEY_CODES.enterVim:
-          if (cursorIndex !== undefined) {
+          if (cursorIndex === undefined) {
+            restartExited();
+          } else {
             switchToCommand(cursorIndex);
           }
           return undefined;
