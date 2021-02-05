@@ -154,10 +154,8 @@ describe("dashboard", () => {
   test("empty", () => {
     expect(testDashboard([], 0)).toMatchInlineSnapshot(`
       ⧙[⧘⧙⧘⧙]⧘       focus command ⧙(or click)⧘
-      ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit␊
-
     `);
   });
 
@@ -176,10 +174,8 @@ describe("dashboard", () => {
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
-      ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit␊
-
     `);
   });
 
@@ -249,10 +245,8 @@ describe("dashboard", () => {
       ⧙[⧘⧙6⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
 
       ⧙[⧘⧙1-6⧘⧙]⧘    focus command ⧙(or click)⧘
-      ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘␊
-
     `);
   });
 
@@ -333,10 +327,8 @@ describe("dashboard", () => {
       ⧙[⧘⧙ ⧘⧙]⧘  🟢⧘  echo 61⧘
 
       ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command ⧙(or click)⧘
-      ⧙[⧘⧙enter⧘⧙]⧘  focus selected command
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all␊
-
     `);
   });
 });

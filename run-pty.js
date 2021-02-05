@@ -301,14 +301,34 @@ const drawDashboard = (commands, width, attemptedKillAll, cursorIndex) => {
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
+  const pid =
+    cursorIndex === undefined ? undefined : getPid(commands[cursorIndex]);
+
+  const enter =
+    pid === undefined ? "" : `${shortcut(KEYS.enter)} focus selected${pid}`;
+
   return `
 ${finalLines}
 
 ${shortcut(label)} focus command ${dim("(or click)")}
-${shortcut(KEYS.enter)} focus selected command
-${shortcut(KEYS.navigate)} move selection
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
-`.trimStart();
+${shortcut(KEYS.navigate)} move selection
+${enter}
+`.trim();
+};
+
+/**
+ * @param {Command} command
+ * @returns {string}
+ */
+const getPid = (command) => {
+  switch (command.status.tag) {
+    case "Running":
+    case "Killing":
+      return ` ${dim(`(pid ${command.status.terminal.pid})`)}`;
+    case "Exit":
+      return "";
+  }
 };
 
 /**
