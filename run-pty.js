@@ -442,9 +442,9 @@ const moveBack = (string) =>
  */
 const erase = (string) => {
   const numLines = string.split("\n").length;
-  return `\r${`${CLEAR_RIGHT}${CURSOR_DOWN}`.repeat(
+  return `\r${`${CURSOR_DOWN}${CLEAR_RIGHT}`.repeat(
     numLines - 1
-  )}${CLEAR_RIGHT}${CURSOR_UP.repeat(numLines - 1)}`;
+  )}${CURSOR_UP.repeat(numLines - 1)}`;
 };
 
 /**
@@ -1025,9 +1025,6 @@ const runCommands = (commandDescriptions) => {
   const printExtraText = (command, data) => {
     const eraser = lastExtraText === undefined ? "" : erase(lastExtraText);
 
-    const match = /\n((?:\^C)*)$/.exec(command.history);
-    const lastLine = match === null ? "" : match[1];
-
     switch (command.status.tag) {
       case "Running":
         lastExtraText = command.history.endsWith("\n")
@@ -1042,13 +1039,17 @@ const runCommands = (commandDescriptions) => {
         );
         return undefined;
 
-      case "Killing":
-        lastExtraText =
-          match === null
-            ? undefined
-            : command.status.slow
-            ? RESET_COLOR + killingText(command.status.terminal.pid)
-            : RESET_COLOR + runningText(command.status.terminal.pid);
+      case "Killing": {
+        const match = /\n((?:\^C)*)$/.exec(command.history);
+        // Visually this line does not need reprinting, but we do to get the
+        // cursor at the end of it.
+        const lastLine = match === null ? "" : match[1];
+
+        lastExtraText = !/\n((?:\^C)*)$/.test(command.history)
+          ? undefined
+          : command.status.slow
+          ? RESET_COLOR + killingText(command.status.terminal.pid)
+          : RESET_COLOR + runningText(command.status.terminal.pid);
         process.stdout.write(
           eraser +
             data +
@@ -1057,6 +1058,7 @@ const runCommands = (commandDescriptions) => {
               : lastExtraText + moveBack(lastExtraText) + lastLine)
         );
         return undefined;
+      }
 
       case "Exit": {
         const isOnAlternateScreen =
@@ -1080,7 +1082,7 @@ const runCommands = (commandDescriptions) => {
           maybeNewline +
           exitText(commands, command, command.status.exitCode);
 
-        process.stdout.write(eraser + lastLine + data + lastExtraText);
+        process.stdout.write(eraser + data + lastExtraText);
         return undefined;
       }
     }
