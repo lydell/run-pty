@@ -1025,6 +1025,9 @@ const runCommands = (commandDescriptions) => {
   const printExtraText = (command, data) => {
     const eraser = lastExtraText === undefined ? "" : erase(lastExtraText);
 
+    const match = /\n((?:\^C)*)$/.exec(command.history);
+    const lastLine = match === null ? "" : match[1];
+
     switch (command.status.tag) {
       case "Running":
         lastExtraText = command.history.endsWith("\n")
@@ -1039,9 +1042,7 @@ const runCommands = (commandDescriptions) => {
         );
         return undefined;
 
-      case "Killing": {
-        const match = /\n((?:\^C)*)$/.exec(command.history);
-        const lastLine = match === null ? "" : match[1];
+      case "Killing":
         lastExtraText =
           match === null
             ? undefined
@@ -1056,7 +1057,6 @@ const runCommands = (commandDescriptions) => {
               : lastExtraText + moveBack(lastExtraText) + lastLine)
         );
         return undefined;
-      }
 
       case "Exit": {
         const isOnAlternateScreen =
@@ -1080,7 +1080,7 @@ const runCommands = (commandDescriptions) => {
           maybeNewline +
           exitText(commands, command, command.status.exitCode);
 
-        process.stdout.write(eraser + data + lastExtraText);
+        process.stdout.write(eraser + lastLine + data + lastExtraText);
         return undefined;
       }
     }
