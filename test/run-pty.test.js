@@ -111,6 +111,7 @@ describe("dashboard", () => {
             args: [],
             cwd: ".",
             history: "",
+            isSimpleLog: true,
             statusFromRules: item.statusFromRules,
             defaultStatus: undefined,
             statusRules: [],
@@ -124,7 +125,7 @@ describe("dashboard", () => {
         }),
         width,
         false,
-        undefined
+        { tag: "Invisible", index: 0 }
       )
     );
   }
@@ -176,6 +177,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
 
@@ -247,6 +249,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙1-6⧘⧙]⧘    focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
 
