@@ -390,6 +390,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 };
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
+const ESCAPE_EXCEPT_GRAPHIC_RENDITIONS = /\x1B\[(?!(?:\d+(?:;\d+)*)?m)/g;
 const WINDOWS_HACK = IS_WINDOWS ? "\\0" : "";
 const EMPTY_LAST_LINE = RegExp(
   `(?:^|[${WINDOWS_HACK}\\r\\n])(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
@@ -820,6 +821,7 @@ class Command {
     this.onExit = onExit;
     /** @type {string} */
     this.history = "";
+    this.isSimpleLog = true;
     /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
     /** @type {string | undefined} */
@@ -951,6 +953,9 @@ class Command {
     if (this.history.length > MAX_HISTORY) {
       this.history = this.history.slice(-MAX_HISTORY);
     }
+    if (this.isSimpleLog && ESCAPE_EXCEPT_GRAPHIC_RENDITIONS.test(data)) {
+      this.isSimpleLog = false;
+    }
     return statusFromRulesChanged;
   }
 
@@ -1025,35 +1030,56 @@ const runCommands = (commandDescriptions) => {
   const printExtraText = (command, data) => {
     const eraser = lastExtraText === undefined ? "" : erase(lastExtraText);
 
+    // For a simple log (no cursor movements or anything) we can _always_ show
+    // extra text. Otherwise, if the history ends with a newline is a good
+    // Visually the last line of the history does not need reprinting, but we do
+    // to get the cursor at the end of it.
+
     switch (command.status.tag) {
-      case "Running":
-        lastExtraText = command.history.endsWith("\n")
-          ? RESET_COLOR + runningText(command.status.terminal.pid)
-          : undefined;
+      case "Running": {
+        const match = /(?:^|\n)([^\n]*)$/.exec(command.history);
+        const lastLine =
+          match === null
+            ? undefined
+            : match[1] === ""
+            ? ""
+            : command.isSimpleLog
+            ? match[1]
+            : undefined;
+        lastExtraText =
+          lastLine === undefined
+            ? undefined
+            : RESET_COLOR + runningText(command.status.terminal.pid);
         process.stdout.write(
           eraser +
             data +
-            (lastExtraText === undefined
+            (lastExtraText === undefined || lastLine === undefined
               ? ""
-              : lastExtraText + moveBack(lastExtraText))
+              : lastExtraText + moveBack(lastExtraText) + lastLine)
         );
         return undefined;
+      }
 
       case "Killing": {
-        const match = /\n((?:\^C)*)$/.exec(command.history);
-        // Visually this line does not need reprinting, but we do to get the
-        // cursor at the end of it.
-        const lastLine = match === null ? "" : match[1];
-
-        lastExtraText = !/\n((?:\^C)*)$/.test(command.history)
-          ? undefined
-          : command.status.slow
-          ? RESET_COLOR + killingText(command.status.terminal.pid)
-          : RESET_COLOR + runningText(command.status.terminal.pid);
+        const match = /(?:^|\n)(?:((?:\^C)*)|([^\n]*))$/.exec(command.history);
+        const lastLine =
+          match === null
+            ? undefined
+            : match[1] !== undefined
+            ? match[1]
+            : command.isSimpleLog
+            ? match[2]
+            : undefined;
+        lastExtraText =
+          lastLine === undefined
+            ? undefined
+            : command.status.slow
+            ? RESET_COLOR + killingText(command.status.terminal.pid)
+            : RESET_COLOR + runningText(command.status.terminal.pid);
         process.stdout.write(
           eraser +
             data +
-            (lastExtraText === undefined
+            (lastExtraText === undefined || lastLine === undefined
               ? ""
               : lastExtraText + moveBack(lastExtraText) + lastLine)
         );
