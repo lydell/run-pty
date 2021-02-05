@@ -32,13 +32,12 @@ $ npm start
 ➡️
 
 ```
-[1]  🟢  npm run frontend
-[2]  🟢  npm run backend
+[1]  🟢   npm run frontend
+[2]  🟢   npm run backend
 
 [1-2]    focus command (or click)
-[enter]  focus selected command
-[↑/↓]    move selection
 [ctrl+c] kill all
+[↑/↓]    move selection
 ```
 
 ➡️ <kbd>1</kbd> ️️➡️
@@ -55,11 +54,9 @@ $ npm start
 [9:51:27 AM]: Producing bundles...
 [9:51:27 AM]: Packaging...
 [9:51:27 AM]: ✨  Built in 67ms.
-
+▊
 [ctrl+c] kill (pid 63096)
 [ctrl+z] dashboard
-
-▊
 ```
 
 ➡️ <kbd>ctrl+c</kbd> ➡️
@@ -76,6 +73,7 @@ $ npm start
 [9:51:27 AM]: Producing bundles...
 [9:51:27 AM]: Packaging...
 [9:51:27 AM]: ✨  Built in 67ms.
+^C
 
 ⚪ npm run frontend
 exit 0
@@ -88,13 +86,13 @@ exit 0
 ➡️ <kbd>ctrl+z</kbd> ➡️
 
 ```
-[1]  ⚪  exit 0  npm run frontend
-[2]  🟢  npm run backend
+[1]  ⚪   exit 0  npm run frontend
+[2]  🟢   npm run backend
 
 [1-2]    focus command (or click)
-[enter]  focus selected command
-[↑/↓]    move selection
 [ctrl+c] kill all
+[↑/↓]    move selection
+[enter]  restart exited
 ```
 
 ➡️ <kbd>ctrl+c</kbd> ➡️
