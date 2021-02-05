@@ -359,7 +359,6 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @returns {string}
  */
 const exitText = (commands, command, exitCode) =>
-  // Newlines at the start/end are wanted here.
   `
 ${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
     command.formattedCommandWithTitle
@@ -369,7 +368,7 @@ ${cwdText(command)}exit ${exitCode}
 ${shortcut(KEYS.restart)} restart
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
-`;
+`.trimEnd();
 
 /**
  * @param {Status} status
