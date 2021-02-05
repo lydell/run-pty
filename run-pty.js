@@ -58,6 +58,7 @@ const KEY_CODES = {
   downVim: "j",
   enter: "\r",
   enterVim: "o",
+  esc: "\x1B",
 };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
@@ -1386,6 +1387,10 @@ const onStdin = (
               ? 0
               : cursorIndex + 1
           );
+          return undefined;
+
+        case KEY_CODES.esc:
+          setCursor(undefined);
           return undefined;
 
         default: {
