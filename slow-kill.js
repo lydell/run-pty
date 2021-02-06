@@ -16,6 +16,10 @@ for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
   });
 }
 
+// Move cursor down so the program isn’t considered a simple log.
+// We still print stuff ending with newlines though, so we can still show
+// keyboard shortcuts.
+process.stdout.write("\x1B[B");
 console.log(`Exiting after ${timeout} ms on:`, killSignals);
 console.log("Press ctrl+d to exit.");
 console.log("pid", process.pid);
