@@ -1223,6 +1223,7 @@ const runCommands = (commandDescriptions) => {
     );
 
     lastExtraText = "";
+    lastHistoryLine = "";
 
     printExtraText(command, command.history);
   };
