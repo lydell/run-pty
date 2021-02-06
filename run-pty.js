@@ -420,8 +420,18 @@ const statusText = (status, statusFromRules = runningIndicator) => {
   }
 };
 
+// If a command uses escape codes it’s not considered a “simple log”. If the
+// cursor moves it’s not safe to print the keyboard shortcuts.
+// Graphic renditions escape codes (colors) are OK though.
+// On Windows, the pty prints some extra code at startup of every command:
+// - 6n: Requests the cursor position.
+// - ?25h: Show cursor.
+// - It also sets the window title, but that uses a different escape code
+//   prefix so it doesn’t count anyway: \x1B]0;My title\x07
+// It should be safe to allow requesting the cursor position and showing the
+// cursor (it should already be shown) even in a simple log.
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|6n|\?25h)/g;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
-const ESCAPE_EXCEPT_GRAPHIC_RENDITIONS = /\x1B\[(?!(?:\d+(?:;\d+)*)?m)/g;
 const WINDOWS_HACK = IS_WINDOWS ? "\\0" : "";
 const EMPTY_LAST_LINE = RegExp(
   `(?:^|[${WINDOWS_HACK}\\r\\n])(?:[^\\S\\r\\n]|${GRAPHIC_RENDITIONS.source})*$`
@@ -897,8 +907,15 @@ class Command {
     });
 
     if (IS_WINDOWS) {
-      // Needed when using `conptyInheritCursor`. Otherwise terminals spawned in
-      // the background hang and will not run their command until focused.
+      // When using `conptyInheritCursor`, a 6n escape (device status report) is
+      // printed (as output). This is expected to cause the following escape as
+      // input (reports the cursor position). For terminals spawned in the
+      // foreground this seems to happen automatically. But for those spawned in
+      // the background we need to do it ourselves. Otherwise the command won’t
+      // start running until focused. We send this escape manually even if we
+      // only have one command (focused by default) to be consistent, because
+      // unfortunately the command gets this as stdin. We wouldn’t want the
+      // command to behave differently based on the number of commands in total.
       // It’s important to get the line number right. Otherwise the pty emits
       // cursor movements trying to adjust for it or something, resulting in
       // lost lines of output (cursor is moved up and lines are overwritten).
@@ -975,7 +992,7 @@ class Command {
     if (this.history.length > MAX_HISTORY) {
       this.history = this.history.slice(-MAX_HISTORY);
     }
-    if (this.isSimpleLog && ESCAPE_EXCEPT_GRAPHIC_RENDITIONS.test(data)) {
+    if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(data)) {
       this.isSimpleLog = false;
     }
     return statusFromRulesChanged;
