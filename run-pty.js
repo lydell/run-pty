@@ -1176,10 +1176,10 @@ const runCommands = (commandDescriptions) => {
    * @param {number} index
    * @returns {void}
    */
-  const switchToCommand = (index, { viaMouse = false } = {}) => {
+  const switchToCommand = (index, { hideSelection = false } = {}) => {
     const command = commands[index];
     current = { tag: "Command", index };
-    if (viaMouse) {
+    if (hideSelection) {
       selection = { tag: "Invisible", index };
     }
 
@@ -1375,7 +1375,7 @@ const runCommands = (commandDescriptions) => {
  * @param {Array<Command>} commands
  * @param {Selection} selection
  * @param {() => void} switchToDashboard
- * @param {(index: number, options?: { viaMouse?: boolean }) => void} switchToCommand
+ * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
  * @param {() => void} restartExited
@@ -1489,7 +1489,7 @@ const onStdin = (
             (command) => command.label === data
           );
           if (commandIndex !== -1) {
-            switchToCommand(commandIndex);
+            switchToCommand(commandIndex, { hideSelection: true });
             return undefined;
           }
 
@@ -1512,7 +1512,7 @@ const onStdin = (
 
             case "mouseup": {
               if (index !== undefined && index === selection.index) {
-                switchToCommand(index, { viaMouse: true });
+                switchToCommand(index, { hideSelection: true });
               } else if (selection.tag !== "Invisible") {
                 setSelection({ tag: "Invisible", index: selection.index });
               }
