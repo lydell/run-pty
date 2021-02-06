@@ -899,7 +899,10 @@ class Command {
     if (IS_WINDOWS) {
       // Needed when using `conptyInheritCursor`. Otherwise terminals spawned in
       // the background hang and will not run their command until focused.
-      terminal.write("\x1B[1;1R");
+      // It’s important to get the line number right. Otherwise the pty emits
+      // cursor movements trying to adjust for it or something, resulting in
+      // lost lines of output (cursor is moved up and lines are overwritten).
+      terminal.write(`\x1B[${this.history.split("\n").length};1R`);
     }
 
     const disposeOnData = terminal.onData((data) => {
