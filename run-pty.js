@@ -1072,10 +1072,12 @@ const runCommands = (commandDescriptions) => {
     // extra text. Otherwise, if the history ends with a newline is a good
     // Visually the last line of the history does not need reprinting, but we do
     // to get the cursor at the end of it.
+    // Windows likes putting a RESET_COLOR at the start of lines if the previous
+    // line was colored.
 
     switch (command.status.tag) {
       case "Running": {
-        const match = /(?:^|\n)([^\n]*)$/.exec(command.history);
+        const match = /(?:^|\n)(?:\x1B\[0?m)?([^\n]*)$/.exec(command.history);
         const lastLine =
           match === null
             ? undefined
@@ -1099,7 +1101,9 @@ const runCommands = (commandDescriptions) => {
       }
 
       case "Killing": {
-        const match = /(?:^|\n)(?:((?:\^C)*)|([^\n]*))$/.exec(command.history);
+        const match = /(?:^|\n)(?:\x1B\[0?m)?(?:((?:\^C)*)|([^\n]*))$/.exec(
+          command.history
+        );
         const lastLine =
           match === null
             ? undefined
