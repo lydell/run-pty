@@ -80,6 +80,37 @@ const RESET_COLOR_REGEX = /(\x1B\[0?m)/;
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
 
+const CLEAR_REGEX = (() => {
+  const goToTopLeft = /(?:0(?:;0)?)?[fH]/;
+  const clearDown = /0?J/;
+  const clearScreen = /2J/;
+  const clearScrollback = /3J/;
+
+  /**
+   * @template T
+   * @param {Array<T>} items
+   * @returns {Array<Array<T>>}
+   */
+  const permutations = (items) =>
+    items.length <= 1
+      ? [items]
+      : items.flatMap((first, index) =>
+          permutations([
+            ...items.slice(0, index),
+            ...items.slice(index + 1),
+          ]).map((rest) => [first, ...rest])
+        );
+
+  const variants = [
+    ...permutations([clearScreen, clearScrollback, goToTopLeft]),
+    [clearScrollback, goToTopLeft, clearDown],
+    [goToTopLeft, clearDown, clearScrollback],
+    [goToTopLeft, clearScrollback, clearDown],
+  ].map((parts) => parts.map((part) => `\\x1B\\[${part.source}`).join(""));
+
+  return RegExp(`(?:${variants.join("|")})$`);
+})();
+
 const runningIndicator = NO_COLOR
   ? "›"
   : IS_WINDOWS
@@ -995,11 +1026,16 @@ class Command {
   pushHistory(data) {
     const statusFromRulesChanged = this.updateStatusFromRules(data);
     this.history += data;
-    if (this.history.length > MAX_HISTORY) {
-      this.history = this.history.slice(-MAX_HISTORY);
-    }
-    if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(data)) {
-      this.isSimpleLog = false;
+    if (CLEAR_REGEX.test(this.history)) {
+      this.history = "";
+      this.isSimpleLog = true;
+    } else {
+      if (this.history.length > MAX_HISTORY) {
+        this.history = this.history.slice(-MAX_HISTORY);
+      }
+      if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(data)) {
+        this.isSimpleLog = false;
+      }
     }
     return statusFromRulesChanged;
   }
