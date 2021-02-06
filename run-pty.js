@@ -302,6 +302,8 @@ const drawDashboard = (commands, width, attemptedKillAll, selection) => {
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
+  const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
+
   const pid =
     selection.tag === "Keyboard"
       ? getPid(commands[selection.index])
@@ -319,7 +321,7 @@ const drawDashboard = (commands, width, attemptedKillAll, selection) => {
   return `
 ${finalLines}
 
-${shortcut(label)} focus command ${dim("(or click)")}
+${shortcut(label)} focus command${click}
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.navigate)} move selection
 ${enter}
