@@ -1110,7 +1110,9 @@ const runCommands = (commandDescriptions) => {
             ? ""
             : helper(runningText(command.status.terminal.pid), lastLine);
         process.stdout.write(
-          erase(lastExtraText) + previousLastLine + data + extraText
+          extraText === "" && lastExtraText === ""
+            ? data
+            : erase(lastExtraText) + previousLastLine + data + extraText
         );
         lastExtraText = extraText;
         return undefined;
@@ -1134,7 +1136,9 @@ const runCommands = (commandDescriptions) => {
             ? helper(killingText(command.status.terminal.pid), lastLine)
             : helper(runningText(command.status.terminal.pid), lastLine);
         process.stdout.write(
-          erase(lastExtraText) + previousLastLine + data + extraText
+          extraText === "" && lastExtraText === ""
+            ? data
+            : erase(lastExtraText) + previousLastLine + data + extraText
         );
         lastExtraText = extraText;
         return undefined;
@@ -1160,15 +1164,17 @@ const runCommands = (commandDescriptions) => {
           ? DISABLE_ALTERNATE_SCREEN
           : "";
 
+        const extraText =
+          HIDE_CURSOR +
+          RESET_COLOR +
+          disableAlternateScreen +
+          maybeNewline +
+          exitText(commands, command, command.status.exitCode);
+
         process.stdout.write(
-          erase(lastExtraText) +
-            previousLastLine +
-            data +
-            HIDE_CURSOR +
-            RESET_COLOR +
-            disableAlternateScreen +
-            maybeNewline +
-            exitText(commands, command, command.status.exitCode)
+          lastExtraText === ""
+            ? data + extraText
+            : erase(lastExtraText) + previousLastLine + data + extraText
         );
 
         lastExtraText = "";
