@@ -816,7 +816,6 @@ class Command {
   /**
    * @param {{
       label: string,
-      focusOnlyCommand: boolean,
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onExit: () => undefined,
@@ -824,7 +823,6 @@ class Command {
    */
   constructor({
     label,
-    focusOnlyCommand,
     commandDescription: {
       title,
       cwd,
@@ -861,14 +859,13 @@ class Command {
     this.defaultStatus = defaultStatus;
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
-    this.start({ isFocused: focusOnlyCommand });
+    this.start();
   }
 
   /**
-   * @param {{ isFocused: boolean }} options
    * @returns {void}
    */
-  start({ isFocused }) {
+  start() {
     if (this.status.tag !== "Exit") {
       throw new Error(
         `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.title}`
@@ -886,15 +883,6 @@ class Command {
             "/s",
             "/q",
             "/c",
-            ...(!isFocused
-              ? [
-                  "node",
-                  "-e",
-                  cmdEscapeArg("process.stdout.write('\\0')"),
-                  // "echo:",
-                  "&&",
-                ]
-              : []),
             cmdEscapeMetaChars(this.file),
             ...this.args.map(cmdEscapeArg),
           ].join(" "),
@@ -908,7 +896,7 @@ class Command {
       conptyInheritCursor: true,
     });
 
-    if (IS_WINDOWS && !isFocused) {
+    if (IS_WINDOWS) {
       // Needed when using `conptyInheritCursor`. Otherwise terminals spawned in
       // the background hang and will not run their command until focused.
       terminal.write("\x1B[1;1R");
@@ -1237,21 +1225,18 @@ const runCommands = (commandDescriptions) => {
     const exited = commands.filter((command) => command.status.tag === "Exit");
     if (exited.length > 0) {
       for (const command of exited) {
-        command.start({ isFocused: false });
+        command.start();
       }
       // Redraw dashboard.
       switchToDashboard();
     }
   };
 
-  const focusOnlyCommand = commandDescriptions.length === 1;
-
   /** @type {Array<Command>} */
   const commands = commandDescriptions.map(
     (commandDescription, index) =>
       new Command({
         label: ALL_LABELS[index] || "",
-        focusOnlyCommand,
         commandDescription,
         onData: (data, statusFromRulesChanged) => {
           switch (current.tag) {
@@ -1366,7 +1351,7 @@ const runCommands = (commandDescriptions) => {
     );
   });
 
-  if (focusOnlyCommand) {
+  if (commandDescriptions.length === 1) {
     switchToCommand(0);
   } else {
     switchToDashboard();
@@ -1431,7 +1416,7 @@ const onStdin = (
               return undefined;
 
             case KEY_CODES.restart:
-              command.start({ isFocused: true });
+              command.start();
               switchToCommand(current.index);
               return undefined;
 
