@@ -473,11 +473,10 @@ const truncate = (string, maxLength) => {
  * @returns {string}
  */
 const moveBack = (string) =>
-  `${CURSOR_UP.repeat(string.split("\n").length - 1)}\r`;
+  string === "" ? "" : `${CURSOR_UP.repeat(string.split("\n").length - 1)}\r`;
 
 /**
- * Assumes that `moveBack` has been run first and that the first line shouldn’t
- * be cleared.
+ * Assumes that `moveBack` has been run first. Always clears the first line.
  *
  * @param {string} string
  * @returns {string}
@@ -1065,9 +1064,8 @@ const runCommands = (commandDescriptions) => {
   let attemptedKillAll = false;
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
-  /** @type {string | undefined} */
-  let lastExtraText = undefined;
-  let ylastLine = "";
+  let lastExtraText = "";
+  let lastHistoryLine = "";
 
   /**
    * @param {Command} command
@@ -1075,13 +1073,10 @@ const runCommands = (commandDescriptions) => {
    * @returns {undefined}
    */
   const printExtraText = (command, data) => {
-    const eraser =
-      lastExtraText === undefined ? erase("") : erase(lastExtraText);
-
     const match = LAST_LINE_REGEX.exec(command.history);
     const groups = match === null ? undefined : match.groups;
-    const xlastLine = ylastLine;
-    ylastLine = groups === undefined ? "" : groups.fullLine;
+    const previousLastLine = lastHistoryLine;
+    lastHistoryLine = groups === undefined ? "" : groups.fullLine;
 
     // Notes:
     // - For a simple log (no cursor movements or anything) we can _always_ show
@@ -1091,6 +1086,14 @@ const runCommands = (commandDescriptions) => {
     // press ctrl+c. (`groups.ctrlCs !== undefined`)
     // - Visually the last line of the history does not need reprinting, but we
     // do to get the cursor at the end of it.
+
+    /**
+     * @param {string} extraText
+     * @param {string} lastLine
+     * @returns {string}
+     */
+    const helper = (extraText, lastLine) =>
+      RESET_COLOR + extraText + moveBack(extraText) + lastLine;
 
     switch (command.status.tag) {
       case "Running": {
@@ -1102,18 +1105,14 @@ const runCommands = (commandDescriptions) => {
             : command.isSimpleLog
             ? groups.fullLine
             : undefined;
-        lastExtraText =
+        const extraText =
           lastLine === undefined
-            ? undefined
-            : RESET_COLOR + runningText(command.status.terminal.pid);
+            ? ""
+            : helper(runningText(command.status.terminal.pid), lastLine);
         process.stdout.write(
-          eraser +
-            xlastLine +
-            data +
-            (lastExtraText === undefined || lastLine === undefined
-              ? ""
-              : lastExtraText + moveBack(lastExtraText) + lastLine)
+          erase(lastExtraText) + previousLastLine + data + extraText
         );
+        lastExtraText = extraText;
         return undefined;
       }
 
@@ -1128,20 +1127,16 @@ const runCommands = (commandDescriptions) => {
             : command.isSimpleLog
             ? groups.fullLine
             : undefined;
-        lastExtraText =
+        const extraText =
           lastLine === undefined
-            ? undefined
+            ? ""
             : command.status.slow
-            ? RESET_COLOR + killingText(command.status.terminal.pid)
-            : RESET_COLOR + runningText(command.status.terminal.pid);
+            ? helper(killingText(command.status.terminal.pid), lastLine)
+            : helper(runningText(command.status.terminal.pid), lastLine);
         process.stdout.write(
-          eraser +
-            xlastLine +
-            data +
-            (lastExtraText === undefined || lastLine === undefined
-              ? ""
-              : lastExtraText + moveBack(lastExtraText) + lastLine)
+          erase(lastExtraText) + previousLastLine + data + extraText
         );
+        lastExtraText = extraText;
         return undefined;
       }
 
@@ -1165,14 +1160,18 @@ const runCommands = (commandDescriptions) => {
           ? DISABLE_ALTERNATE_SCREEN
           : "";
 
-        lastExtraText =
-          HIDE_CURSOR +
-          RESET_COLOR +
-          disableAlternateScreen +
-          maybeNewline +
-          exitText(commands, command, command.status.exitCode);
+        process.stdout.write(
+          erase(lastExtraText) +
+            previousLastLine +
+            data +
+            HIDE_CURSOR +
+            RESET_COLOR +
+            disableAlternateScreen +
+            maybeNewline +
+            exitText(commands, command, command.status.exitCode)
+        );
 
-        process.stdout.write(eraser + xlastLine + data + lastExtraText);
+        lastExtraText = "";
         return undefined;
       }
     }
@@ -1217,7 +1216,7 @@ const runCommands = (commandDescriptions) => {
         CLEAR
     );
 
-    lastExtraText = undefined;
+    lastExtraText = "";
 
     printExtraText(command, command.history);
   };
