@@ -434,8 +434,8 @@ const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|6n|\?25h)/g;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
-// line was colored.
-const LAST_LINE_REGEX = /(?:^|\n)(?:\x1B\[0?m)?(?<fullLine>(?<empty>)|(?<ctrlCs>(?:\^C)+)|(?<anyChars>[^\n]+))$/;
+// line was colored. Ignore that and consider the line empty anyway.
+const LAST_LINE_REGEX = /(?:^|\n)(?:\x1B\[0?m)?([^\n]*)$/;
 
 /**
  * @param {string} string
@@ -1065,7 +1065,7 @@ const runCommands = (commandDescriptions) => {
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
   let lastExtraText = "";
-  let lastHistoryLine = "";
+  let lastLine = "";
 
   /**
    * @param {Command} command
@@ -1074,41 +1074,28 @@ const runCommands = (commandDescriptions) => {
    */
   const printExtraText = (command, data) => {
     const match = LAST_LINE_REGEX.exec(command.history);
-    const groups = match === null ? undefined : match.groups;
-    const previousLastLine = lastHistoryLine;
-    lastHistoryLine = groups === undefined ? "" : groups.fullLine;
+    const previousLastLine = lastLine;
+    lastLine = match === null ? "" : match[1];
 
     // Notes:
     // - For a simple log (no cursor movements or anything) we can _always_ show
-    // extra text. Otherwise, a good heuristic is to check if the history ends
-    // with a newline (`groups.empty !== undefined`).
-    // - In the Killing state, also allow ^C. Some shells print that when you
-    // press ctrl+c. (`groups.ctrlCs !== undefined`)
+    // extra text. Otherwise, it’s better not to print anything extra in. We
+    // don’t want to put something in the middle of the command’s output.
     // - Visually the last line of the history does not need reprinting, but we
-    // do to get the cursor at the end of it.
+    // do that anyway to get the cursor at the end of it.
 
     /**
      * @param {string} extraText
-     * @param {string} lastLine
      * @returns {string}
      */
-    const helper = (extraText, lastLine) =>
+    const helper = (extraText) =>
       RESET_COLOR + extraText + moveBack(extraText) + lastLine;
 
     switch (command.status.tag) {
       case "Running": {
-        const lastLine =
-          groups === undefined
-            ? undefined
-            : groups.empty !== undefined
-            ? ""
-            : command.isSimpleLog
-            ? groups.fullLine
-            : undefined;
-        const extraText =
-          lastLine === undefined
-            ? ""
-            : helper(runningText(command.status.terminal.pid), lastLine);
+        const extraText = command.isSimpleLog
+          ? helper(runningText(command.status.terminal.pid))
+          : "";
         process.stdout.write(
           extraText === "" && lastExtraText === ""
             ? data
@@ -1119,22 +1106,11 @@ const runCommands = (commandDescriptions) => {
       }
 
       case "Killing": {
-        const lastLine =
-          groups === undefined
-            ? undefined
-            : groups.empty !== undefined
-            ? ""
-            : groups.ctrlCs !== undefined
-            ? groups.ctrlCs
-            : command.isSimpleLog
-            ? groups.fullLine
-            : undefined;
-        const extraText =
-          lastLine === undefined
-            ? ""
-            : command.status.slow
-            ? helper(killingText(command.status.terminal.pid), lastLine)
-            : helper(runningText(command.status.terminal.pid), lastLine);
+        const extraText = command.isSimpleLog
+          ? command.status.slow
+            ? helper(killingText(command.status.terminal.pid))
+            : helper(runningText(command.status.terminal.pid))
+          : "";
         process.stdout.write(
           extraText === "" && lastExtraText === ""
             ? data
@@ -1154,8 +1130,7 @@ const runCommands = (commandDescriptions) => {
           // so print one just in case.
           !isOnAlternateScreen &&
           // If the last line is empty, no newline is needed.
-          groups !== undefined &&
-          groups.empty !== undefined
+          lastLine === ""
             ? ""
             : "\n";
 
@@ -1223,7 +1198,7 @@ const runCommands = (commandDescriptions) => {
     );
 
     lastExtraText = "";
-    lastHistoryLine = "";
+    lastLine = "";
 
     printExtraText(command, command.history);
   };
