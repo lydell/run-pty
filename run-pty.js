@@ -424,13 +424,11 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // cursor moves it’s not safe to print the keyboard shortcuts.
 // Graphic renditions escape codes (colors) are OK though.
 // On Windows, the pty prints some extra code at startup of every command:
-// - 6n: Requests the cursor position.
-// - ?25h: Show cursor.
+// - 6n: Requests the cursor position. We don’t save that in the history.
+// - ?25h: Show cursor. It should be safe to allow this even for simple logs.
 // - It also sets the window title, but that uses a different escape code
 //   prefix so it doesn’t count anyway: \x1B]0;My title\x07
-// It should be safe to allow requesting the cursor position and showing the
-// cursor (it should already be shown) even in a simple log.
-const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|6n|\?25h)/g;
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?25h)/g;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
@@ -906,24 +904,33 @@ class Command {
     });
 
     if (IS_WINDOWS) {
-      // When using `conptyInheritCursor`, a 6n escape (device status report) is
-      // printed (as output). This is expected to cause the following escape as
-      // input (reports the cursor position). For terminals spawned in the
-      // foreground this seems to happen automatically. But for those spawned in
-      // the background we need to do it ourselves. Otherwise the command won’t
-      // start running until focused. We send this escape manually even if we
-      // only have one command (focused by default) to be consistent, because
-      // unfortunately the command gets this as stdin. We wouldn’t want the
-      // command to behave differently based on the number of commands in total.
+      // See `onData` below for why we do this.
       // It’s important to get the line number right. Otherwise the pty emits
       // cursor movements trying to adjust for it or something, resulting in
       // lost lines of output (cursor is moved up and lines are overwritten).
       terminal.write(`\x1B[${this.history.split("\n").length};1R`);
     }
 
+    let first = true;
+
     const disposeOnData = terminal.onData((data) => {
-      const statusFromRulesChanged = this.pushHistory(data);
-      this.onData(data, statusFromRulesChanged);
+      // When using `conptyInheritCursor` (Windows only), a 6n escape is the
+      // first thing we get here. If we print that code to the console, we will
+      // get a `\x1B[2;1R` (cursor position) reply on stdin. The pty is waiting
+      // for such a message. By default we pass on all stdin so the pty gets it.
+      // So if we have a single (focused by default) command it all works
+      // automatically. But if we have multiple commands, the pty still waits
+      // for the message before executing the command. And we won’t print the 6n
+      // escape until we focus it. This means commands effectively don’t start
+      // executing until focused. For this reason we ignore this escape and send
+      // the reply above instead. This has the side bonus of the 6n escape never
+      // reaching the command’s stdin.
+      const shouldIgnore = IS_WINDOWS && first && data === "\x1B[6n";
+      first = false;
+      if (!shouldIgnore) {
+        const statusFromRulesChanged = this.pushHistory(data);
+        this.onData(data, statusFromRulesChanged);
+      }
     });
 
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
