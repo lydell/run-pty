@@ -452,14 +452,20 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 };
 
 // If a command uses escape codes it’s not considered a “simple log”. If the
-// cursor moves it’s not safe to print the keyboard shortcuts.
-// Graphic renditions escape codes (colors) are OK though.
+// cursor moves it’s not safe to print the keyboard shortcuts. Exceptions:
+//
+// - Graphic renditions escape codes (colors) are OK though.
+// - ?25l: Hiding the cursor is OK. Parcel does this temporarily (?25h shows it again).
+// - nK: Clears the current line without moving the cursor. Parcel does this too.
+// - nCDG: Move the cursor within the line. Again, Parcel. Should be safe.
+//
 // On Windows, the pty prints some extra code at startup of every command:
+//
 // - 6n: Requests the cursor position. We don’t save that in the history.
 // - ?25h: Show cursor. It should be safe to allow this even for simple logs.
 // - It also sets the window title, but that uses a different escape code
 //   prefix so it doesn’t count anyway: \x1B]0;My title\x07
-const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?25h)/g;
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?25[hl]|[0-2]K|\d*[CDG])/g;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
