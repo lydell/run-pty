@@ -26,6 +26,9 @@ const variants = [
   ...permutations(["\x1B[2J", "\x1B[3J", "\x1B[0;0f"]).map((items) =>
     items.join("")
   ),
+  ...permutations(["\x1B[2J", "\x1B[3J", "\x1B[1;1H"]).map((items) =>
+    items.join("")
+  ),
   () => {
     process.stdout.write("\x1B[3J");
     console.clear();

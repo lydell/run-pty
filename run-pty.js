@@ -81,7 +81,7 @@ const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
 
 const CLEAR_REGEX = (() => {
-  const goToTopLeft = /(?:0(?:;0)?)?[fH]/;
+  const goToTopLeft = /(?:[01](?:;[01])?)?[fH]/;
   const clearDown = /0?J/;
   const clearScreen = /2J/;
   const clearScrollback = /3J/;
