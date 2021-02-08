@@ -1137,8 +1137,16 @@ const runCommands = (commandDescriptions) => {
      * @param {string} extraText
      * @returns {string}
      */
-    const helper = (extraText) =>
-      RESET_COLOR + extraText + moveBack(extraText) + lastLine;
+    const helper = (extraText) => {
+      const maybeNewline = lastLine === "" ? "" : "\n";
+      return (
+        RESET_COLOR +
+        maybeNewline +
+        extraText +
+        moveBack(maybeNewline + extraText) +
+        lastLine
+      );
+    };
 
     switch (command.status.tag) {
       case "Running": {
