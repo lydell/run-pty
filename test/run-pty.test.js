@@ -66,6 +66,12 @@ describe("help", () => {
 
           ⧙run-pty⧘ run-pty.json
 
+      Keyboard shortcuts:
+
+          ⧙[⧘⧙ctrl+z⧘⧙]⧘ Dashboard
+          ⧙[⧘⧙ctrl+c⧘⧙]⧘ Kill all or focused command
+          Other keyboard shortcuts are shown as needed.
+
       Environment variables:
 
           ⧙RUN_PTY_MAX_HISTORY⧘

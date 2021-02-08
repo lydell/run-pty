@@ -232,6 +232,12 @@ Alternatively, specify the commands in a JSON (or NDJSON) file:
 
     ${runPty} run-pty.json
 
+Keyboard shortcuts:
+
+    ${shortcut(KEYS.dashboard)} Dashboard
+    ${shortcut(KEYS.kill)} Kill all or focused command
+    Other keyboard shortcuts are shown as needed.
+
 Environment variables:
 
     ${bold("RUN_PTY_MAX_HISTORY")}
