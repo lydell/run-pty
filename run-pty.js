@@ -50,12 +50,9 @@ const KEY_CODES = {
   kill: "\x03",
   restart: "\r",
   dashboard: "\x1a",
-  // https://vi.stackexchange.com/questions/15324/up-arrow-key-code-why-a-becomes-oa
   up: "\x1B[A",
-  upAlt: "\x1BOA",
   upVim: "k",
   down: "\x1B[B",
-  downAlt: "\x1BOB",
   downVim: "j",
   enter: "\r",
   enterVim: "o",
@@ -73,6 +70,7 @@ const CURSOR_DOWN = "\x1B[B";
 const ENABLE_ALTERNATE_SCREEN = "\x1B[?1049h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
+const DISABLE_APPLICATION_CURSOR_KEYS = "\x1B[?1l"; // https://www.vt100.net/docs/vt510-rm/DECCKM.html
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
 const DISABLE_MOUSE = "\x1B[?1000;1006l";
 const RESET_COLOR = "\x1B[m";
@@ -462,6 +460,8 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 //
 // - Graphic renditions escape codes (colors) are OK though.
 // - ?25l: Hiding the cursor is OK. Parcel does this temporarily (?25h shows it again).
+// - ?1h: Changes the key codes for arrow keys. I’ve seen dotnet do this (?1l resets).
+//   https://vi.stackexchange.com/questions/15324/up-arrow-key-code-why-a-becomes-oa
 // - nK: Clears the current line without moving the cursor. Parcel does this too.
 // - nCDG: Move the cursor within the line. Again, Parcel. Should be safe.
 //
@@ -471,12 +471,13 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - ?25h: Show cursor. It should be safe to allow this even for simple logs.
 // - It also sets the window title, but that uses a different escape code
 //   prefix so it doesn’t count anyway: \x1B]0;My title\x07
-const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?25[hl]|[0-2]K|\d*[CDG])/g;
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?(?:1|25)[hl]|[0-2]K|\d*[CDG])/g;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
-// line was colored. Ignore that and consider the line empty anyway.
-const LAST_LINE_REGEX = /(?:^|\n)(?:\x1B\[0?m)?([^\n]*)$/;
+// line was colored. I’ve also seen tools print color codes after the newline.
+// Ignore that and consider the line empty anyway.
+const LAST_LINE_REGEX = /(?:^|\n)(?:\x1B\[(?:\d+(?:;\d+)*)?m)?([^\n]*)$/;
 
 /**
  * @param {string} string
@@ -1229,6 +1230,7 @@ const runCommands = (commandDescriptions) => {
     process.stdout.write(
       HIDE_CURSOR +
         DISABLE_ALTERNATE_SCREEN +
+        DISABLE_APPLICATION_CURSOR_KEYS +
         ENABLE_MOUSE +
         RESET_COLOR +
         CLEAR +
@@ -1255,6 +1257,7 @@ const runCommands = (commandDescriptions) => {
     process.stdout.write(
       SHOW_CURSOR +
         DISABLE_ALTERNATE_SCREEN +
+        DISABLE_APPLICATION_CURSOR_KEYS +
         DISABLE_MOUSE +
         RESET_COLOR +
         CLEAR
@@ -1520,7 +1523,6 @@ const onStdin = (
           return undefined;
 
         case KEY_CODES.up:
-        case KEY_CODES.upAlt:
         case KEY_CODES.upVim:
           setSelection({
             tag: "Keyboard",
@@ -1534,7 +1536,6 @@ const onStdin = (
           return undefined;
 
         case KEY_CODES.down:
-        case KEY_CODES.downAlt:
         case KEY_CODES.downVim:
           setSelection({
             tag: "Keyboard",
