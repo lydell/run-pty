@@ -152,6 +152,8 @@ describe("dashboard", () => {
       onData: () => notCalled("onData") || { dispose: () => undefined },
       onExit: () => notCalled("onExit") || { dispose: () => undefined },
       on: () => notCalled("on"),
+      pause: () => notCalled("pause"),
+      resume: () => notCalled("resume"),
       resize: () => notCalled("resize"),
       write: () => notCalled("write"),
       kill: () => notCalled("kill"),
