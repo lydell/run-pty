@@ -17,8 +17,6 @@ const permutations = (items) =>
         ]).map((rest) => [first, ...rest])
       );
 
-// Works: 0 1 2 3 4 5 6 7
-// Nope:
 const variants = [
   ...permutations(["\x1B[2J", "\x1B[3J", "\x1B[H"]).map((items) =>
     items.join("")

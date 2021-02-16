@@ -74,7 +74,6 @@ const DISABLE_APPLICATION_CURSOR_KEYS = "\x1B[?1l"; // https://www.vt100.net/doc
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
 const DISABLE_MOUSE = "\x1B[?1000;1006l";
 const RESET_COLOR = "\x1B[m";
-const RESET_COLOR_REGEX = /(\x1B\[0?m)/;
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
 
@@ -165,7 +164,8 @@ const dim = (string) => (NO_COLOR ? string : `\x1B[2m${string}${RESET_COLOR}`);
  */
 const invert = (string) => {
   const inverted = string
-    .split(RESET_COLOR_REGEX)
+    // Split on RESET_COLOR and stop invert (27).
+    .split(/(\x1B\[(?:0?|27)m)/)
     .map((part, index) => (index % 2 === 0 ? `\x1B[7m${part}` : part))
     .join("");
   return NO_COLOR ? string : `${inverted}${RESET_COLOR}`;
