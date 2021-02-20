@@ -462,8 +462,11 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - ?25l: Hiding the cursor is OK. Parcel does this temporarily (?25h shows it again).
 // - ?1h: Changes the key codes for arrow keys. I’ve seen dotnet do this (?1l resets).
 //   https://vi.stackexchange.com/questions/15324/up-arrow-key-code-why-a-becomes-oa
+// - ?2004h: Enabled bracketed paste mode. The Python REPL uses it. (?2004l resets.)
 // - nK: Clears the current line without moving the cursor. Parcel does this too.
 // - nCDG: Move the cursor within the line. Again, Parcel. Should be safe.
+// - nP: Like the delete key. The Python REPL uses it. We allow \b so the other
+//   way should be fine too.
 //
 // On Windows, the pty prints some extra code at startup of every command:
 //
@@ -471,7 +474,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - ?25h: Show cursor. It should be safe to allow this even for simple logs.
 // - It also sets the window title, but that uses a different escape code
 //   prefix so it doesn’t count anyway: \x1B]0;My title\x07
-const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?(?:1|25)[hl]|[0-2]K|\d*[CDG])/g;
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?(?:1|25|2004)[hl]|[0-2]?K|\d*[CDGP])/g;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
