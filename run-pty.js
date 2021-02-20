@@ -456,27 +456,26 @@ const statusText = (status, statusFromRules = runningIndicator) => {
   }
 };
 
-// If a command uses escape codes it’s not considered a “simple log”. If the
-// cursor moves it’s not safe to print the keyboard shortcuts. Exceptions:
+// If a command moves the cursor to another line it’s not considered a “simple
+// log”. Then it’s not safe to print the keyboard shortcuts.
 //
-// - Graphic renditions escape codes (colors) are OK though.
-// - ?25l: Hiding the cursor is OK. Parcel does this temporarily (?25h shows it again).
-// - ?1h: Changes the key codes for arrow keys. I’ve seen dotnet do this (?1l resets).
-//   https://vi.stackexchange.com/questions/15324/up-arrow-key-code-why-a-becomes-oa
-// - ?1049h: Enable alternate screen. The Python REPL uses it for `help()`. (?1049l resets.)
-// - ?2004h: Enabled bracketed paste mode. The Python REPL uses it. (?2004l resets.)
-// - nK: Clears the current line without moving the cursor. Parcel does this too.
-// - nCDG: Move the cursor within the line. Again, Parcel. Should be safe.
-// - nP: Like the delete key. The Python REPL uses it. We allow \b so the other
-//   way should be fine too.
-//
-// On Windows, the pty prints some extra code at startup of every command:
-//
-// - 6n: Requests the cursor position. We don’t save that in the history.
-// - ?25h: Show cursor. It should be safe to allow this even for simple logs.
-// - It also sets the window title, but that uses a different escape code
-//   prefix so it doesn’t count anyway: \x1B]0;My title\x07
-const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?(?:1|25|1049|2004)[hl]|[0-2]?K|\d*[CDGP])/g;
+// - A, B: Cursor up/down.
+// - C, D: Cursor left/right. Should be safe! Parcel does this.
+// - E, F: Cursor up/down, and to the start of the line.
+// - G: Cursor absolute position within line. Should be safe! Again, Parcel.
+// - H, f: Cursor absolute position, both x and y. Exception: Moving to the
+//         top-left corner and clearing the screen (ctrl+l).
+// - I, Z: Cursor forward/backward by tab stops. Should be safe.
+// - J: Clear the screen in different ways. Should be safe. It might clear away
+//      the keyboard shortcuts too, but they’ll reappear once a new line is written.
+// - K: Erase in line. Should be safe.
+// - L: Insert lines.
+// - M: Delete lines.
+// - S: Scroll up.
+// - T: Scroll down.
+// - s: Save cursor position.
+// - u: Restore cursor position.
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?:\d*[ABEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
