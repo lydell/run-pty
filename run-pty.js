@@ -69,6 +69,7 @@ const CURSOR_UP = "\x1B[A";
 const CURSOR_DOWN = "\x1B[B";
 const ENABLE_ALTERNATE_SCREEN = "\x1B[?1049h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
+const ALTERNATE_SCREEN_REGEX = /(\x1B\[\?1049[hl])/;
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const DISABLE_APPLICATION_CURSOR_KEYS = "\x1B[?1l"; // https://www.vt100.net/docs/vt510-rm/DECCKM.html
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
@@ -462,6 +463,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - ?25l: Hiding the cursor is OK. Parcel does this temporarily (?25h shows it again).
 // - ?1h: Changes the key codes for arrow keys. I’ve seen dotnet do this (?1l resets).
 //   https://vi.stackexchange.com/questions/15324/up-arrow-key-code-why-a-becomes-oa
+// - ?1049h: Enable alternate screen. The Python REPL uses it for `help()`. (?1049l resets.)
 // - ?2004h: Enabled bracketed paste mode. The Python REPL uses it. (?2004l resets.)
 // - nK: Clears the current line without moving the cursor. Parcel does this too.
 // - nCDG: Move the cursor within the line. Again, Parcel. Should be safe.
@@ -474,7 +476,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - ?25h: Show cursor. It should be safe to allow this even for simple logs.
 // - It also sets the window title, but that uses a different escape code
 //   prefix so it doesn’t count anyway: \x1B]0;My title\x07
-const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?(?:1|25|2004)[hl]|[0-2]?K|\d*[CDGP])/g;
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?!(?:\d+(?:;\d+)*)?m|\?(?:1|25|1049|2004)[hl]|[0-2]?K|\d*[CDGP])/g;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
@@ -866,6 +868,20 @@ const parseStatus = (json) => {
   return [value1, value2];
 };
 
+/**
+ * @param {Command} command
+ * @returns {string}
+ */
+const joinHistory = (command) =>
+  command.history +
+  (command.historyAlternateScreen === ""
+    ? command.isOnAlternateScreen
+      ? ENABLE_ALTERNATE_SCREEN
+      : ""
+    : ENABLE_ALTERNATE_SCREEN +
+      command.historyAlternateScreen +
+      (command.isOnAlternateScreen ? "" : DISABLE_ALTERNATE_SCREEN));
+
 class Command {
   /**
    * @param {{
@@ -902,9 +918,10 @@ class Command {
         : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
     this.onData = onData;
     this.onExit = onExit;
-    /** @type {string} */
     this.history = "";
+    this.historyAlternateScreen = "";
     this.isSimpleLog = true;
+    this.isOnAlternateScreen = false;
     /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
     /** @type {string | undefined} */
@@ -927,6 +944,9 @@ class Command {
     }
 
     this.history = historyStart(this);
+    this.historyAlternateScreen = "";
+    this.isSimpleLog = true;
+    this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
 
     const [file, args] = IS_WINDOWS
@@ -1040,29 +1060,60 @@ class Command {
    * @returns {boolean}
    */
   pushHistory(data) {
-    const statusFromRulesChanged = this.updateStatusFromRules(data);
-    this.history += data;
-    if (CLEAR_REGEX.test(this.history)) {
-      this.history = "";
-      this.isSimpleLog = true;
-    } else {
-      if (this.history.length > MAX_HISTORY) {
-        this.history = this.history.slice(-MAX_HISTORY);
-      }
-      if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(data)) {
-        this.isSimpleLog = false;
+    const previousStatusFromRules = this.statusFromRules;
+
+    for (const part of data.split(ALTERNATE_SCREEN_REGEX)) {
+      switch (part) {
+        case ENABLE_ALTERNATE_SCREEN:
+          this.isOnAlternateScreen = true;
+          break;
+        case DISABLE_ALTERNATE_SCREEN:
+          this.isOnAlternateScreen = false;
+          break;
+        default:
+          this.updateStatusFromRules(part);
+          if (this.isOnAlternateScreen) {
+            this.historyAlternateScreen += part;
+            if (CLEAR_REGEX.test(this.historyAlternateScreen)) {
+              this.historyAlternateScreen = "";
+            } else {
+              if (this.historyAlternateScreen.length > MAX_HISTORY) {
+                this.historyAlternateScreen = this.historyAlternateScreen.slice(
+                  -MAX_HISTORY
+                );
+              }
+            }
+          } else {
+            this.history += part;
+            if (CLEAR_REGEX.test(this.history)) {
+              this.history = "";
+              this.isSimpleLog = true;
+            } else {
+              if (this.history.length > MAX_HISTORY) {
+                this.history = this.history.slice(-MAX_HISTORY);
+              }
+              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(part)) {
+                this.isSimpleLog = false;
+              }
+            }
+          }
       }
     }
+
+    const statusFromRulesChanged =
+      this.statusFromRules !== previousStatusFromRules;
+
     return statusFromRulesChanged;
   }
 
   /**
    * @param {string} data
-   * @returns {boolean}
+   * @returns {void}
    */
   updateStatusFromRules(data) {
-    const previousStatusFromRules = this.statusFromRules;
-    const lastLine = getLastLine(this.history);
+    const lastLine = getLastLine(
+      this.isOnAlternateScreen ? this.historyAlternateScreen : this.history
+    );
     const lines = (lastLine + data).split(/(?:\r?\n|\r)/);
 
     for (const line of lines) {
@@ -1072,8 +1123,6 @@ class Command {
         }
       }
     }
-
-    return this.statusFromRules !== previousStatusFromRules;
   }
 }
 
@@ -1188,21 +1237,12 @@ const runCommands = (commandDescriptions) => {
       }
 
       case "Exit": {
-        const isOnAlternateScreen =
-          command.history.lastIndexOf(ENABLE_ALTERNATE_SCREEN) >
-          command.history.lastIndexOf(DISABLE_ALTERNATE_SCREEN);
-
         const maybeNewline =
-          // If on the alternate screen, we can’t know if a newline is needed,
-          // so print one just in case.
-          !isOnAlternateScreen &&
           // If the last line is empty, no newline is needed.
-          lastLine === ""
-            ? ""
-            : "\n";
+          lastLine === "" ? "" : "\n";
 
         // This has the side effect of moving the cursor, so only do it if needed.
-        const disableAlternateScreen = isOnAlternateScreen
+        const disableAlternateScreen = command.isOnAlternateScreen
           ? DISABLE_ALTERNATE_SCREEN
           : "";
 
@@ -1269,7 +1309,11 @@ const runCommands = (commandDescriptions) => {
     lastExtraText = "";
     lastLine = "";
 
-    printExtraText(command, command.history);
+    if (command.isOnAlternateScreen) {
+      process.stdout.write(joinHistory(command));
+    } else {
+      printExtraText(command, joinHistory(command));
+    }
   };
 
   /**
@@ -1330,7 +1374,11 @@ const runCommands = (commandDescriptions) => {
                 switch (command.status.tag) {
                   case "Running":
                   case "Killing":
-                    printExtraText(command, data);
+                    if (command.isOnAlternateScreen) {
+                      process.stdout.write(data);
+                    } else {
+                      printExtraText(command, data);
+                    }
                     return undefined;
                   case "Exit":
                     throw new Error(
