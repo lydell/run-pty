@@ -1611,17 +1611,17 @@ const onStdin = (
             return undefined;
           }
 
-          const mouseupPosition = parseMouse(data);
-          if (mouseupPosition === undefined) {
+          const mousePosition = parseMouse(data);
+          if (mousePosition === undefined) {
             return undefined;
           }
 
           const index = getCommandIndexFromMousePosition(
             commands,
-            mouseupPosition
+            mousePosition
           );
 
-          switch (mouseupPosition.type) {
+          switch (mousePosition.type) {
             case "mousedown":
               if (index !== undefined) {
                 setSelection({ tag: "Mousedown", index });
@@ -1642,14 +1642,14 @@ const onStdin = (
   }
 };
 
-const MOUSEUP_REGEX = /\x1B\[<0;(\d+);(\d+)([Mm])/;
+const MOUSE_REGEX = /\x1B\[<0;(\d+);(\d+)([Mm])/;
 
 /**
  * @param {string} string
  * @returns {{ type: "mousedown" | "mouseup", x: number, y: number } | undefined}
  */
 const parseMouse = (string) => {
-  const match = MOUSEUP_REGEX.exec(string);
+  const match = MOUSE_REGEX.exec(string);
   if (match === null) {
     return undefined;
   }
