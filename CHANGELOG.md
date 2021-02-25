@@ -1,3 +1,17 @@
+### Version 2.3.0 (2021-02-25)
+
+- Fixed: <kbd>ctrl+c</kbd> now works just like in a regular terminal. Previously, `run-pty` sent a SIGHUP signal followed by SIGTERM to the command, because I thought that killing commands had to be handled specially. Turns out all I need to do is pass along the <kbd>ctrl+c</kbd> press to the command. This allows the command to handle <kbd>ctrl+c</kbd> in a custom way if it wants, and it will kill the entire process tree instead of just the top process.
+- Changed: Since <kbd>ctrl+c</kbd> is now sent to the command, it’s up to the command to actually exit then. Further key presses are now passed on to the command, including a second <kbd>ctrl+c</kbd>, which previously meant “force kill.” To force kill, double-press <kbd>ctrl+c</kbd>.
+- Added: You can now click commands to focus them in terminals that support mouse events.
+- Added: You can now use the arrow keys and <kbd>enter</kbd> to focus commands. (Vim-style keyboard shortcuts are available, too).
+- Added: You can now press <kbd>enter</kbd> in the dashboard to restart all exited commands (press <kdd>escape</kbd> to unselect first, if needed).
+- Changed: In focused commands, keyboard shortcuts are now always printed below the cursor, unless the command moves the cursor vertically or switches to the “alternate screen.”
+- Improved: The whole history of the command is no longer reprinted when you kill it. No more text flashing by.
+- Improved: History is cleared if the command clears the screen including the scrollback buffer. Many watchers clear the screen on each cycle. This means that focusing a long-running watcher command will now be faster and less text will flash by. This required having a separate history for the alternate screen.
+- Improved: Emoji indicators should now always be drawn using 2 character slots in the terminal, regardless of terminal and terminal bugs.
+- Changed: Exit code 130 is now marked with ⚪ instead of 🔴 since exit code 130 usually means exit via <kbd>ctrl+c</kbd>.
+- Fixed: Some line rendering weirdness at command startup on Windows.
+
 ### Version 2.2.0 (2021-01-26)
 
 - Added: You can now optionally provide the commands to run via a JSON (or NDJSON) file instead of directly at the command line. The JSON format lets you configure more things, such as custom status indicators.
