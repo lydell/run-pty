@@ -9,7 +9,7 @@ const pty = require("node-pty");
 /**
  * @typedef {
     | { tag: "Running", terminal: import("node-pty").IPty }
-    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean }
+    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined }
     | { tag: "Exit", exitCode: number }
    } Status
  *
@@ -19,9 +19,12 @@ const pty = require("node-pty");
    } Current
  */
 
-// node-pty does not support kill signals on Windows.
-// This is the same check that node-pty uses.
 const IS_WINDOWS = process.platform === "win32";
+
+const SLOW_KILL = 100; // ms
+
+// This is apparently what Windows uses for double clicks.
+const DOUBLE_PRESS = 500; // ms
 
 const MAX_HISTORY_DEFAULT = 1000000;
 
@@ -38,12 +41,22 @@ const KEYS = {
   kill: "ctrl+c",
   restart: "enter",
   dashboard: "ctrl+z",
+  navigate: "↑/↓",
+  enter: "enter",
+  unselect: "escape",
 };
 
 const KEY_CODES = {
   kill: "\x03",
   restart: "\r",
   dashboard: "\x1a",
+  up: "\x1B[A",
+  upVim: "k",
+  down: "\x1B[B",
+  downVim: "j",
+  enter: "\r",
+  enterVim: "o",
+  esc: "\x1B",
 };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
@@ -52,11 +65,49 @@ const ALL_LABELS = LABEL_GROUPS.join("");
 
 const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
+const CURSOR_UP = "\x1B[A";
+const CURSOR_DOWN = "\x1B[B";
+const ENABLE_ALTERNATE_SCREEN = "\x1B[?1049h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
+const ALTERNATE_SCREEN_REGEX = /(\x1B\[\?1049[hl])/;
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
+const DISABLE_APPLICATION_CURSOR_KEYS = "\x1B[?1l"; // https://www.vt100.net/docs/vt510-rm/DECCKM.html
+const ENABLE_MOUSE = "\x1B[?1000;1006h";
+const DISABLE_MOUSE = "\x1B[?1000;1006l";
 const RESET_COLOR = "\x1B[m";
-const CLEAR = IS_WINDOWS ? "\x1B[2J\x1B[0f" : "\x1B[2J\x1B[3J\x1B[H";
+const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
+
+const CLEAR_REGEX = (() => {
+  const goToTopLeft = /(?:[01](?:;[01])?)?[fH]/;
+  const clearDown = /0?J/;
+  const clearScreen = /2J/;
+  const clearScrollback = /3J/;
+
+  /**
+   * @template T
+   * @param {Array<T>} items
+   * @returns {Array<Array<T>>}
+   */
+  const permutations = (items) =>
+    items.length <= 1
+      ? [items]
+      : items.flatMap((first, index) =>
+          permutations([
+            ...items.slice(0, index),
+            ...items.slice(index + 1),
+          ]).map((rest) => [first, ...rest])
+        );
+
+  const variants = [
+    ...permutations([clearScreen, clearScrollback, goToTopLeft]),
+    [clearScrollback, goToTopLeft, clearDown],
+    [goToTopLeft, clearDown, clearScrollback],
+    [goToTopLeft, clearScrollback, clearDown],
+  ].map((parts) => parts.map((part) => `\\x1B\\[${part.source}`).join(""));
+
+  return RegExp(`(?:${variants.join("|")})$`);
+})();
 
 const runningIndicator = NO_COLOR
   ? "›"
@@ -75,7 +126,8 @@ const killingIndicator = NO_COLOR
  * @returns {string}
  */
 const exitIndicator = (exitCode) =>
-  exitCode === 0
+  // 130 commonly means exit by ctrl+c.
+  exitCode === 0 || exitCode === 130
     ? NO_COLOR
       ? "●"
       : IS_WINDOWS
@@ -109,7 +161,20 @@ const dim = (string) => (NO_COLOR ? string : `\x1B[2m${string}${RESET_COLOR}`);
 
 /**
  * @param {string} string
- * @param {{ pad?: boolean }} pad
+ * @returns {string}
+ */
+const invert = (string) => {
+  const inverted = string
+    // Split on RESET_COLOR and stop invert (27).
+    .split(/(\x1B\[(?:0?|27)m)/)
+    .map((part, index) => (index % 2 === 0 ? `\x1B[7m${part}` : part))
+    .join("");
+  return NO_COLOR ? string : `${inverted}${RESET_COLOR}`;
+};
+
+/**
+ * @param {string} string
+ * @param {{ pad?: boolean, highlight?: boolean }} pad
  */
 const shortcut = (string, { pad = true } = {}) =>
   dim("[") +
@@ -153,11 +218,6 @@ Run several commands concurrently.
 Show output for one command at a time.
 Kill all at once.
 
-    ${shortcut(summarizeLabels(ALL_LABELS.split("")))} focus command
-    ${shortcut(KEYS.dashboard)} dashboard
-    ${shortcut(KEYS.kill)} kill focused/all
-    ${shortcut(KEYS.restart)} restart killed/exited command
-
 Separate the commands with a character of choice:
 
     ${runPty} ${pc} npm start ${pc} make watch ${pc} some_command arg1 arg2 arg3
@@ -170,6 +230,12 @@ Use ${bold("sh -c '...'")} or similar if you need that.
 Alternatively, specify the commands in a JSON (or NDJSON) file:
 
     ${runPty} run-pty.json
+
+Keyboard shortcuts:
+
+    ${shortcut(KEYS.dashboard)} Dashboard
+    ${shortcut(KEYS.kill)} Kill all or focused command
+    Other keyboard shortcuts are shown as needed.
 
 Environment variables:
 
@@ -189,7 +255,7 @@ Environment variables:
  */
 const killAllLabel = (commands) =>
   commands.some((command) => command.status.tag === "Killing")
-    ? "force kill all"
+    ? `kill all ${dim("(double-press to force) ")}`
     : commands.every((command) => command.status.tag === "Exit")
     ? "exit"
     : "kill all";
@@ -197,59 +263,119 @@ const killAllLabel = (commands) =>
 /**
  * @param {Array<Command>} commands
  * @param {number} width
- * @param {boolean} attemptedKillAll
+ * @param {Selection} selection
+ * @returns {Array<{ line: string, length: number }>}
  */
-const drawDashboard = (commands, width, attemptedKillAll) => {
+const drawDashboardCommandLines = (commands, width, selection) => {
   const lines = commands.map((command) => {
     const [icon, status] = statusText(command.status, command.statusFromRules);
     return {
       label: shortcut(command.label || " ", { pad: false }),
       icon,
       status,
-      title: command.title,
+      title: command.titleWithGraphicRenditions,
     };
   });
+
+  const separator = "  ";
 
   const widestStatus = Math.max(
     0,
     ...lines.map(({ status }) => (status === undefined ? 0 : status.length))
   );
 
-  const finalLines = lines
-    .map(({ label, icon, status, title }) => {
-      const separator = "  ";
-      const start = truncate(`${label}${separator}${icon}`, width);
-      const startLength =
-        removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
-      const end =
-        status === undefined
-          ? title
-          : `${status.padEnd(widestStatus, " ")}${separator}${title}`;
-      return `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
+  return lines.map(({ label, icon, status, title }, index) => {
+    const start = truncate(`${label}${separator}${icon}`, width);
+    const startLength =
+      removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
+    const end =
+      status === undefined
+        ? title
+        : `${status.padEnd(widestStatus, " ")}${separator}${title}`;
+    const truncatedEnd = truncate(end, width - startLength - separator.length);
+    const length =
+      startLength +
+      separator.length +
+      removeGraphicRenditions(truncatedEnd).length;
+    const finalEnd =
+      selection.tag !== "Invisible" && index === selection.index
+        ? NO_COLOR
+          ? `${separator.slice(0, -1)}→${truncatedEnd}`
+          : `${separator}${invert(truncatedEnd)}`
+        : `${separator}${truncatedEnd}`;
+    return {
+      line: `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1
-      )}${CLEAR_RIGHT}${separator}${truncate(
-        end,
-        width - startLength - separator.length
-      )}${RESET_COLOR}`;
-    })
+      )}${CLEAR_RIGHT}${finalEnd}${RESET_COLOR}`,
+      length,
+    };
+  });
+};
+
+/**
+ * @param {Array<Command>} commands
+ * @param {number} width
+ * @param {boolean} attemptedKillAll
+ * @param {Selection} selection
+ * @returns {string}
+ */
+const drawDashboard = (commands, width, attemptedKillAll, selection) => {
+  const done =
+    attemptedKillAll &&
+    commands.every((command) => command.status.tag === "Exit");
+
+  const finalLines = drawDashboardCommandLines(
+    commands,
+    width,
+    done ? { tag: "Invisible", index: 0 } : selection
+  )
+    .map(({ line }) => line)
     .join("\n");
 
-  const label = summarizeLabels(commands.map((command) => command.label));
-
-  if (
-    attemptedKillAll &&
-    commands.every((command) => command.status.tag === "Exit")
-  ) {
+  if (done) {
     return `${finalLines}\n`;
   }
 
-  // Newlines at the end are wanted here.
+  const label = summarizeLabels(commands.map((command) => command.label));
+
+  const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
+
+  const pid =
+    selection.tag === "Keyboard"
+      ? getPid(commands[selection.index])
+      : undefined;
+
+  const enter =
+    pid === undefined
+      ? commands.some((command) => command.status.tag === "Exit")
+        ? `${shortcut(KEYS.enter)} restart exited`
+        : ""
+      : `${shortcut(KEYS.enter)} focus selected${pid}\n${shortcut(
+          KEYS.unselect
+        )} unselect`;
+
   return `
 ${finalLines}
 
-${shortcut(label)} focus command
+${shortcut(label)} focus command${click}
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
-`.trimStart();
+${shortcut(KEYS.navigate)} move selection
+${enter}
+`.trim();
+};
+
+/**
+ * @param {Command} command
+ * @returns {string}
+ */
+const getPid = (command) => {
+  switch (command.status.tag) {
+    case "Running":
+    case "Killing":
+      return ` ${dim(`(pid ${command.status.terminal.pid})`)}`;
+    case "Exit":
+      return "";
+  }
 };
 
 /**
@@ -261,8 +387,7 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
  * @returns {string}
  */
 const cwdText = (command) =>
-  path.resolve(command.cwd) === process.cwd() ||
-  command.cwd === removeGraphicRenditions(command.title)
+  path.resolve(command.cwd) === process.cwd() || command.cwd === command.title
     ? ""
     : `${folder}${EMOJI_WIDTH_FIX} ${dim(command.cwd)}\n`;
 
@@ -280,29 +405,20 @@ const historyStart = (command) =>
  * @returns {string}
  */
 const runningText = (pid) =>
-  // Newlines at the start/end are wanted here.
   `
 ${shortcut(KEYS.kill)} kill ${dim(`(pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
-
-`;
+`.trimEnd();
 
 /**
- * @param {CommandText} command
  * @param {number} pid
  * @returns {string}
  */
-const killingText = (command, pid) =>
-  // Newlines at the start/end are wanted here.
+const killingText = (pid) =>
   `
-${killingIndicator}${EMOJI_WIDTH_FIX} ${
-    command.formattedCommandWithTitle
-  }${RESET_COLOR}
-${cwdText(command)}killing…
-
-${shortcut(KEYS.kill)} force kill ${dim(`(pid ${pid})`)}
+${shortcut(KEYS.kill)} kill ${dim(`(double-press to force) (pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
-`;
+`.trimEnd();
 
 /**
  * @param {Array<Command>} commands
@@ -311,7 +427,6 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @returns {string}
  */
 const exitText = (commands, command, exitCode) =>
-  // Newlines at the start/end are wanted here.
   `
 ${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
     command.formattedCommandWithTitle
@@ -321,7 +436,7 @@ ${cwdText(command)}exit ${exitCode}
 ${shortcut(KEYS.restart)} restart
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
-`;
+`.trimEnd();
 
 /**
  * @param {Status} status
@@ -341,8 +456,32 @@ const statusText = (status, statusFromRules = runningIndicator) => {
   }
 };
 
-// eslint-disable-next-line no-control-regex
+// If a command moves the cursor to another line it’s not considered a “simple
+// log”. Then it’s not safe to print the keyboard shortcuts.
+//
+// - A, B: Cursor up/down.
+// - C, D: Cursor left/right. Should be safe! Parcel does this.
+// - E, F: Cursor up/down, and to the start of the line.
+// - G: Cursor absolute position within line. Should be safe! Again, Parcel.
+// - H, f: Cursor absolute position, both x and y. Exception: Moving to the
+//         top-left corner and clearing the screen (ctrl+l).
+// - I, Z: Cursor forward/backward by tab stops. Should be safe.
+// - J: Clear the screen in different ways. Should be safe. It might clear away
+//      the keyboard shortcuts too, but they’ll reappear once a new line is written.
+// - K: Erase in line. Should be safe.
+// - L: Insert lines.
+// - M: Delete lines.
+// - S: Scroll up.
+// - T: Scroll down.
+// - s: Save cursor position.
+// - u: Restore cursor position.
+const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?:\d*[ABEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
+
+// Windows likes putting a RESET_COLOR at the start of lines if the previous
+// line was colored. I’ve also seen tools print color codes after the newline.
+// Ignore that and consider the line empty anyway.
+const LAST_LINE_REGEX = /(?:^|\n)(?:\x1B\[(?:\d+(?:;\d+)*)?m)?([^\n]*)$/;
 
 /**
  * @param {string} string
@@ -373,6 +512,26 @@ const truncate = (string, maxLength) => {
     }
   }
   return result;
+};
+
+/**
+ * @param {string} string
+ * @returns {string}
+ */
+const moveBack = (string) =>
+  string === "" ? "" : `${CURSOR_UP.repeat(string.split("\n").length - 1)}\r`;
+
+/**
+ * Assumes that `moveBack` has been run first. Always clears the first line.
+ *
+ * @param {string} string
+ * @returns {string}
+ */
+const erase = (string) => {
+  const numLines = string.split("\n").length;
+  return `\r${CLEAR_RIGHT}${`${CURSOR_DOWN}${CLEAR_RIGHT}`.repeat(
+    numLines - 1
+  )}${CURSOR_UP.repeat(numLines - 1)}`;
 };
 
 /**
@@ -708,6 +867,20 @@ const parseStatus = (json) => {
   return [value1, value2];
 };
 
+/**
+ * @param {Command} command
+ * @returns {string}
+ */
+const joinHistory = (command) =>
+  command.history +
+  (command.historyAlternateScreen === ""
+    ? command.isOnAlternateScreen
+      ? ENABLE_ALTERNATE_SCREEN
+      : ""
+    : ENABLE_ALTERNATE_SCREEN +
+      command.historyAlternateScreen +
+      (command.isOnAlternateScreen ? "" : DISABLE_ALTERNATE_SCREEN));
+
 class Command {
   /**
    * @param {{
@@ -734,15 +907,20 @@ class Command {
     this.file = file;
     this.args = args;
     this.cwd = cwd;
-    this.title = title;
+    this.title = removeGraphicRenditions(title);
+    this.titleWithGraphicRenditions = title;
     this.formattedCommandWithTitle =
       title === formattedCommand
         ? formattedCommand
+        : NO_COLOR
+        ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
         : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
     this.onData = onData;
     this.onExit = onExit;
-    /** @type {string} */
     this.history = "";
+    this.historyAlternateScreen = "";
+    this.isSimpleLog = true;
+    this.isOnAlternateScreen = false;
     /** @type {Status} */
     this.status = { tag: "Exit", exitCode: 0 };
     /** @type {string | undefined} */
@@ -765,6 +943,9 @@ class Command {
     }
 
     this.history = historyStart(this);
+    this.historyAlternateScreen = "";
+    this.isSimpleLog = true;
+    this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
 
     const [file, args] = IS_WINDOWS
@@ -789,14 +970,33 @@ class Command {
     });
 
     if (IS_WINDOWS) {
-      // Needed when using `conptyInheritCursor`. Otherwise the spawned
-      // terminals hang and will not run their command.
-      terminal.write("\x1B[1;1R");
+      // See `onData` below for why we do this.
+      // It’s important to get the line number right. Otherwise the pty emits
+      // cursor movements trying to adjust for it or something, resulting in
+      // lost lines of output (cursor is moved up and lines are overwritten).
+      terminal.write(`\x1B[${this.history.split("\n").length};1R`);
     }
 
+    let first = true;
+
     const disposeOnData = terminal.onData((data) => {
-      const statusFromRulesChanged = this.pushHistory(data);
-      this.onData(data, statusFromRulesChanged);
+      // When using `conptyInheritCursor` (Windows only), a 6n escape is the
+      // first thing we get here. If we print that code to the console, we will
+      // get a `\x1B[2;1R` (cursor position) reply on stdin. The pty is waiting
+      // for such a message. By default we pass on all stdin so the pty gets it.
+      // So if we have a single (focused by default) command it all works
+      // automatically. But if we have multiple commands, the pty still waits
+      // for the message before executing the command. And we won’t print the 6n
+      // escape until we focus it. This means commands effectively don’t start
+      // executing until focused. For this reason we ignore this escape and send
+      // the reply above instead. This has the side bonus of the 6n escape never
+      // reaching the command’s stdin.
+      const shouldIgnore = IS_WINDOWS && first && data === "\x1B[6n";
+      first = false;
+      if (!shouldIgnore) {
+        const statusFromRulesChanged = this.pushHistory(data);
+        this.onData(data, statusFromRulesChanged);
+      }
     });
 
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
@@ -813,13 +1013,13 @@ class Command {
    * @returns {undefined}
    */
   kill() {
-    // https://www.gnu.org/software/libc/manual/html_node/Termination-Signals.html
     switch (this.status.tag) {
       case "Running":
         this.status = {
           tag: "Killing",
           terminal: this.status.terminal,
           slow: false,
+          lastKillPress: undefined,
         };
         setTimeout(() => {
           if (this.status.tag === "Killing") {
@@ -827,24 +1027,27 @@ class Command {
             // Ugly way to redraw:
             this.onData("", false);
           }
-        }, 100);
-        if (IS_WINDOWS) {
-          this.status.terminal.kill();
-        } else {
-          // SIGHUP causes a silent exit for `npm run`.
-          this.status.terminal.kill("SIGHUP");
-          // SIGTERM is needed for some programs (but is noisy for `npm run`).
-          this.status.terminal.kill("SIGTERM");
-        }
+        }, SLOW_KILL);
+        this.status.terminal.write(KEY_CODES.kill);
         return undefined;
 
-      case "Killing":
-        if (IS_WINDOWS) {
-          this.status.terminal.kill();
+      case "Killing": {
+        const now = Date.now();
+        if (
+          this.status.lastKillPress !== undefined &&
+          now - this.status.lastKillPress <= DOUBLE_PRESS
+        ) {
+          if (IS_WINDOWS) {
+            this.status.terminal.kill();
+          } else {
+            this.status.terminal.kill("SIGKILL");
+          }
         } else {
-          this.status.terminal.kill("SIGKILL");
+          this.status.terminal.write(KEY_CODES.kill);
         }
+        this.status.lastKillPress = now;
         return undefined;
+      }
 
       case "Exit":
         throw new Error(`Cannot kill already exited pty for: ${this.title}`);
@@ -856,21 +1059,60 @@ class Command {
    * @returns {boolean}
    */
   pushHistory(data) {
-    const statusFromRulesChanged = this.updateStatusFromRules(data);
-    this.history += data;
-    if (this.history.length > MAX_HISTORY) {
-      this.history = this.history.slice(-MAX_HISTORY);
+    const previousStatusFromRules = this.statusFromRules;
+
+    for (const part of data.split(ALTERNATE_SCREEN_REGEX)) {
+      switch (part) {
+        case ENABLE_ALTERNATE_SCREEN:
+          this.isOnAlternateScreen = true;
+          break;
+        case DISABLE_ALTERNATE_SCREEN:
+          this.isOnAlternateScreen = false;
+          break;
+        default:
+          this.updateStatusFromRules(part);
+          if (this.isOnAlternateScreen) {
+            this.historyAlternateScreen += part;
+            if (CLEAR_REGEX.test(this.historyAlternateScreen)) {
+              this.historyAlternateScreen = "";
+            } else {
+              if (this.historyAlternateScreen.length > MAX_HISTORY) {
+                this.historyAlternateScreen = this.historyAlternateScreen.slice(
+                  -MAX_HISTORY
+                );
+              }
+            }
+          } else {
+            this.history += part;
+            if (CLEAR_REGEX.test(this.history)) {
+              this.history = "";
+              this.isSimpleLog = true;
+            } else {
+              if (this.history.length > MAX_HISTORY) {
+                this.history = this.history.slice(-MAX_HISTORY);
+              }
+              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(part)) {
+                this.isSimpleLog = false;
+              }
+            }
+          }
+      }
     }
+
+    const statusFromRulesChanged =
+      this.statusFromRules !== previousStatusFromRules;
+
     return statusFromRulesChanged;
   }
 
   /**
    * @param {string} data
-   * @returns {boolean}
+   * @returns {void}
    */
   updateStatusFromRules(data) {
-    const previousStatusFromRules = this.statusFromRules;
-    const lastLine = getLastLine(this.history);
+    const lastLine = getLastLine(
+      this.isOnAlternateScreen ? this.historyAlternateScreen : this.history
+    );
     const lines = (lastLine + data).split(/(?:\r?\n|\r)/);
 
     for (const line of lines) {
@@ -880,8 +1122,6 @@ class Command {
         }
       }
     }
-
-    return this.statusFromRules !== previousStatusFromRules;
   }
 }
 
@@ -913,6 +1153,13 @@ const getLastLine = (string) => {
   }
   return string.slice(index + 1);
 };
+/**
+ * @typedef {
+    | { tag: "Invisible", index: number }
+    | { tag: "Mousedown", index: number }
+    | { tag: "Keyboard", index: number }
+   } Selection
+ */
 
 /**
  * @param {Array<CommandDescription>} commandDescriptions
@@ -922,49 +1169,90 @@ const runCommands = (commandDescriptions) => {
   /** @type {Current} */
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
+  /** @type {Selection} */
+  let selection = { tag: "Invisible", index: 0 };
+  let lastExtraText = "";
+  let lastLine = "";
 
   /**
    * @param {Command} command
+   * @param {string} data
    * @returns {undefined}
    */
-  const printHistoryAndExtraText = (command) => {
-    process.stdout.write(
-      SHOW_CURSOR +
-        DISABLE_ALTERNATE_SCREEN +
-        RESET_COLOR +
-        CLEAR +
-        command.history
-    );
+  const printExtraText = (command, data) => {
+    const match = LAST_LINE_REGEX.exec(command.history);
+    const previousLastLine = lastLine;
+    lastLine = match === null ? "" : match[1];
+
+    // Notes:
+    // - For a simple log (no cursor movements or anything) we can _always_ show
+    // extra text. Otherwise, it’s better not to print anything extra in. We
+    // don’t want to put something in the middle of the command’s output.
+    // - Visually the last line of the history does not need reprinting, but we
+    // do that anyway to get the cursor at the end of it.
+
+    /**
+     * @param {string} extraText
+     * @returns {string}
+     */
+    const helper = (extraText) =>
+      RESET_COLOR + extraText + moveBack(extraText) + lastLine;
 
     switch (command.status.tag) {
-      case "Running":
-        if (
-          command.history.endsWith("\n") ||
-          command.history.endsWith(`\n${RESET_COLOR}`)
-        ) {
-          process.stdout.write(
-            RESET_COLOR + runningText(command.status.terminal.pid)
-          );
-        }
-        return undefined;
-
-      case "Killing":
-        if (command.status.slow) {
-          process.stdout.write(
-            HIDE_CURSOR +
-              RESET_COLOR +
-              killingText(command, command.status.terminal.pid)
-          );
-        }
-        return undefined;
-
-      case "Exit":
+      case "Running": {
+        const extraText = command.isSimpleLog
+          ? helper(runningText(command.status.terminal.pid))
+          : "";
         process.stdout.write(
-          HIDE_CURSOR +
-            RESET_COLOR +
-            exitText(commands, command, command.status.exitCode)
+          extraText === "" && lastExtraText === ""
+            ? data
+            : erase(lastExtraText) + previousLastLine + data + extraText
         );
+        lastExtraText = extraText;
         return undefined;
+      }
+
+      case "Killing": {
+        const extraText = command.isSimpleLog
+          ? command.status.slow
+            ? helper(killingText(command.status.terminal.pid))
+            : helper(runningText(command.status.terminal.pid))
+          : "";
+        process.stdout.write(
+          extraText === "" && lastExtraText === ""
+            ? data
+            : erase(lastExtraText) + previousLastLine + data + extraText
+        );
+        lastExtraText = extraText;
+        return undefined;
+      }
+
+      case "Exit": {
+        const maybeNewline =
+          // If the last line is empty, no newline is needed.
+          lastLine === "" ? "" : "\n";
+
+        // This has the side effect of moving the cursor, so only do it if needed.
+        const disableAlternateScreen = command.isOnAlternateScreen
+          ? DISABLE_ALTERNATE_SCREEN
+          : "";
+
+        const extraText =
+          HIDE_CURSOR +
+          RESET_COLOR +
+          disableAlternateScreen +
+          maybeNewline +
+          exitText(commands, command, command.status.exitCode);
+
+        process.stdout.write(
+          lastExtraText === ""
+            ? data + extraText
+            : erase(lastExtraText) + previousLastLine + data + extraText
+        );
+
+        lastExtraText = "";
+        return undefined;
+      }
     }
   };
 
@@ -976,9 +1264,16 @@ const runCommands = (commandDescriptions) => {
     process.stdout.write(
       HIDE_CURSOR +
         DISABLE_ALTERNATE_SCREEN +
+        DISABLE_APPLICATION_CURSOR_KEYS +
+        ENABLE_MOUSE +
         RESET_COLOR +
         CLEAR +
-        drawDashboard(commands, process.stdout.columns, attemptedKillAll)
+        drawDashboard(
+          commands,
+          process.stdout.columns,
+          attemptedKillAll,
+          selection
+        )
     );
   };
 
@@ -986,10 +1281,40 @@ const runCommands = (commandDescriptions) => {
    * @param {number} index
    * @returns {void}
    */
-  const switchToCommand = (index) => {
+  const switchToCommand = (index, { hideSelection = false } = {}) => {
     const command = commands[index];
     current = { tag: "Command", index };
-    printHistoryAndExtraText(command);
+    if (hideSelection) {
+      selection = { tag: "Invisible", index };
+    }
+
+    process.stdout.write(
+      SHOW_CURSOR +
+        DISABLE_ALTERNATE_SCREEN +
+        DISABLE_APPLICATION_CURSOR_KEYS +
+        DISABLE_MOUSE +
+        RESET_COLOR +
+        CLEAR
+    );
+
+    lastExtraText = "";
+    lastLine = "";
+
+    if (command.isOnAlternateScreen) {
+      process.stdout.write(joinHistory(command));
+    } else {
+      printExtraText(command, joinHistory(command));
+    }
+  };
+
+  /**
+   * @param {Selection} newSelection
+   * @returns {void}
+   */
+  const setSelection = (newSelection) => {
+    selection = newSelection;
+    // Redraw dashboard.
+    switchToDashboard();
   };
 
   /**
@@ -1012,6 +1337,20 @@ const runCommands = (commandDescriptions) => {
     }
   };
 
+  /**
+   * @returns {void}
+   */
+  const restartExited = () => {
+    const exited = commands.filter((command) => command.status.tag === "Exit");
+    if (exited.length > 0) {
+      for (const command of exited) {
+        command.start();
+      }
+      // Redraw dashboard.
+      switchToDashboard();
+    }
+  };
+
   /** @type {Array<Command>} */
   const commands = commandDescriptions.map(
     (commandDescription, index) =>
@@ -1025,14 +1364,13 @@ const runCommands = (commandDescriptions) => {
                 const command = commands[index];
                 switch (command.status.tag) {
                   case "Running":
-                    process.stdout.write(data);
-                    return undefined;
-
                   case "Killing":
-                    // Redraw with killingText at the bottom.
-                    printHistoryAndExtraText(command);
+                    if (command.isOnAlternateScreen) {
+                      process.stdout.write(data);
+                    } else {
+                      printExtraText(command, data);
+                    }
                     return undefined;
-
                   case "Exit":
                     throw new Error(
                       `Received unexpected output from already exited pty for: ${command.title}\n${data}`
@@ -1063,8 +1401,7 @@ const runCommands = (commandDescriptions) => {
             case "Command":
               if (current.index === index) {
                 const command = commands[index];
-                // Redraw current command.
-                printHistoryAndExtraText(command);
+                printExtraText(command, "");
               }
               return undefined;
 
@@ -1100,10 +1437,12 @@ const runCommands = (commandDescriptions) => {
       data.toString("utf8"),
       current,
       commands,
+      selection,
       switchToDashboard,
       switchToCommand,
+      setSelection,
       killAll,
-      printHistoryAndExtraText
+      restartExited
     );
   });
 
@@ -1131,11 +1470,11 @@ const runCommands = (commandDescriptions) => {
 
   process.on("exit", () => {
     process.stdout.write(
-      SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + RESET_COLOR
+      SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + DISABLE_MOUSE + RESET_COLOR
     );
   });
 
-  if (commands.length === 1) {
+  if (commandDescriptions.length === 1) {
     switchToCommand(0);
   } else {
     switchToDashboard();
@@ -1146,40 +1485,30 @@ const runCommands = (commandDescriptions) => {
  * @param {string} data
  * @param {Current} current
  * @param {Array<Command>} commands
+ * @param {Selection} selection
  * @param {() => void} switchToDashboard
- * @param {(index: number) => void} switchToCommand
+ * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
+ * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
- * @param {(command: Command) => void} printHistoryAndExtraText
+ * @param {() => void} restartExited
  * @returns {undefined}
  */
 const onStdin = (
   data,
   current,
   commands,
+  selection,
   switchToDashboard,
   switchToCommand,
+  setSelection,
   killAll,
-  printHistoryAndExtraText
+  restartExited
 ) => {
   switch (current.tag) {
     case "Command": {
       const command = commands[current.index];
       switch (command.status.tag) {
         case "Running":
-          switch (data) {
-            case KEY_CODES.kill:
-              command.kill();
-              return undefined;
-
-            case KEY_CODES.dashboard:
-              switchToDashboard();
-              return undefined;
-
-            default:
-              command.status.terminal.write(data);
-              return undefined;
-          }
-
         case "Killing":
           switch (data) {
             case KEY_CODES.kill:
@@ -1191,6 +1520,11 @@ const onStdin = (
               return undefined;
 
             default:
+              command.status = {
+                tag: "Running",
+                terminal: command.status.terminal,
+              };
+              command.status.terminal.write(data);
               return undefined;
           }
 
@@ -1206,7 +1540,7 @@ const onStdin = (
 
             case KEY_CODES.restart:
               command.start();
-              printHistoryAndExtraText(command);
+              switchToCommand(current.index);
               return undefined;
 
             default:
@@ -1221,17 +1555,122 @@ const onStdin = (
           killAll();
           return undefined;
 
+        case KEY_CODES.enter:
+        case KEY_CODES.enterVim:
+          if (selection.tag === "Invisible") {
+            restartExited();
+          } else {
+            switchToCommand(selection.index);
+          }
+          return undefined;
+
+        case KEY_CODES.up:
+        case KEY_CODES.upVim:
+          setSelection({
+            tag: "Keyboard",
+            index:
+              selection.tag === "Invisible"
+                ? selection.index
+                : selection.index === 0
+                ? commands.length - 1
+                : selection.index - 1,
+          });
+          return undefined;
+
+        case KEY_CODES.down:
+        case KEY_CODES.downVim:
+          setSelection({
+            tag: "Keyboard",
+            index:
+              selection.tag === "Invisible"
+                ? selection.index
+                : selection.index === commands.length - 1
+                ? 0
+                : selection.index + 1,
+          });
+          return undefined;
+
+        case KEY_CODES.esc:
+          setSelection({ tag: "Invisible", index: selection.index });
+          return undefined;
+
         default: {
           const commandIndex = commands.findIndex(
             (command) => command.label === data
           );
           if (commandIndex !== -1) {
-            switchToCommand(commandIndex);
+            switchToCommand(commandIndex, { hideSelection: true });
+            return undefined;
           }
-          return undefined;
+
+          const mousePosition = parseMouse(data);
+          if (mousePosition === undefined) {
+            return undefined;
+          }
+
+          const index = getCommandIndexFromMousePosition(
+            commands,
+            mousePosition
+          );
+
+          switch (mousePosition.type) {
+            case "mousedown":
+              if (index !== undefined) {
+                setSelection({ tag: "Mousedown", index });
+              }
+              return undefined;
+
+            case "mouseup": {
+              if (index !== undefined && index === selection.index) {
+                switchToCommand(index, { hideSelection: true });
+              } else if (selection.tag !== "Invisible") {
+                setSelection({ tag: "Invisible", index: selection.index });
+              }
+              return undefined;
+            }
+          }
         }
       }
   }
+};
+
+const MOUSE_REGEX = /\x1B\[<0;(\d+);(\d+)([Mm])/;
+
+/**
+ * @param {string} string
+ * @returns {{ type: "mousedown" | "mouseup", x: number, y: number } | undefined}
+ */
+const parseMouse = (string) => {
+  const match = MOUSE_REGEX.exec(string);
+  if (match === null) {
+    return undefined;
+  }
+  const [, x, y, type] = match;
+  return {
+    type: type === "M" ? "mousedown" : "mouseup",
+    x: Number(x) - 1,
+    y: Number(y) - 1,
+  };
+};
+
+/**
+ * @param {Array<Command>} commands
+ * @param {{ x: number, y: number }} mousePosition
+ */
+const getCommandIndexFromMousePosition = (commands, { x, y }) => {
+  const lines = drawDashboardCommandLines(commands, process.stdout.columns, {
+    tag: "Invisible",
+    index: 0,
+  });
+
+  if (y >= 0 && y < lines.length) {
+    const line = lines[y];
+    if (x >= 0 && x < line.length) {
+      return y;
+    }
+  }
+
+  return undefined;
 };
 
 /**

@@ -6,7 +6,6 @@
   "description": "Run several commands concurrently. Show output for one command at a time. Kill all at once.",
   "repository": "lydell/run-pty",
   "type": "commonjs",
-  "exports": {},
   "bin": "./run-pty.js",
   "files": [
     "run-pty.js"
@@ -25,21 +24,21 @@
     "xterm"
   ],
   "dependencies": {
-    "node-pty": "^0.9.0"
+    "node-pty": "^0.10.0"
   },
   "devDependencies": {
     "@types/jest": "26.0.20",
-    "@typescript-eslint/eslint-plugin": "4.14.0",
-    "@typescript-eslint/parser": "4.14.0",
-    "eslint": "7.18.0",
-    "eslint-plugin-jest": "24.1.3",
+    "@typescript-eslint/eslint-plugin": "4.15.2",
+    "@typescript-eslint/parser": "4.15.2",
+    "eslint": "7.20.0",
+    "eslint-plugin-jest": "24.1.5",
     "jest": "26.6.3",
     "jest-environment-node-single-context": "26.2.0",
     "prettier": "2.2.1",
-    "typescript": "4.1.3"
+    "typescript": "4.2.2"
   },
   "scripts": {
-    "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node get-cursor-position.js % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\" % make watch",
+    "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node get-cursor-position.js % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\" % make watch % make signals",
     "example": "node run-pty.js example.json",
     "test": "prettier --check . && eslint . --report-unused-disable-directives && tsc && jest",
     "prepublishOnly": "npm test"

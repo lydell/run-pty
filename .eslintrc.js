@@ -18,6 +18,7 @@ module.exports = {
     "arrow-body-style": "error",
     curly: "error",
     "dot-notation": "error",
+    "no-control-regex": "off",
     "no-fallthrough": "off",
     "no-shadow": "error",
     "object-shorthand": "error",

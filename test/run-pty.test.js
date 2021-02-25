@@ -22,12 +22,10 @@ const {
  * @returns {string}
  */
 function replaceAnsi(string) {
-  /* eslint-disable no-control-regex */
   return string
     .replace(/\x1B\[0?m/g, "⧘")
     .replace(/\x1B\[\d+m/g, "⧙")
     .replace(/\x1B\[\d*[GK]/g, "");
-  /* eslint-enable no-control-regex */
 }
 
 /**
@@ -55,11 +53,6 @@ describe("help", () => {
       Show output for one command at a time.
       Kill all at once.
 
-          ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command
-          ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-          ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill focused/all
-          ⧙[⧘⧙enter⧘⧙]⧘  restart killed/exited command
-
       Separate the commands with a character of choice:
 
           ⧙run-pty⧘ ⧙%⧘ npm start ⧙%⧘ make watch ⧙%⧘ some_command arg1 arg2 arg3
@@ -72,6 +65,12 @@ describe("help", () => {
       Alternatively, specify the commands in a JSON (or NDJSON) file:
 
           ⧙run-pty⧘ run-pty.json
+
+      Keyboard shortcuts:
+
+          ⧙[⧘⧙ctrl+z⧘⧙]⧘ Dashboard
+          ⧙[⧘⧙ctrl+c⧘⧙]⧘ Kill all or focused command
+          Other keyboard shortcuts are shown as needed.
 
       Environment variables:
 
@@ -102,31 +101,39 @@ describe("dashboard", () => {
   function testDashboard(items, width) {
     return replaceAnsi(
       drawDashboard(
-        items.map((item, index) => ({
-          label: ALL_LABELS[index] || "",
-          title:
+        items.map((item, index) => {
+          const title =
             item.title === undefined
               ? commandToPresentationName(item.command)
-              : item.title,
-          formattedCommandWithTitle: commandToPresentationName(item.command),
-          status: item.status,
-          // Unused in this case:
-          file: "file",
-          args: [],
-          cwd: ".",
-          history: "",
-          statusFromRules: item.statusFromRules,
-          defaultStatus: undefined,
-          statusRules: [],
-          onData: () => notCalled("onData"),
-          onExit: () => notCalled("onExit"),
-          pushHistory: () => notCalled("pushHistory"),
-          start: () => notCalled("start"),
-          kill: () => notCalled("kill"),
-          updateStatusFromRules: () => notCalled("updateStatusFromRules"),
-        })),
+              : item.title;
+          return {
+            label: ALL_LABELS[index] || "",
+            title,
+            titleWithGraphicRenditions: title,
+            formattedCommandWithTitle: commandToPresentationName(item.command),
+            status: item.status,
+            // Unused in this case:
+            file: "file",
+            args: [],
+            cwd: ".",
+            history: "",
+            historyAlternateScreen: "",
+            isSimpleLog: true,
+            isOnAlternateScreen: false,
+            statusFromRules: item.statusFromRules,
+            defaultStatus: undefined,
+            statusRules: [],
+            onData: () => notCalled("onData"),
+            onExit: () => notCalled("onExit"),
+            pushHistory: () => notCalled("pushHistory"),
+            start: () => notCalled("start"),
+            kill: () => notCalled("kill"),
+            updateStatusFromRules: () => notCalled("updateStatusFromRules"),
+          };
+        }),
         width,
-        false
+        false,
+        { tag: "Invisible", index: 0 }
       )
     );
   }
@@ -147,6 +154,8 @@ describe("dashboard", () => {
       onData: () => notCalled("onData") || { dispose: () => undefined },
       onExit: () => notCalled("onExit") || { dispose: () => undefined },
       on: () => notCalled("on"),
+      pause: () => notCalled("pause"),
+      resume: () => notCalled("resume"),
       resize: () => notCalled("resize"),
       write: () => notCalled("write"),
       kill: () => notCalled("kill"),
@@ -155,9 +164,9 @@ describe("dashboard", () => {
 
   test("empty", () => {
     expect(testDashboard([], 0)).toMatchInlineSnapshot(`
-      ⧙[⧘⧙⧘⧙]⧘       focus command
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit␊
-
+      ⧙[⧘⧙⧘⧙]⧘       focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
     `);
   });
 
@@ -175,9 +184,10 @@ describe("dashboard", () => {
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘
 
-      ⧙[⧘⧙1⧘⧙]⧘      focus command
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit␊
-
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
 
@@ -199,6 +209,11 @@ describe("dashboard", () => {
             statusFromRules: "!", // Should be ignored.
           },
           {
+            command: ["npm", "run", "server"],
+            status: { tag: "Exit", exitCode: 130 },
+            statusFromRules: "!", // Should be ignored.
+          },
+          {
             command: ["ping", "nope"],
             status: { tag: "Exit", exitCode: 68 },
             statusFromRules: "!", // Should be ignored.
@@ -209,6 +224,7 @@ describe("dashboard", () => {
               tag: "Killing",
               terminal: fakeTerminal({ pid: 12345 }),
               slow: false,
+              lastKillPress: undefined,
             },
             statusFromRules: "!", // Should be ignored.
           },
@@ -233,15 +249,17 @@ describe("dashboard", () => {
         80
       )
     ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘   echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'hell…⧘
-      ⧙[⧘⧙2⧘⧙]⧘  🔴⧘  ⧙exit 68⧘  ping nope⧘
-      ⧙[⧘⧙3⧘⧙]⧘  ⭕⧘  ping localhost⧘
-      ⧙[⧘⧙4⧘⧙]⧘  🟢⧘  yes⧘
-      ⧙[⧘⧙5⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
+      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘    echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'hel…⧘
+      ⧙[⧘⧙2⧘⧙]⧘  ⚪⧘  ⧙exit 130⧘  npm run server⧘
+      ⧙[⧘⧙3⧘⧙]⧘  🔴⧘  ⧙exit 68⧘   ping nope⧘
+      ⧙[⧘⧙4⧘⧙]⧘  ⭕⧘  ping localhost⧘
+      ⧙[⧘⧙5⧘⧙]⧘  🟢⧘  yes⧘
+      ⧙[⧘⧙6⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
 
-      ⧙[⧘⧙1-5⧘⧙]⧘    focus command
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill all␊
-
+      ⧙[⧘⧙1-6⧘⧙]⧘    focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
 
@@ -321,9 +339,9 @@ describe("dashboard", () => {
       ⧙[⧘⧙Z⧘⧙]⧘  🟢⧘  echo 60⧘
       ⧙[⧘⧙ ⧘⧙]⧘  🟢⧘  echo 61⧘
 
-      ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all␊
-
+      ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
     `);
   });
 });
@@ -371,47 +389,36 @@ describe("focused command", () => {
       ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
-
     `);
   });
 
   test("killing without cwd", () => {
     expect(
       render(
-        (command) => killingText(command, 12345),
+        () => killingText(12345),
         "frontend: npm start",
         "frontend",
         "./x/.."
       )
     ).toMatchInlineSnapshot(`
       ␊
-      ⭕ frontend: npm start⧘
-      killing…
-
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill ⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 
   test("killing with cwd", () => {
     expect(
       render(
-        (command) => killingText(command, 12345),
+        () => killingText(12345),
         "frontend: npm start",
         "frontend",
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
       ␊
-      ⭕ frontend: npm start⧘
-      📂 ⧙web/frontend⧘
-      killing…
-
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ force kill ⧙(pid 12345)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 
@@ -432,7 +439,6 @@ describe("focused command", () => {
       ⧙[⧘⧙enter⧘⧙]⧘  restart
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 
@@ -452,7 +458,6 @@ describe("focused command", () => {
       ⧙[⧘⧙enter⧘⧙]⧘  restart
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-
     `);
   });
 });
