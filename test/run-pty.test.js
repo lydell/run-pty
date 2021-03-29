@@ -626,10 +626,7 @@ describe("parse json", () => {
   });
 
   test("empty NDJSON", () => {
-    expect(testJsonError("empty.ndjson")).toMatchInlineSnapshot(`
-      Failed to read command descriptions file as JSON:
-      Expected input to start with [ or { but got: nothing
-    `);
+    expect(testJson("empty.ndjson")).toStrictEqual({ tag: "NoCommands" });
   });
 
   test("empty command", () => {

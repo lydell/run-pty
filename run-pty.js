@@ -695,6 +695,7 @@ const parseInputFile = (string) => {
       });
     }
 
+    case "": // An empty file is empty NDJSON.
     case "{":
       return string.split("\n").flatMap((line, lineIndex) => {
         const trimmed = line.trim();
