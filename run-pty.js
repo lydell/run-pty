@@ -5,6 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 const pty = require("node-pty");
+const Decode = require("tiny-decoders");
 
 /**
  * @typedef {
@@ -589,7 +590,7 @@ const cmdEscapeArg = (arg) =>
     cwd: string,
     command: Array<string>,
     status: Array<[RegExp, [string, string] | undefined]>
-    defaultStatus: [string, string] | undefined
+    defaultStatus?: [string, string]
    }} CommandDescription
  */
 
@@ -676,23 +677,13 @@ const parseInputFile = (string) => {
   const first = string.trimStart().slice(0, 1);
   switch (first) {
     case "[": {
-      /** @type {unknown} */
-      const json = JSON.parse(string);
-      if (!Array.isArray(json)) {
-        throw new Error(`Expected an array but got: ${JSON.stringify(json)}`);
+      try {
+        return Decode.array(commandDescriptionDecoder)(JSON.parse(string));
+      } catch (error) {
+        throw error instanceof Decode.DecoderError
+          ? new Error(error.format())
+          : error;
       }
-
-      return json.map((item, index) => {
-        try {
-          return parseInputItem(item);
-        } catch (error) {
-          throw new Error(
-            `Index ${index}: ${
-              error instanceof Error ? error.message : "Unknown parse error"
-            }`
-          );
-        }
-      });
     }
 
     case "": // An empty file is empty NDJSON.
@@ -704,11 +695,15 @@ const parseInputFile = (string) => {
         }
 
         try {
-          return parseInputItem(JSON.parse(trimmed));
+          return commandDescriptionDecoder(JSON.parse(trimmed));
         } catch (error) {
           throw new Error(
             `Line ${lineIndex + 1}: ${
-              error instanceof Error ? error.message : "Unknown parse error"
+              error instanceof Decode.DecoderError
+                ? error.format()
+                : error instanceof Error
+                ? error.message
+                : "Unknown parse error"
             }`
           );
         }
@@ -722,151 +717,62 @@ const parseInputFile = (string) => {
 };
 
 /**
- * @param {unknown} json
- * @returns {CommandDescription}
+ * @type {Decode.Decoder<CommandDescription>}
  */
-const parseInputItem = (json) => {
-  if (typeof json !== "object" || Array.isArray(json) || json === null) {
-    throw new Error(`Expected a JSON object but got: ${JSON.stringify(json)}`);
-  }
+const commandDescriptionDecoder = Decode.fields(
+  /** @returns {CommandDescription} */
+  (field) => {
+    const command = field("command", nonEmptyArray(Decode.string));
 
-  /** @type {Partial<CommandDescription>} */
-  const commandDescription = {};
-
-  for (const [key, value] of Object.entries(json)) {
-    switch (key) {
-      case "title":
-        if (typeof value !== "string") {
-          throw new Error(
-            `title: Expected a string but got: ${JSON.stringify(value)}`
-          );
-        }
-        commandDescription.title = value;
-        break;
-
-      case "cwd":
-        if (typeof value !== "string") {
-          throw new Error(
-            `cwd: Expected a string but got: ${JSON.stringify(value)}`
-          );
-        }
-        commandDescription.cwd = value;
-        break;
-
-      case "command": {
-        if (!Array.isArray(value)) {
-          throw new Error(
-            `command: Expected an array but got: ${JSON.stringify(value)}`
-          );
-        }
-
-        const command = [];
-        for (const [index, item] of value.entries()) {
-          if (typeof item !== "string") {
-            throw new Error(
-              `command[${index}]: Expected a string but got: ${JSON.stringify(
-                value
-              )}`
-            );
-          }
-          command.push(item);
-        }
-
-        if (command.length === 0) {
-          throw new Error("command: Expected a non-empty array");
-        }
-
-        commandDescription.command = command;
-        break;
-      }
-
-      case "status": {
-        if (typeof json !== "object" || Array.isArray(json) || json === null) {
-          throw new Error(
-            `status: Expected an object but got: ${JSON.stringify(value)}`
-          );
-        }
-
-        /** @type {Array<[RegExp, [string, string] | undefined]>} */
-        const status = [];
-        for (const [key2, value2] of Object.entries(value)) {
-          try {
-            status.push([RegExp(key2, "u"), parseStatus(value2)]);
-          } catch (error) {
-            throw new Error(
-              `status[${JSON.stringify(key2)}]: ${
-                error instanceof SyntaxError
-                  ? `This key is not a valid regex: ${error.message}`
-                  : error instanceof Error
-                  ? error.message
-                  : "Unknown error"
-              }`
-            );
-          }
-        }
-
-        commandDescription.status = status;
-        break;
-      }
-
-      case "defaultStatus":
-        try {
-          commandDescription.defaultStatus = parseStatus(value);
-        } catch (error) {
-          throw new Error(
-            `defaultStatus: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          );
-        }
-        break;
-
-      default:
-        throw new Error(`Unknown key: ${key}`);
-    }
-  }
-
-  if (commandDescription.command === undefined) {
-    throw new Error("command: This field is required, but was not provided.");
-  }
-
-  const {
-    command,
-    title = commandToPresentationName(command),
-    cwd = ".",
-    status = [],
-    defaultStatus,
-  } = commandDescription;
-
-  return { title, cwd, command, status, defaultStatus };
-};
+    return {
+      title: field(
+        "title",
+        Decode.optional(Decode.string, commandToPresentationName(command))
+      ),
+      cwd: field("cwd", Decode.optional(Decode.string, ".")),
+      command,
+      status: field(
+        "status",
+        Decode.optional(
+          Decode.chain(Decode.record(statusDecoder), (record) =>
+            Object.entries(record).map(([key, value]) => {
+              try {
+                return [RegExp(key, "u"), value];
+              } catch (error) {
+                throw Decode.DecoderError.at(error, key);
+              }
+            })
+          ),
+          []
+        )
+      ),
+      defaultStatus: field("defaultStatus", Decode.optional(statusDecoder)),
+    };
+  },
+  { exact: "throw" }
+);
 
 /**
- * @param {unknown} json
- * @returns {[string, string] | undefined}
+ * @template T
+ * @param {Decode.Decoder<T>} decoder
+ * @returns {Decode.Decoder<Array<T>>}
  */
-const parseStatus = (json) => {
-  if (json === null) {
-    return undefined;
-  }
+function nonEmptyArray(decoder) {
+  return Decode.chain(Decode.array(decoder), (arr) => {
+    if (arr.length === 0) {
+      throw new Decode.DecoderError({
+        message: "Expected a non-empty array",
+        value: arr,
+      });
+    }
+    return arr;
+  });
+}
 
-  if (!Array.isArray(json) || json.length !== 2) {
-    throw new Error(
-      `Expected an array of length 2 but got: ${JSON.stringify(json)}`
-    );
-  }
-
-  /** @type {unknown} */
-  const value1 = json[0];
-  /** @type {unknown} */
-  const value2 = json[1];
-
-  if (typeof value1 !== "string" || typeof value2 !== "string") {
-    throw new Error(`Expected two strings but got: ${JSON.stringify(json)}`);
-  }
-
-  return [value1, value2];
-};
+const statusDecoder = Decode.nullable(
+  Decode.tuple([Decode.string, Decode.string]),
+  undefined
+);
 
 /**
  * @param {Command} command

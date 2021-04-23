@@ -632,35 +632,44 @@ describe("parse json", () => {
   test("empty command", () => {
     expect(testJsonError("empty-command.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Index 0: command: Expected a non-empty array
+      At root[0]["command"]:
+      Expected a non-empty array
+      Got: []
     `);
   });
 
   test("missing command", () => {
     expect(testJsonError("missing-command.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Index 0: command: This field is required, but was not provided.
+      At root[0]["command"]:
+      Expected an array
+      Got: undefined
     `);
   });
 
   test("wrong command type", () => {
     expect(testJsonError("wrong-command-type.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Index 0: command: Expected an array but got: "npm run frontend"
+      At root[0]["command"]:
+      Expected an array
+      Got: "npm run frontend"
     `);
   });
 
   test("invalid regex", () => {
     expect(testJsonError("invalid-regex.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Index 0: status["{}"]: This key is not a valid regex: Invalid regular expression: /{}/: Lone quantifier brackets
+      At root[0]["status"]["{}"]:
+      Invalid regular expression: /{}/: Lone quantifier brackets
     `);
   });
 
   test("key typo", () => {
     expect(testJsonError("key-typo.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Index 0: Unknown key: titel
+      At root[0]:
+      Expected only these fields: "command", "title", "cwd", "status", "defaultStatus"
+      Found extra fields: "titel"
     `);
   });
 
