@@ -561,24 +561,6 @@ const commandToPresentationName = (command) =>
     .join(" ");
 
 /**
- * @param {string} arg
- * @returns {string}
- */
-const cmdEscapeMetaChars = (arg) =>
-  // https://qntm.org/cmd
-  arg.replace(/[()%!^"<>&|;, ]/g, "^$&");
-
-/**
- * @param {string} arg
- * @returns {string}
- */
-const cmdEscapeArg = (arg) =>
-  // https://qntm.org/cmd
-  cmdEscapeMetaChars(
-    `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
-  );
-
-/**
  * @typedef {
     | { tag: "Help" }
     | { tag: "NoCommands" }
@@ -856,19 +838,30 @@ class Command {
     this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
 
-    const [file, args] = IS_WINDOWS
-      ? [
-          "cmd.exe",
-          [
-            "/d",
-            "/s",
-            "/q",
-            "/c",
-            cmdEscapeMetaChars(this.file),
-            ...this.args.map(cmdEscapeArg),
-          ].join(" "),
-        ]
-      : [this.file, this.args];
+    let { file, args } = this;
+
+    // This uses cmd.exe and escapes arguments if needed on Windows.
+    if (IS_WINDOWS) {
+      const childProcess = require("child_process");
+      const nonce = new Error("nonce");
+      // @ts-expect-error This is how cross-spawn calls the function, but not how it works in general.
+      childProcess.spawnSync =
+        /** @type {(file: string, args: Array<string>) => never} */
+        (passedFile, passedArgs) => {
+          file = passedFile;
+          args = passedArgs;
+          throw nonce;
+        };
+      const crossSpawn = require("cross-spawn");
+      try {
+        crossSpawn.sync(file, args);
+      } catch (error) {
+        if (error !== nonce) {
+          throw error;
+        }
+      }
+    }
+
     const terminal = pty.spawn(file, args, {
       cwd: path.resolve(this.cwd),
       cols: process.stdout.columns,
