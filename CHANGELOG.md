@@ -1,3 +1,7 @@
+### Version 2.3.2 (2021-05-20)
+
+- Fixed: cwd is now resolved (using `path.resolve`) before being passed to `spawn`. Previously, just passing `cwd: "."` could cause `npm run` not to find package.json.
+
 ### Version 2.3.1 (2021-03-29)
 
 - Fixed: Running with an empty NDJSON file now just exits with status 0 instead of being an error, to match how a JSON file with `[]` works. This is useful when generating the NDJSON from a script and it sometimes produces no commands to run.
