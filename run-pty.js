@@ -869,7 +869,7 @@ class Command {
         ]
       : [this.file, this.args];
     const terminal = pty.spawn(file, args, {
-      cwd: this.cwd,
+      cwd: path.resolve(this.cwd),
       cols: process.stdout.columns,
       rows: process.stdout.rows,
       // Avoid conpty adding escape sequences to clear the screen:
