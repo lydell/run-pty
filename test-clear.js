@@ -11,10 +11,9 @@ const permutations = (items) =>
   items.length <= 1
     ? [items]
     : items.flatMap((first, index) =>
-        permutations([
-          ...items.slice(0, index),
-          ...items.slice(index + 1),
-        ]).map((rest) => [first, ...rest])
+        permutations([...items.slice(0, index), ...items.slice(index + 1)]).map(
+          (rest) => [first, ...rest]
+        )
       );
 
 const variants = [

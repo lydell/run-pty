@@ -476,7 +476,8 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - T: Scroll down.
 // - s: Save cursor position.
 // - u: Restore cursor position.
-const NOT_SIMPLE_LOG_ESCAPE = /\x1B\[(?:\d*[ABEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
+const NOT_SIMPLE_LOG_ESCAPE =
+  /\x1B\[(?:\d*[ABEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 // Windows likes putting a RESET_COLOR at the start of lines if the previous
