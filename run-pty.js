@@ -78,6 +78,7 @@ const DISABLE_MOUSE = "\x1B[?1000;1006l";
 const RESET_COLOR = "\x1B[m";
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
+const CLEAR_DOWN_REGEX = /\x1B\[0?J$/;
 
 const CLEAR_REGEX = (() => {
   const goToTopLeft = /(?:[01](?:;[01])?)?[fH]/;
@@ -996,6 +997,9 @@ class Command {
               this.history = "";
               this.isSimpleLog = true;
             } else {
+              if (CLEAR_DOWN_REGEX.test(this.history)) {
+                this.isSimpleLog = true;
+              }
               if (this.history.length > MAX_HISTORY) {
                 this.history = this.history.slice(-MAX_HISTORY);
               }
@@ -1090,7 +1094,7 @@ const runCommands = (commandDescriptions) => {
   const printExtraText = (command, data) => {
     const match = LAST_LINE_REGEX.exec(command.history);
     const previousLastLine = lastLine;
-    lastLine = match === null ? "" : match[1];
+    lastLine = match === null ? "" : match[1].replace(CLEAR_DOWN_REGEX, "");
 
     // Notes:
     // - For a simple log (no cursor movements or anything) we can _always_ show
@@ -1114,6 +1118,8 @@ const runCommands = (commandDescriptions) => {
         process.stdout.write(
           extraText === "" && lastExtraText === ""
             ? data
+            : lastExtraText === ""
+            ? data + extraText
             : erase(lastExtraText) + previousLastLine + data + extraText
         );
         lastExtraText = extraText;
@@ -1129,6 +1135,8 @@ const runCommands = (commandDescriptions) => {
         process.stdout.write(
           extraText === "" && lastExtraText === ""
             ? data
+            : lastExtraText === ""
+            ? data + extraText
             : erase(lastExtraText) + previousLastLine + data + extraText
         );
         lastExtraText = extraText;
