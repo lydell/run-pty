@@ -578,8 +578,9 @@ const cmdEscapeArg = (arg) =>
     title: string,
     cwd: string,
     command: Array<string>,
-    status: Array<[RegExp, [string, string] | undefined]>
-    defaultStatus?: [string, string]
+    status: Array<[RegExp, [string, string] | undefined]>,
+    defaultStatus?: [string, string],
+    killAllSequence: string,
    }} CommandDescription
  */
 
@@ -654,6 +655,7 @@ const parseArgs = (args) => {
       command: command2,
       status: [],
       defaultStatus: undefined,
+      killAllSequence: KEY_CODES.kill,
     })),
   };
 };
@@ -736,6 +738,10 @@ const commandDescriptionDecoder = Decode.fields(
         )
       ),
       defaultStatus: field("defaultStatus", Decode.optional(statusDecoder)),
+      killAllSequence: field(
+        "killAllSequence",
+        Decode.optional(Decode.string, KEY_CODES.kill)
+      ),
     };
   },
   { exact: "throw" }
@@ -794,6 +800,7 @@ class Command {
       command: [file, ...args],
       status: statusRules,
       defaultStatus,
+      killAllSequence,
     },
     onData,
     onExit,
@@ -803,6 +810,7 @@ class Command {
     this.file = file;
     this.args = args;
     this.cwd = cwd;
+    this.killAllSequence = killAllSequence;
     this.title = removeGraphicRenditions(title);
     this.titleWithGraphicRenditions = title;
     this.formattedCommandWithTitle =
@@ -924,7 +932,7 @@ class Command {
             this.onData("", false);
           }
         }, SLOW_KILL);
-        this.status.terminal.write(KEY_CODES.kill);
+        this.status.terminal.write(this.killAllSequence);
         return undefined;
 
       case "Killing": {
@@ -939,7 +947,7 @@ class Command {
             this.status.terminal.kill("SIGKILL");
           }
         } else {
-          this.status.terminal.write(KEY_CODES.kill);
+          this.status.terminal.write(this.killAllSequence);
         }
         this.status.lastKillPress = now;
         return undefined;
