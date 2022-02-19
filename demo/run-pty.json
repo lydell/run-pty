@@ -3,8 +3,8 @@
     "command": ["npm", "run", "frontend"],
     "title": "Frontend",
     "status": {
-      "🚨": ["🚨", "E"],
-      "✨": null
+      "Internal server error": ["🚨", "E"],
+      "ready in|page reload": null
     },
     "defaultStatus": ["⏳", "S"]
   },

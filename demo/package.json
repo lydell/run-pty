@@ -3,12 +3,12 @@
   "scripts": {
     "start": "run-pty % npm run frontend % npm run backend",
     "start-advanced": "run-pty run-pty.json",
-    "frontend": "parcel watch index.html",
+    "frontend": "vite --no-clearScreen",
     "backend": "nodemon server.js"
   },
   "devDependencies": {
     "nodemon": "2.0.15",
-    "parcel": "2.3.2",
-    "run-pty": "file:.."
+    "run-pty": "file:..",
+    "vite": "2.8.4"
   }
 }

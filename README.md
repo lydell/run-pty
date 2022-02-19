@@ -8,7 +8,7 @@ It’s like [concurrently] but the command outputs aren’t mixed, and you can r
 
 <kbd>ctrl+c</kbd> kills commands.
 
-A use case is running several watchers. Maybe one or two for frontend (webpack, Parcel, Sass), and one for backend (nodemon, or even some watcher for another programming language).
+A use case is running several watchers. Maybe one or two for frontend (webpack, Parcel, Vite), and one for backend (nodemon, or even some watcher for another programming language).
 
 ## Example
 
@@ -45,15 +45,17 @@ $ npm start
 ```
 🟢 npm run frontend
 
-> @ frontend /Users/lydell/src/run-pty/demo
-> parcel watch index.html --log-level 4
+> frontend
+> vite --no-clearScreen
 
-[9:51:27 AM]: Building...
-[9:51:27 AM]: Building index.html...
-[9:51:27 AM]: Built index.html...
-[9:51:27 AM]: Producing bundles...
-[9:51:27 AM]: Packaging...
-[9:51:27 AM]: ✨  Built in 67ms.
+
+  vite v2.8.4 dev server running at:
+
+  > Local: http://localhost:3000/
+  > Network: use `--host` to expose
+
+  ready in 136ms.
+
 ▊
 [ctrl+c] kill (pid 63096)
 [ctrl+z] dashboard
@@ -62,20 +64,22 @@ $ npm start
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
-🟢 npm run frontend
+🟢  npm run frontend
 
-> @ frontend /Users/lydell/src/run-pty/demo
-> parcel watch index.html --log-level 4
+> frontend
+> vite --no-clearScreen
 
-[9:51:27 AM]: Building...
-[9:51:27 AM]: Building index.html...
-[9:51:27 AM]: Built index.html...
-[9:51:27 AM]: Producing bundles...
-[9:51:27 AM]: Packaging...
-[9:51:27 AM]: ✨  Built in 67ms.
+
+  vite v2.8.4 dev server running at:
+
+  > Local: http://localhost:3000/
+  > Network: use `--host` to expose
+
+  ready in 136ms.
+
 ^C
 
-⚪ npm run frontend
+⚪  npm run frontend
 exit 0
 
 [enter]  restart
