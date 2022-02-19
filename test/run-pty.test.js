@@ -386,7 +386,6 @@ describe("focused command", () => {
 
   test("running text includes pid", () => {
     expect(replaceAnsi(runningText(12345))).toMatchInlineSnapshot(`
-      ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -401,7 +400,6 @@ describe("focused command", () => {
         "./x/.."
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -416,7 +414,6 @@ describe("focused command", () => {
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -431,7 +428,6 @@ describe("focused command", () => {
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⚪ frontend: npm start⧘
       📂 ⧙web/frontend⧘
       exit 0
@@ -451,7 +447,6 @@ describe("focused command", () => {
         "frontend"
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⚪ frontend: npm start⧘
       exit 0
 
