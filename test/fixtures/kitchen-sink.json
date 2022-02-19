@@ -1,6 +1,7 @@
 [
   {
-    "command": ["node"]
+    "command": ["node"],
+    "killAllSequence": "\u0003\u0003"
   },
   {
     "command": ["npm", "start"],

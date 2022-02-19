@@ -1359,6 +1359,7 @@ const runCommands = (commandDescriptions) => {
         onRequest: (data) => {
           requests.push({ commandIndex: index, data });
           handleNextRequest();
+          return undefined;
         },
         onExit: () => {
           // Exit the whole program if all commands are killed.
