@@ -159,6 +159,12 @@ const cursorUp = (n) => `\x1B[${n}A`;
  * @param {number} n
  * @returns {string}
  */
+const cursorDown = (n) => `\x1B[${n}B`;
+
+/**
+ * @param {number} n
+ * @returns {string}
+ */
 const cursorHorizontalAbsolute = (n) => `\x1B[${n}G`;
 
 /**
@@ -1113,7 +1119,15 @@ const runCommands = (commandDescriptions) => {
     // command’s output.
 
     if (extraTextPrinted) {
-      process.stdout.write(`\f${CLEAR_LEFT}${CLEAR_DOWN}${cursorUp(1)}`);
+      // `RESET_COLOR` is needed because `CLEAR_LEFT` and `CLEAR_DOWN` paint the
+      // area they clear with the current background color otherwise. Since we
+      // use `RESET_COLOR`, we also have to use `SAVE_CURSOR` and
+      // `RESTORE_CURSOR` to restore the current colors when done.
+      process.stdout.write(
+        `${SAVE_CURSOR}${cursorDown(
+          1
+        )}${RESET_COLOR}${CLEAR_LEFT}${CLEAR_DOWN}${RESTORE_CURSOR}`
+      );
       extraTextPrinted = false;
     }
 
@@ -1129,6 +1143,15 @@ const runCommands = (commandDescriptions) => {
     const helper = (extraText) => {
       if (command.isSimpleLog) {
         const numLines = extraText.split("\n").length;
+        // `\f` is like `\n` except the cursor column is preserved on the new
+        // line. We print the `\f`s so that if we’re at the bottom of the
+        // terminal window, empty space is created for `extraText`. However, if
+        // there’s currently a background color, the new lines will be colored.
+        // We can’t solve that with doing `RESET_COLOR` and `SAVE_CURSOR`
+        // earlier, because the `\f`s might cause scrolling but `SAVE_CURSOR`
+        // and `RESTORE_CURSOR` are relative to the screen, not the content. As
+        // a workaround we let the lines be colored, and later clear that using
+        // `CLEAR_DOWN`. (There’s no text to clear at that point; only color.)
         process.stdout.write(
           data +
             "\f".repeat(numLines) +
@@ -1136,6 +1159,7 @@ const runCommands = (commandDescriptions) => {
             SAVE_CURSOR +
             RESET_COLOR +
             "\n".repeat(1) +
+            CLEAR_DOWN +
             extraText +
             RESTORE_CURSOR
         );
