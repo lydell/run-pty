@@ -497,11 +497,18 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 const NOT_SIMPLE_LOG_ESCAPE =
   /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 
-// These escapes should be printed when they first occur, but not when re-printing history.
-// They result in getting a response on stdin. The commands might not be in a
-// state where they expect such stdin at the time we re-print history. For
-// example, Vim asks for the terminal background/foreground colors on startup.
-// But if it receives such a response later, it treats it as if the user typed those characters.
+// These escapes should be printed when they first occur, but not when
+// re-printing history.  They result in getting a response on stdin. The
+// commands might not be in a state where they expect such stdin at the time we
+// re-print history. For example, Vim asks for the terminal
+// background/foreground colors on startup.  But if it receives such a response
+// later, it treats it as if the user typed those characters.
+//
+// When using `conptyInheritCursor` (Windows only), the pty writes a 6n escape
+// to get the cursor position, and then waits for the response before actually
+// starting the command. There used to be a problem where the commands
+// effectively wouldn’t start executing until focused. That’s solved by handling
+// requests and responses this way.
 //
 // https://xfree86.org/current/ctlseqs.html
 //
@@ -899,31 +906,7 @@ class Command {
       conptyInheritCursor: true,
     });
 
-    // if (IS_WINDOWS) {
-    //   // See `onData` below for why we do this.
-    //   // It’s important to get the line number right. Otherwise the pty emits
-    //   // cursor movements trying to adjust for it or something, resulting in
-    //   // lost lines of output (cursor is moved up and lines are overwritten).
-    //   terminal.write(`\x1B[${this.history.split("\n").length};1R`);
-    // }
-
-    // let first = true;
-
     const disposeOnData = terminal.onData((data) => {
-      // When using `conptyInheritCursor` (Windows only), a 6n escape is the
-      // first thing we get here. If we print that code to the console, we will
-      // get a `\x1B[2;1R` (cursor position) reply on stdin. The pty is waiting
-      // for such a message. By default we pass on all stdin so the pty gets it.
-      // So if we have a single (focused by default) command it all works
-      // automatically. But if we have multiple commands, the pty still waits
-      // for the message before executing the command. And we won’t print the 6n
-      // escape until we focus it. This means commands effectively don’t start
-      // executing until focused. For this reason we ignore this escape and send
-      // the reply above instead. This has the side bonus of the 6n escape never
-      // reaching the command’s stdin.
-      // const shouldIgnore = IS_WINDOWS && first && data === "\x1B[6n";
-      // first = false;
-      // if (!shouldIgnore) {
       for (const [index, part] of data.split(ESCAPES_REQUEST).entries()) {
         if (index % 2 === 0) {
           const statusFromRulesChanged = this.pushHistory(part);
@@ -932,7 +915,6 @@ class Command {
           this.onRequest(part);
         }
       }
-      // }
     });
 
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
