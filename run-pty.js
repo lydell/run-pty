@@ -505,11 +505,14 @@ const NOT_SIMPLE_LOG_ESCAPE =
 //
 // https://xfree86.org/current/ctlseqs.html
 //
-// - 6n: Report Cursor Position. There are others such as 5n that report other things.
+// - 6n: Report Cursor Position. Reply uses `R` instead of `n`.
+// - ?6n: Also report Cursor Position. Reply uses `R` instead of `n`.
 // - t: Report window position, size, title etc.
-// - ]10;? and ]11;?: Report background/foreground color. https://unix.stackexchange.com/a/172674
-const ESCAPES_WITH_RESPONSE =
-  /\x1B\[(?:\??\d*n|\d*(?:;\d*){0,2}t)|\x1b\]1[01];\?\x07/g;
+// - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
+const ESCAPES_REQUEST =
+  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1b\]1[01];\?\x07)/g;
+const ESCAPES_RESPONSE =
+  /(\x1B\[(?:\d+;\d+R|\?\d+;\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1b\]1[01];[^\x07]+\x07)/g;
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
@@ -809,6 +812,7 @@ class Command {
       label: string,
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
+      onRequest: (data: string) => undefined,
       onExit: () => undefined,
      }} commandInit
    */
@@ -823,6 +827,7 @@ class Command {
       killAllSequence,
     },
     onData,
+    onRequest,
     onExit,
   }) {
     const formattedCommand = commandToPresentationName([file, ...args]);
@@ -840,6 +845,7 @@ class Command {
         ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
         : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
     this.onData = onData;
+    this.onRequest = onRequest;
     this.onExit = onExit;
     this.history = "";
     this.historyAlternateScreen = "";
@@ -893,15 +899,15 @@ class Command {
       conptyInheritCursor: true,
     });
 
-    if (IS_WINDOWS) {
-      // See `onData` below for why we do this.
-      // It’s important to get the line number right. Otherwise the pty emits
-      // cursor movements trying to adjust for it or something, resulting in
-      // lost lines of output (cursor is moved up and lines are overwritten).
-      terminal.write(`\x1B[${this.history.split("\n").length};1R`);
-    }
+    // if (IS_WINDOWS) {
+    //   // See `onData` below for why we do this.
+    //   // It’s important to get the line number right. Otherwise the pty emits
+    //   // cursor movements trying to adjust for it or something, resulting in
+    //   // lost lines of output (cursor is moved up and lines are overwritten).
+    //   terminal.write(`\x1B[${this.history.split("\n").length};1R`);
+    // }
 
-    let first = true;
+    // let first = true;
 
     const disposeOnData = terminal.onData((data) => {
       // When using `conptyInheritCursor` (Windows only), a 6n escape is the
@@ -915,14 +921,18 @@ class Command {
       // executing until focused. For this reason we ignore this escape and send
       // the reply above instead. This has the side bonus of the 6n escape never
       // reaching the command’s stdin.
-      const shouldIgnore = IS_WINDOWS && first && data === "\x1B[6n";
-      first = false;
-      if (!shouldIgnore) {
-        const statusFromRulesChanged = this.pushHistory(
-          data.replace(ESCAPES_WITH_RESPONSE, "")
-        );
-        this.onData(data, statusFromRulesChanged);
+      // const shouldIgnore = IS_WINDOWS && first && data === "\x1B[6n";
+      // first = false;
+      // if (!shouldIgnore) {
+      for (const [index, part] of data.split(ESCAPES_REQUEST).entries()) {
+        if (index % 2 === 0) {
+          const statusFromRulesChanged = this.pushHistory(part);
+          this.onData(part, statusFromRulesChanged);
+        } else {
+          this.onRequest(part);
+        }
       }
+      // }
     });
 
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
@@ -1298,6 +1308,22 @@ const runCommands = (commandDescriptions) => {
     }
   };
 
+  /** @type {Array<{ commandIndex: number, data: string }>} */
+  const requests = [];
+  let requestInFlight = false;
+
+  /**
+   * @returns {void}
+   */
+  const handleNextRequest = () => {
+    if (requestInFlight || requests.length === 0) {
+      return;
+    }
+    const request = requests[0];
+    process.stdout.write(request.data);
+    requestInFlight = true;
+  };
+
   /** @type {Array<Command>} */
   const commands = commandDescriptions.map(
     (commandDescription, index) =>
@@ -1329,6 +1355,10 @@ const runCommands = (commandDescriptions) => {
               }
               return undefined;
           }
+        },
+        onRequest: (data) => {
+          requests.push({ commandIndex: index, data });
+          handleNextRequest();
         },
         onExit: () => {
           // Exit the whole program if all commands are killed.
@@ -1378,17 +1408,38 @@ const runCommands = (commandDescriptions) => {
   process.stdin.setRawMode(true);
 
   process.stdin.on("data", (data) => {
-    onStdin(
-      data.toString("utf8"),
-      current,
-      commands,
-      selection,
-      switchToDashboard,
-      switchToCommand,
-      setSelection,
-      killAll,
-      restartExited
-    );
+    for (const [index, part] of data
+      .toString("utf8")
+      .split(ESCAPES_RESPONSE)
+      .entries()) {
+      if (index % 2 === 1 && requests.length > 0) {
+        const request = requests[0];
+        const command = commands[request.commandIndex];
+        switch (command.status.tag) {
+          case "Running":
+          case "Killing":
+            command.status.terminal.write(part);
+            break;
+          case "Exit":
+            break;
+        }
+        requests.shift();
+        requestInFlight = false;
+        handleNextRequest();
+      } else {
+        onStdin(
+          part,
+          current,
+          commands,
+          selection,
+          switchToDashboard,
+          switchToCommand,
+          setSelection,
+          killAll,
+          restartExited
+        );
+      }
+    }
   });
 
   // Clean up all commands if someone tries to kill run-pty.
