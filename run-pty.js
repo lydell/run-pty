@@ -491,6 +491,20 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 const NOT_SIMPLE_LOG_ESCAPE =
   /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 
+// These escapes should be printed when they first occur, but not when re-printing history.
+// They result in getting a response on stdin. The commands might not be in a
+// state where they expect such stdin at the time we re-print history. For
+// example, Vim asks for the terminal background/foreground colors on startup.
+// But if it receives such a response later, it treats it as if the user typed those characters.
+//
+// https://xfree86.org/current/ctlseqs.html
+//
+// - 6n: Report Cursor Position. There are others such as 5n that report other things.
+// - t: Report window position, size, title etc.
+// - ]10;? and ]11;?: Report background/foreground color. https://unix.stackexchange.com/a/172674
+const ESCAPES_WITH_RESPONSE =
+  /\x1B\[(?:\??\d*n|\d*(?:;\d*){0,2}t)|\x1b\]1[01];\?\x07/g;
+
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 /**
@@ -898,7 +912,9 @@ class Command {
       const shouldIgnore = IS_WINDOWS && first && data === "\x1B[6n";
       first = false;
       if (!shouldIgnore) {
-        const statusFromRulesChanged = this.pushHistory(data);
+        const statusFromRulesChanged = this.pushHistory(
+          data.replace(ESCAPES_WITH_RESPONSE, "")
+        );
         this.onData(data, statusFromRulesChanged);
       }
     });
