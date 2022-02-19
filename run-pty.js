@@ -473,15 +473,14 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // If a command moves the cursor to another line it’s not considered a “simple
 // log”. Then it’s not safe to print the keyboard shortcuts.
 //
-// - A, B: Cursor up/down.
+// - A, B: Cursor up/down. Moving down should be safe.
 // - C, D: Cursor left/right. Should be safe! Parcel does this.
 // - E, F: Cursor up/down, and to the start of the line.
 // - G: Cursor absolute position within line. Should be safe! Again, Parcel.
 // - H, f: Cursor absolute position, both x and y. Exception: Moving to the
 //         top-left corner and clearing the screen (ctrl+l).
 // - I, Z: Cursor forward/backward by tab stops. Should be safe.
-// - J: Clear the screen in different ways. Should be safe. It might clear away
-//      the keyboard shortcuts too, but they’ll reappear once a new line is written.
+// - J: Clear the screen in different ways. Should be safe.
 // - K: Erase in line. Should be safe.
 // - L: Insert lines.
 // - M: Delete lines.
@@ -490,7 +489,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - s: Save cursor position.
 // - u: Restore cursor position.
 const NOT_SIMPLE_LOG_ESCAPE =
-  /\x1B\[(?:\d*[ABEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
+  /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
