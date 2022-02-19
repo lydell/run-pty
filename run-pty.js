@@ -505,14 +505,14 @@ const NOT_SIMPLE_LOG_ESCAPE =
 //
 // https://xfree86.org/current/ctlseqs.html
 //
-// - 6n: Report Cursor Position. Reply uses `R` instead of `n`.
-// - ?6n: Also report Cursor Position. Reply uses `R` instead of `n`.
+// - 6n and ?6n: Report Cursor Position. Reply uses `R` instead of `n`.
 // - t: Report window position, size, title etc.
 // - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
 const ESCAPES_REQUEST =
   /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1b\]1[01];\?\x07)/g;
 const ESCAPES_RESPONSE =
-  /(\x1B\[(?:\d+;\d+R|\?\d+;\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1b\]1[01];[^\x07]+\x07)/g;
+  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1b\]1[01];[^\x07]+\x07)/g;
+const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
@@ -1419,7 +1419,24 @@ const runCommands = (commandDescriptions) => {
         switch (command.status.tag) {
           case "Running":
           case "Killing":
-            command.status.terminal.write(part);
+            switch (current.tag) {
+              case "Command":
+                command.status.terminal.write(part);
+                break;
+              // In the dashboard, make an educated guess where the cursor would be in the command.
+              case "Dashboard": {
+                const numLines = (
+                  command.isOnAlternateScreen
+                    ? command.historyAlternateScreen
+                    : command.history
+                ).split("\n").length;
+                const likelyRow = Math.min(numLines, process.stdout.rows);
+                command.status.terminal.write(
+                  part.replace(CURSOR_POSITION_RESPONSE, `$1${likelyRow};1R`)
+                );
+                break;
+              }
+            }
             break;
           case "Exit":
             break;
