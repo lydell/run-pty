@@ -183,7 +183,7 @@ The JSON format lets you specify additional things apart from the command itself
 
 - defaultStatus: This lets you replace 🟢 with a custom status indicator at startup (before your command has written anything). The value works like for `status`.
 
-- killAllSequence: When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to the command to make it exit.
+- killAllSequence: When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to send to the command to make it exit.
 
 Instead of JSON, you can also use [NDJSON] – one JSON object per line (blank lines are OK, too). This is handy if you generate the file on the fly using some primitive scripting language.
 
