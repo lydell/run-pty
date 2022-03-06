@@ -154,6 +154,7 @@ The JSON format lets you specify additional things apart from the command itself
 | cwd | `string` | `"."` | Current working directory for the command. |
 | status | <code>{ [regex: string]: [string,&nbsp;string] &vert; null }</code> | `{}` | Customize the status of the command in the dashboard. |
 | defaultStatus | <code>[string,&nbsp;string] &vert; null</code> | `null` | Customize the default status of the command in the dashboard. |
+| killAllSequence | `string` | `"\u0003"` | Sequence to send to the command when using “kill all”. The default is the escape code for <kbd>ctrl+c</kbd>. |
 
 - command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % npm run frontend` on the command line, the JSON version of it is `["npm", "run", "frontend"]`. And `run-pty % echo 'hello world'` would be `["echo", "hello world"]`.
 
@@ -181,6 +182,8 @@ The JSON format lets you specify additional things apart from the command itself
   - `null` resets the indicator to the standard 🟢 one (_not_ `defaultStatus`).
 
 - defaultStatus: This lets you replace 🟢 with a custom status indicator at startup (before your command has written anything). The value works like for `status`.
+
+- killAllSequence: When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to the command to make it exit.
 
 Instead of JSON, you can also use [NDJSON] – one JSON object per line (blank lines are OK, too). This is handy if you generate the file on the fly using some primitive scripting language.
 

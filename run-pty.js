@@ -22,6 +22,9 @@ const Decode = require("tiny-decoders");
 
 const IS_WINDOWS = process.platform === "win32";
 
+// https://github.com/sindresorhus/ansi-escapes/blob/2b3b59c56ff77a2afdee946bff96f1779d10d775/index.js#L5
+const IS_TERMINAL_APP = process.env.TERM_PROGRAM === "Apple_Terminal";
+
 const SLOW_KILL = 100; // ms
 
 // This is apparently what Windows uses for double clicks.
@@ -66,8 +69,6 @@ const ALL_LABELS = LABEL_GROUPS.join("");
 
 const HIDE_CURSOR = "\x1B[?25l";
 const SHOW_CURSOR = "\x1B[?25h";
-const CURSOR_UP = "\x1B[A";
-const CURSOR_DOWN = "\x1B[B";
 const ENABLE_ALTERNATE_SCREEN = "\x1B[?1049h";
 const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const ALTERNATE_SCREEN_REGEX = /(\x1B\[\?1049[hl])/;
@@ -77,8 +78,13 @@ const ENABLE_MOUSE = "\x1B[?1000;1006h";
 const DISABLE_MOUSE = "\x1B[?1000;1006l";
 const RESET_COLOR = "\x1B[m";
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
+const CLEAR_LEFT = "\x1B[1K";
 const CLEAR_RIGHT = "\x1B[K";
+const CLEAR_DOWN = "\x1B[J";
 const CLEAR_DOWN_REGEX = /\x1B\[0?J$/;
+// These save/restore cursor position _and graphic renditions._
+const SAVE_CURSOR = IS_TERMINAL_APP ? "\u001B7" : "\x1B[s";
+const RESTORE_CURSOR = IS_TERMINAL_APP ? "\u001B8" : "\x1B[u";
 
 const CLEAR_REGEX = (() => {
   const goToTopLeft = /(?:[01](?:;[01])?)?[fH]/;
@@ -142,6 +148,18 @@ const exitIndicator = (exitCode) =>
     : "🔴";
 
 const folder = NO_COLOR ? "⌂" : IS_WINDOWS ? `\x1B[2m⌂${RESET_COLOR}` : "📂";
+
+/**
+ * @param {number} n
+ * @returns {string}
+ */
+const cursorUp = (n) => `\x1B[${n}A`;
+
+/**
+ * @param {number} n
+ * @returns {string}
+ */
+const cursorDown = (n) => `\x1B[${n}B`;
 
 /**
  * @param {number} n
@@ -410,7 +428,7 @@ const runningText = (pid) =>
   `
 ${shortcut(KEYS.kill)} kill ${dim(`(pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
-`.trimEnd();
+`.trim();
 
 /**
  * @param {number} pid
@@ -420,7 +438,7 @@ const killingText = (pid) =>
   `
 ${shortcut(KEYS.kill)} kill ${dim(`(double-press to force) (pid ${pid})`)}
 ${shortcut(KEYS.dashboard)} dashboard
-`.trimEnd();
+`.trim();
 
 /**
  * @param {Array<Command>} commands
@@ -438,7 +456,7 @@ ${cwdText(command)}exit ${exitCode}
 ${shortcut(KEYS.restart)} restart
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
-`.trimEnd();
+`.trim();
 
 /**
  * @param {Status} status
@@ -461,15 +479,14 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // If a command moves the cursor to another line it’s not considered a “simple
 // log”. Then it’s not safe to print the keyboard shortcuts.
 //
-// - A, B: Cursor up/down.
+// - A, B: Cursor up/down. Moving down should be safe.
 // - C, D: Cursor left/right. Should be safe! Parcel does this.
 // - E, F: Cursor up/down, and to the start of the line.
 // - G: Cursor absolute position within line. Should be safe! Again, Parcel.
 // - H, f: Cursor absolute position, both x and y. Exception: Moving to the
 //         top-left corner and clearing the screen (ctrl+l).
 // - I, Z: Cursor forward/backward by tab stops. Should be safe.
-// - J: Clear the screen in different ways. Should be safe. It might clear away
-//      the keyboard shortcuts too, but they’ll reappear once a new line is written.
+// - J: Clear the screen in different ways. Should be safe.
 // - K: Erase in line. Should be safe.
 // - L: Insert lines.
 // - M: Delete lines.
@@ -478,13 +495,33 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - s: Save cursor position.
 // - u: Restore cursor position.
 const NOT_SIMPLE_LOG_ESCAPE =
-  /\x1B\[(?:\d*[ABEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
-const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
+  /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 
-// Windows likes putting a RESET_COLOR at the start of lines if the previous
-// line was colored. I’ve also seen tools print color codes after the newline.
-// Ignore that and consider the line empty anyway.
-const LAST_LINE_REGEX = /(?:^|\n)(?:\x1B\[(?:\d+(?:;\d+)*)?m)?([^\n]*)$/;
+// These escapes should be printed when they first occur, but not when
+// re-printing history.  They result in getting a response on stdin. The
+// commands might not be in a state where they expect such stdin at the time we
+// re-print history. For example, Vim asks for the terminal
+// background/foreground colors on startup.  But if it receives such a response
+// later, it treats it as if the user typed those characters.
+//
+// When using `conptyInheritCursor` (Windows only), the pty writes a 6n escape
+// to get the cursor position, and then waits for the response before actually
+// starting the command. There used to be a problem where the commands
+// effectively wouldn’t start executing until focused. That’s solved by handling
+// requests and responses this way.
+//
+// https://xfree86.org/current/ctlseqs.html
+//
+// - 6n and ?6n: Report Cursor Position. Reply uses `R` instead of `n`.
+// - t: Report window position, size, title etc.
+// - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
+const ESCAPES_REQUEST =
+  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1b\]1[01];\?\x07)/g;
+const ESCAPES_RESPONSE =
+  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1b\]1[01];[^\x07]+\x07)/g;
+const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
+
+const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 /**
  * @param {string} string
@@ -515,26 +552,6 @@ const truncate = (string, maxLength) => {
     }
   }
   return result;
-};
-
-/**
- * @param {string} string
- * @returns {string}
- */
-const moveBack = (string) =>
-  string === "" ? "" : `${CURSOR_UP.repeat(string.split("\n").length - 1)}\r`;
-
-/**
- * Assumes that `moveBack` has been run first. Always clears the first line.
- *
- * @param {string} string
- * @returns {string}
- */
-const erase = (string) => {
-  const numLines = string.split("\n").length;
-  return `\r${CLEAR_RIGHT}${`${CURSOR_DOWN}${CLEAR_RIGHT}`.repeat(
-    numLines - 1
-  )}${CURSOR_UP.repeat(numLines - 1)}`;
 };
 
 /**
@@ -591,8 +608,9 @@ const cmdEscapeArg = (arg) =>
     title: string,
     cwd: string,
     command: Array<string>,
-    status: Array<[RegExp, [string, string] | undefined]>
-    defaultStatus?: [string, string]
+    status: Array<[RegExp, [string, string] | undefined]>,
+    defaultStatus?: [string, string],
+    killAllSequence: string,
    }} CommandDescription
  */
 
@@ -667,6 +685,7 @@ const parseArgs = (args) => {
       command: command2,
       status: [],
       defaultStatus: undefined,
+      killAllSequence: KEY_CODES.kill,
     })),
   };
 };
@@ -749,6 +768,10 @@ const commandDescriptionDecoder = Decode.fields(
         )
       ),
       defaultStatus: field("defaultStatus", Decode.optional(statusDecoder)),
+      killAllSequence: field(
+        "killAllSequence",
+        Decode.optional(Decode.string, KEY_CODES.kill)
+      ),
     };
   },
   { exact: "throw" }
@@ -796,6 +819,7 @@ class Command {
       label: string,
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
+      onRequest: (data: string) => undefined,
       onExit: () => undefined,
      }} commandInit
    */
@@ -807,8 +831,10 @@ class Command {
       command: [file, ...args],
       status: statusRules,
       defaultStatus,
+      killAllSequence,
     },
     onData,
+    onRequest,
     onExit,
   }) {
     const formattedCommand = commandToPresentationName([file, ...args]);
@@ -816,6 +842,7 @@ class Command {
     this.file = file;
     this.args = args;
     this.cwd = cwd;
+    this.killAllSequence = killAllSequence;
     this.title = removeGraphicRenditions(title);
     this.titleWithGraphicRenditions = title;
     this.formattedCommandWithTitle =
@@ -825,6 +852,7 @@ class Command {
         ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
         : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
     this.onData = onData;
+    this.onRequest = onRequest;
     this.onExit = onExit;
     this.history = "";
     this.historyAlternateScreen = "";
@@ -878,33 +906,14 @@ class Command {
       conptyInheritCursor: true,
     });
 
-    if (IS_WINDOWS) {
-      // See `onData` below for why we do this.
-      // It’s important to get the line number right. Otherwise the pty emits
-      // cursor movements trying to adjust for it or something, resulting in
-      // lost lines of output (cursor is moved up and lines are overwritten).
-      terminal.write(`\x1B[${this.history.split("\n").length};1R`);
-    }
-
-    let first = true;
-
     const disposeOnData = terminal.onData((data) => {
-      // When using `conptyInheritCursor` (Windows only), a 6n escape is the
-      // first thing we get here. If we print that code to the console, we will
-      // get a `\x1B[2;1R` (cursor position) reply on stdin. The pty is waiting
-      // for such a message. By default we pass on all stdin so the pty gets it.
-      // So if we have a single (focused by default) command it all works
-      // automatically. But if we have multiple commands, the pty still waits
-      // for the message before executing the command. And we won’t print the 6n
-      // escape until we focus it. This means commands effectively don’t start
-      // executing until focused. For this reason we ignore this escape and send
-      // the reply above instead. This has the side bonus of the 6n escape never
-      // reaching the command’s stdin.
-      const shouldIgnore = IS_WINDOWS && first && data === "\x1B[6n";
-      first = false;
-      if (!shouldIgnore) {
-        const statusFromRulesChanged = this.pushHistory(data);
-        this.onData(data, statusFromRulesChanged);
+      for (const [index, part] of data.split(ESCAPES_REQUEST).entries()) {
+        if (index % 2 === 0) {
+          const statusFromRulesChanged = this.pushHistory(part);
+          this.onData(part, statusFromRulesChanged);
+        } else {
+          this.onRequest(part);
+        }
       }
     });
 
@@ -937,7 +946,7 @@ class Command {
             this.onData("", false);
           }
         }, SLOW_KILL);
-        this.status.terminal.write(KEY_CODES.kill);
+        this.status.terminal.write(this.killAllSequence);
         return undefined;
 
       case "Killing": {
@@ -952,7 +961,7 @@ class Command {
             this.status.terminal.kill("SIGKILL");
           }
         } else {
-          this.status.terminal.write(KEY_CODES.kill);
+          this.status.terminal.write(this.killAllSequence);
         }
         this.status.lastKillPress = now;
         return undefined;
@@ -1083,90 +1092,109 @@ const runCommands = (commandDescriptions) => {
   let attemptedKillAll = false;
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
-  let lastExtraText = "";
-  let lastLine = "";
+  let extraTextPrinted = false;
 
   /**
    * @param {Command} command
    * @param {string} data
+   * @param {{ ignoreAlternateScreen?: boolean }} options
    * @returns {undefined}
    */
-  const printExtraText = (command, data) => {
-    const match = LAST_LINE_REGEX.exec(command.history);
-    const previousLastLine = lastLine;
-    lastLine = match === null ? "" : match[1].replace(CLEAR_DOWN_REGEX, "");
+  const printDataWithExtraText = (
+    command,
+    data,
+    { ignoreAlternateScreen = false } = {}
+  ) => {
+    // Note: For a simple log (no complicating cursor movements or anything) we
+    // can _always_ show extra text. Otherwise, it’s better not to print
+    // anything extra in. We don’t want to put something in the middle of the
+    // command’s output.
 
-    // Notes:
-    // - For a simple log (no cursor movements or anything) we can _always_ show
-    // extra text. Otherwise, it’s better not to print anything extra in. We
-    // don’t want to put something in the middle of the command’s output.
-    // - Visually the last line of the history does not need reprinting, but we
-    // do that anyway to get the cursor at the end of it.
+    if (extraTextPrinted) {
+      // `RESET_COLOR` is needed because `CLEAR_LEFT` and `CLEAR_DOWN` paint the
+      // area they clear with the current background color otherwise. Since we
+      // use `RESET_COLOR`, we also have to use `SAVE_CURSOR` and
+      // `RESTORE_CURSOR` to restore the current colors when done.
+      process.stdout.write(
+        `${SAVE_CURSOR}${cursorDown(
+          1
+        )}${RESET_COLOR}${CLEAR_LEFT}${CLEAR_DOWN}${RESTORE_CURSOR}`
+      );
+      extraTextPrinted = false;
+    }
+
+    if (command.isOnAlternateScreen && !ignoreAlternateScreen) {
+      process.stdout.write(data);
+      return undefined;
+    }
 
     /**
      * @param {string} extraText
-     * @returns {string}
+     * @returns {void}
      */
-    const helper = (extraText) =>
-      RESET_COLOR + extraText + moveBack(extraText) + lastLine;
+    const helper = (extraText) => {
+      if (command.isSimpleLog) {
+        const numLines = extraText.split("\n").length;
+        // `\f` is like `\n` except the cursor column is preserved on the new
+        // line. We print the `\f`s so that if we’re at the bottom of the
+        // terminal window, empty space is created for `extraText`. However, if
+        // there’s currently a background color, the new lines will be colored.
+        // We can’t solve that with doing `RESET_COLOR` and `SAVE_CURSOR`
+        // earlier, because the `\f`s might cause scrolling but `SAVE_CURSOR`
+        // and `RESTORE_CURSOR` are relative to the screen, not the content. As
+        // a workaround we let the lines be colored, and later clear that using
+        // `CLEAR_DOWN`. (There’s no text to clear at that point; only color.)
+        process.stdout.write(
+          data +
+            "\f".repeat(numLines) +
+            cursorUp(numLines) +
+            SAVE_CURSOR +
+            RESET_COLOR +
+            "\n".repeat(1) +
+            CLEAR_DOWN +
+            extraText +
+            RESTORE_CURSOR
+        );
+        extraTextPrinted = true;
+      } else {
+        process.stdout.write(data);
+      }
+    };
 
     switch (command.status.tag) {
-      case "Running": {
-        const extraText = command.isSimpleLog
-          ? helper(runningText(command.status.terminal.pid))
-          : "";
-        process.stdout.write(
-          extraText === "" && lastExtraText === ""
-            ? data
-            : lastExtraText === ""
-            ? data + extraText
-            : erase(lastExtraText) + previousLastLine + data + extraText
-        );
-        lastExtraText = extraText;
+      case "Running":
+        helper(runningText(command.status.terminal.pid));
         return undefined;
-      }
 
-      case "Killing": {
-        const extraText = command.isSimpleLog
-          ? command.status.slow
-            ? helper(killingText(command.status.terminal.pid))
-            : helper(runningText(command.status.terminal.pid))
-          : "";
-        process.stdout.write(
-          extraText === "" && lastExtraText === ""
-            ? data
-            : lastExtraText === ""
-            ? data + extraText
-            : erase(lastExtraText) + previousLastLine + data + extraText
+      case "Killing":
+        helper(
+          command.status.slow
+            ? killingText(command.status.terminal.pid)
+            : runningText(command.status.terminal.pid)
         );
-        lastExtraText = extraText;
         return undefined;
-      }
 
       case "Exit": {
-        const maybeNewline =
-          // If the last line is empty, no newline is needed.
-          lastLine === "" ? "" : "\n";
+        const lastLine = removeGraphicRenditions(getLastLine(command.history));
+        const newlines =
+          // If the last line is empty, no extra newline is needed.
+          lastLine.trim() === "" ? "\n" : "\n\n";
 
         // This has the side effect of moving the cursor, so only do it if needed.
         const disableAlternateScreen = command.isOnAlternateScreen
           ? DISABLE_ALTERNATE_SCREEN
           : "";
 
-        const extraText =
-          HIDE_CURSOR +
-          RESET_COLOR +
-          disableAlternateScreen +
-          maybeNewline +
-          exitText(commands, command, command.status.exitCode);
-
         process.stdout.write(
-          lastExtraText === ""
-            ? data + extraText
-            : erase(lastExtraText) + previousLastLine + data + extraText
+          data +
+            HIDE_CURSOR +
+            RESET_COLOR +
+            disableAlternateScreen +
+            newlines +
+            exitText(commands, command, command.status.exitCode)
         );
 
-        lastExtraText = "";
+        extraTextPrinted = false;
         return undefined;
       }
     }
@@ -1213,14 +1241,9 @@ const runCommands = (commandDescriptions) => {
         CLEAR
     );
 
-    lastExtraText = "";
-    lastLine = "";
+    extraTextPrinted = false;
 
-    if (command.isOnAlternateScreen) {
-      process.stdout.write(joinHistory(command));
-    } else {
-      printExtraText(command, joinHistory(command));
-    }
+    printDataWithExtraText(command, joinHistory(command));
   };
 
   /**
@@ -1267,6 +1290,22 @@ const runCommands = (commandDescriptions) => {
     }
   };
 
+  /** @type {Array<{ commandIndex: number, data: string }>} */
+  const requests = [];
+  let requestInFlight = false;
+
+  /**
+   * @returns {void}
+   */
+  const handleNextRequest = () => {
+    if (requestInFlight || requests.length === 0) {
+      return;
+    }
+    const request = requests[0];
+    process.stdout.write(request.data);
+    requestInFlight = true;
+  };
+
   /** @type {Array<Command>} */
   const commands = commandDescriptions.map(
     (commandDescription, index) =>
@@ -1281,11 +1320,7 @@ const runCommands = (commandDescriptions) => {
                 switch (command.status.tag) {
                   case "Running":
                   case "Killing":
-                    if (command.isOnAlternateScreen) {
-                      process.stdout.write(data);
-                    } else {
-                      printExtraText(command, data);
-                    }
+                    printDataWithExtraText(command, data);
                     return undefined;
                   case "Exit":
                     throw new Error(
@@ -1303,6 +1338,11 @@ const runCommands = (commandDescriptions) => {
               return undefined;
           }
         },
+        onRequest: (data) => {
+          requests.push({ commandIndex: index, data });
+          handleNextRequest();
+          return undefined;
+        },
         onExit: () => {
           // Exit the whole program if all commands are killed.
           if (
@@ -1317,7 +1357,9 @@ const runCommands = (commandDescriptions) => {
             case "Command":
               if (current.index === index) {
                 const command = commands[index];
-                printExtraText(command, "");
+                printDataWithExtraText(command, "", {
+                  ignoreAlternateScreen: true,
+                });
               }
               return undefined;
 
@@ -1349,17 +1391,55 @@ const runCommands = (commandDescriptions) => {
   process.stdin.setRawMode(true);
 
   process.stdin.on("data", (data) => {
-    onStdin(
-      data.toString("utf8"),
-      current,
-      commands,
-      selection,
-      switchToDashboard,
-      switchToCommand,
-      setSelection,
-      killAll,
-      restartExited
-    );
+    for (const [index, part] of data
+      .toString("utf8")
+      .split(ESCAPES_RESPONSE)
+      .entries()) {
+      if (index % 2 === 1 && requests.length > 0) {
+        const request = requests[0];
+        const command = commands[request.commandIndex];
+        switch (command.status.tag) {
+          case "Running":
+          case "Killing":
+            switch (current.tag) {
+              case "Command":
+                command.status.terminal.write(part);
+                break;
+              // In the dashboard, make an educated guess where the cursor would be in the command.
+              case "Dashboard": {
+                const numLines = (
+                  command.isOnAlternateScreen
+                    ? command.historyAlternateScreen
+                    : command.history
+                ).split("\n").length;
+                const likelyRow = Math.min(numLines, process.stdout.rows);
+                command.status.terminal.write(
+                  part.replace(CURSOR_POSITION_RESPONSE, `$1${likelyRow};1R`)
+                );
+                break;
+              }
+            }
+            break;
+          case "Exit":
+            break;
+        }
+        requests.shift();
+        requestInFlight = false;
+        handleNextRequest();
+      } else {
+        onStdin(
+          part,
+          current,
+          commands,
+          selection,
+          switchToDashboard,
+          switchToCommand,
+          setSelection,
+          killAll,
+          restartExited
+        );
+      }
+    }
   });
 
   // Clean up all commands if someone tries to kill run-pty.

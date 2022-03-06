@@ -116,6 +116,7 @@ describe("dashboard", () => {
             file: "file",
             args: [],
             cwd: ".",
+            killAllSequence: "\x03",
             history: "",
             historyAlternateScreen: "",
             isSimpleLog: true,
@@ -124,6 +125,7 @@ describe("dashboard", () => {
             defaultStatus: undefined,
             statusRules: [],
             onData: () => notCalled("onData"),
+            onRequest: () => notCalled("onRequest"),
             onExit: () => notCalled("onExit"),
             pushHistory: () => notCalled("pushHistory"),
             start: () => notCalled("start"),
@@ -386,7 +388,6 @@ describe("focused command", () => {
 
   test("running text includes pid", () => {
     expect(replaceAnsi(runningText(12345))).toMatchInlineSnapshot(`
-      ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -401,7 +402,6 @@ describe("focused command", () => {
         "./x/.."
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -416,7 +416,6 @@ describe("focused command", () => {
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -431,7 +430,6 @@ describe("focused command", () => {
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⚪ frontend: npm start⧘
       📂 ⧙web/frontend⧘
       exit 0
@@ -451,7 +449,6 @@ describe("focused command", () => {
         "frontend"
       )
     ).toMatchInlineSnapshot(`
-      ␊
       ⚪ frontend: npm start⧘
       exit 0
 
@@ -527,6 +524,7 @@ describe("parse args", () => {
           defaultStatus: undefined,
           status: [],
           title: commandToPresentationName(command),
+          killAllSequence: "\x03",
         })),
       };
     }
@@ -668,7 +666,7 @@ describe("parse json", () => {
     expect(testJsonError("key-typo.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
       At root[0]:
-      Expected only these fields: "command", "title", "cwd", "status", "defaultStatus"
+      Expected only these fields: "command", "title", "cwd", "status", "defaultStatus", "killAllSequence"
       Found extra fields: "titel"
     `);
   });
@@ -685,6 +683,7 @@ describe("parse json", () => {
           cwd: ".",
           defaultStatus: undefined,
           status: [],
+          killAllSequence: "\x03\x03",
         },
         {
           command: ["npm", "start"],
@@ -692,6 +691,7 @@ describe("parse json", () => {
           cwd: ".",
           defaultStatus: undefined,
           status: [],
+          killAllSequence: "\x03",
         },
         {
           command: ["npm", "run", "parcel"],
@@ -702,6 +702,7 @@ describe("parse json", () => {
             [/✨/u, undefined],
           ],
           defaultStatus: ["⏳", "S"],
+          killAllSequence: "\x03",
         },
       ],
     });
