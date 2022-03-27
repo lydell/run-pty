@@ -25,7 +25,7 @@
   ],
   "dependencies": {
     "node-pty": "^0.10.1",
-    "tiny-decoders": "^6.0.1"
+    "tiny-decoders": "^7.0.0"
   },
   "devDependencies": {
     "@types/jest": "27.4.1",
