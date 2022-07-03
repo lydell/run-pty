@@ -185,8 +185,6 @@ The JSON format lets you specify additional things apart from the command itself
 
 - killAllSequence: When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to send to the command to make it exit.
 
-Instead of JSON, you can also use [NDJSON] – one JSON object per line (blank lines are OK, too). This is handy if you generate the file on the fly using some primitive scripting language.
-
 ## Credits
 
 - [microsoft/node-pty] does all the heavy lifting of running the commands.
@@ -211,5 +209,4 @@ There might still be occasional flicker. Hopefully the iTerm2 developers will im
 [graphic renditions]: https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
 [iterm2]: https://www.iterm2.com/
 [microsoft/node-pty]: https://github.com/microsoft/node-pty
-[ndjson]: https://github.com/ndjson/ndjson-spec
 [tmux]: https://github.com/tmux/tmux

@@ -62,7 +62,7 @@ describe("help", () => {
       Note: All arguments are strings and passed as-is – no shell script execution.
       Use ⧙sh -c '...'⧘ or similar if you need that.
 
-      Alternatively, specify the commands in a JSON (or NDJSON) file:
+      Alternatively, specify the commands in a JSON file:
 
           ⧙run-pty⧘ run-pty.json
 
@@ -597,6 +597,13 @@ describe("parse json", () => {
     throw new Error("Expected Error!");
   }
 
+  test("empty file", () => {
+    expect(testJsonError("empty.json")).toMatchInlineSnapshot(`
+      Failed to read command descriptions file as JSON:
+      Unexpected end of JSON input
+    `);
+  });
+
   test("invalid json syntax", () => {
     expect(testJsonError("invalid-json-syntax.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
@@ -604,27 +611,17 @@ describe("parse json", () => {
     `);
   });
 
-  test("invalid ndjson syntax", () => {
-    expect(testJsonError("invalid-ndjson-syntax.ndjson"))
-      .toMatchInlineSnapshot(`
-      Failed to read command descriptions file as JSON:
-      Line 2: Unexpected token } in JSON at position 40
-    `);
-  });
-
   test("bad json type", () => {
     expect(testJsonError("bad-json-type.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Expected input to start with [ or { but got: n
+      At root:
+      Expected an array
+      Got: null
     `);
   });
 
   test("empty list of commands", () => {
     expect(testJson("empty-array.json")).toStrictEqual({ tag: "NoCommands" });
-  });
-
-  test("empty NDJSON", () => {
-    expect(testJson("empty.ndjson")).toStrictEqual({ tag: "NoCommands" });
   });
 
   test("empty command", () => {
@@ -672,9 +669,7 @@ describe("parse json", () => {
   });
 
   test("kitchen sink", () => {
-    const parsed = testJson("kitchen-sink.json");
-
-    expect(parsed).toStrictEqual({
+    expect(testJson("kitchen-sink.json")).toStrictEqual({
       tag: "Parsed",
       commands: [
         {
@@ -706,7 +701,5 @@ describe("parse json", () => {
         },
       ],
     });
-
-    expect(testJson("kitchen-sink.ndjson")).toStrictEqual(parsed);
   });
 });

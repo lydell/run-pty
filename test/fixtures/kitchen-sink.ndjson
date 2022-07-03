@@ -1,6 +1,0 @@
-{ "command": ["node"], "killAllSequence": "\u0003\u0003" }
-
-  { "command": ["npm", "start"], "title": "Backend", "defaultStatus": null }
-  
-  
-{ "command": ["npm", "run", "parcel"], "title": "Parcel", "cwd": "frontend", "status": { "🚨": ["🚨", "E"], "✨": null }, "defaultStatus": ["⏳", "S"] } 

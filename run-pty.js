@@ -244,7 +244,7 @@ Separate the commands with a character of choice:
 Note: All arguments are strings and passed as-is – no shell script execution.
 Use ${bold("sh -c '...'")} or similar if you need that.
 
-Alternatively, specify the commands in a JSON (or NDJSON) file:
+Alternatively, specify the commands in a JSON file:
 
     ${runPty} run-pty.json
 
@@ -692,45 +692,12 @@ const parseArgs = (args) => {
  * @returns {Array<CommandDescription>}
  */
 const parseInputFile = (string) => {
-  const first = string.trimStart().slice(0, 1);
-  switch (first) {
-    case "[": {
-      try {
-        return Decode.array(commandDescriptionDecoder)(JSON.parse(string));
-      } catch (error) {
-        throw error instanceof Decode.DecoderError
-          ? new Error(error.format())
-          : error;
-      }
-    }
-
-    case "": // An empty file is empty NDJSON.
-    case "{":
-      return string.split("\n").flatMap((line, lineIndex) => {
-        const trimmed = line.trim();
-        if (trimmed === "") {
-          return [];
-        }
-
-        try {
-          return commandDescriptionDecoder(JSON.parse(trimmed));
-        } catch (error) {
-          throw new Error(
-            `Line ${lineIndex + 1}: ${
-              error instanceof Decode.DecoderError
-                ? error.format()
-                : error instanceof Error
-                ? error.message
-                : "Unknown parse error"
-            }`
-          );
-        }
-      });
-
-    default:
-      throw new Error(
-        `Expected input to start with [ or { but got: ${first || "nothing"}`
-      );
+  try {
+    return Decode.array(commandDescriptionDecoder)(JSON.parse(string));
+  } catch (error) {
+    throw error instanceof Decode.DecoderError
+      ? new Error(error.format())
+      : error;
   }
 };
 
