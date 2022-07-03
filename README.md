@@ -185,6 +185,20 @@ The JSON format lets you specify additional things apart from the command itself
 
 - killAllSequence: When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to send to the command to make it exit.
 
+## --auto-exit
+
+If you want to run a couple of commands in parallel and once they’re done continue with something else, use `--auto-exit`:
+
+```
+$ run-pty --auto-exit % npm ci % dotnet restore && ./build.bash
+```
+
+- You can enter the different commands while they are running to see their progress.
+- Once all commands exit with code 0 (success), run-pty exits with code 0 as well.
+- If some command fails, run-pty does _not_ exit, so you can inspect the failure, and re-run that command if you want.
+- If you exit run-pty before all commands have exited with code 0, run-pty exits with code 1, so that if run-pty was part of a longer command chain, that chain is ended.
+- Note that run-pty is interactive and requires a TTY to run, so this cannot be used in CI, but it can be handy when a human operates the terminal.
+
 ## Credits
 
 - [microsoft/node-pty] does all the heavy lifting of running the commands.

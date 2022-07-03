@@ -66,6 +66,10 @@ describe("help", () => {
 
           ⧙run-pty⧘ run-pty.json
 
+      You can tell run-pty to exit once all commands have exited with status 0:
+
+          ⧙run-pty⧘ --auto-exit ⧙%⧘ npm ci ⧙%⧘ dotnet restore ⧙&&⧘ ./build.bash
+
       Keyboard shortcuts:
 
           ⧙[⧘⧙ctrl+z⧘⧙]⧘ Dashboard
@@ -95,13 +99,16 @@ describe("dashboard", () => {
    *   statusFromRules?: string;
    *   title?: string;
    * }>} items
-   * @param {number} width
+   * @param {{width?: number, attemptedKillAll?: boolean, autoExit?: boolean}} options
    * @returns {string}
    */
-  function testDashboard(items, width) {
+  function testDashboard(
+    items,
+    { width = 80, attemptedKillAll = false, autoExit = false } = {}
+  ) {
     return replaceAnsi(
-      drawDashboard(
-        items.map((item, index) => {
+      drawDashboard({
+        commands: items.map((item, index) => {
           const title =
             item.title === undefined
               ? commandToPresentationName(item.command)
@@ -134,9 +141,10 @@ describe("dashboard", () => {
           };
         }),
         width,
-        false,
-        { tag: "Invisible", index: 0 }
-      )
+        attemptedKillAll,
+        autoExit,
+        selection: { tag: "Invisible", index: 0 },
+      })
     );
   }
 
@@ -165,7 +173,7 @@ describe("dashboard", () => {
   }
 
   test("empty", () => {
-    expect(testDashboard([], 0)).toMatchInlineSnapshot(`
+    expect(testDashboard([], { width: 0 })).toMatchInlineSnapshot(`
       ⧙[⧘⧙⧘⧙]⧘       focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
@@ -174,15 +182,12 @@ describe("dashboard", () => {
 
   test("one command", () => {
     expect(
-      testDashboard(
-        [
-          {
-            command: ["npm", "start"],
-            status: { tag: "Exit", exitCode: 0 },
-          },
-        ],
-        80
-      )
+      testDashboard([
+        {
+          command: ["npm", "start"],
+          status: { tag: "Exit", exitCode: 0 },
+        },
+      ])
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘
 
@@ -193,63 +198,181 @@ describe("dashboard", () => {
     `);
   });
 
-  test("a variety of commands", () => {
+  test("auto exit", () => {
     expect(
       testDashboard(
         [
           {
-            command: [
-              "echo",
-              "./Some_script2.js",
-              "-v",
-              "$end",
-              "",
-              "'quoted'th|ng'",
-              "hello world",
-            ],
-            status: { tag: "Exit", exitCode: 0 },
-            statusFromRules: "!", // Should be ignored.
+            command: ["npm", "start"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
+        ],
+        { autoExit: true }
+      )
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
+
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+
+      The session ends automatically once all commands are ⧙exit 0⧘.
+    `);
+  });
+
+  test("auto exit with restart failed", () => {
+    expect(
+      testDashboard(
+        [
           {
-            command: ["npm", "run", "server"],
-            status: { tag: "Exit", exitCode: 130 },
-            statusFromRules: "!", // Should be ignored.
+            command: ["npm", "start"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
+
           {
-            command: ["ping", "nope"],
-            status: { tag: "Exit", exitCode: 68 },
-            statusFromRules: "!", // Should be ignored.
+            command: ["npm", "run", "build"],
+            status: { tag: "Exit", exitCode: 1 },
           },
-          {
-            command: ["ping", "localhost"],
-            status: {
-              tag: "Killing",
-              terminal: fakeTerminal({ pid: 12345 }),
-              slow: false,
-              lastKillPress: undefined,
-            },
-            statusFromRules: "!", // Should be ignored.
-          },
-          {
-            command: ["yes"],
-            status: {
-              tag: "Running",
-              terminal: fakeTerminal({ pid: 123456 }),
-            },
-          },
+        ],
+
+        { autoExit: true }
+      )
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
+      ⧙[⧘⧙2⧘⧙]⧘  🔴⧘  ⧙exit 1⧘  npm run build⧘
+
+      ⧙[⧘⧙1-2⧘⧙]⧘    focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙enter⧘⧙]⧘  restart failed
+
+      The session ends automatically once all commands are ⧙exit 0⧘.
+    `);
+  });
+
+  test("attempted kill all", () => {
+    expect(
+      testDashboard(
+        [
           {
             command: ["npm", "start"],
             status: {
-              tag: "Running",
-              terminal: fakeTerminal({ pid: 123456 }),
+              tag: "Killing",
+              terminal: fakeTerminal({ pid: 1 }),
+              slow: false,
+              lastKillPress: undefined,
             },
-            statusFromRules: "🚨",
-            title:
-              "very long title for some reason that needs to be cut off at some point",
           },
         ],
-        80
+        { attemptedKillAll: true }
       )
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  ⭕⧘  npm start⧘
+
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+    `);
+  });
+
+  test("auto exit and attempted kill all", () => {
+    expect(
+      testDashboard(
+        [
+          {
+            command: ["npm", "start"],
+            status: {
+              tag: "Killing",
+              terminal: fakeTerminal({ pid: 1 }),
+              slow: false,
+              lastKillPress: undefined,
+            },
+          },
+        ],
+        { attemptedKillAll: true, autoExit: true }
+      )
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  ⭕⧘  npm start⧘
+
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+
+      The session ends automatically once all commands are ⧙exit 0⧘.
+    `);
+  });
+
+  test("auto exit and attempted kill all done", () => {
+    expect(
+      testDashboard(
+        [
+          {
+            command: ["npm", "start"],
+            status: { tag: "Exit", exitCode: 0 },
+          },
+        ],
+        { attemptedKillAll: true, autoExit: true }
+      )
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘␊
+
+    `);
+  });
+
+  test("a variety of commands", () => {
+    expect(
+      testDashboard([
+        {
+          command: [
+            "echo",
+            "./Some_script2.js",
+            "-v",
+            "$end",
+            "",
+            "'quoted'th|ng'",
+            "hello world",
+          ],
+          status: { tag: "Exit", exitCode: 0 },
+          statusFromRules: "!", // Should be ignored.
+        },
+        {
+          command: ["npm", "run", "server"],
+          status: { tag: "Exit", exitCode: 130 },
+          statusFromRules: "!", // Should be ignored.
+        },
+        {
+          command: ["ping", "nope"],
+          status: { tag: "Exit", exitCode: 68 },
+          statusFromRules: "!", // Should be ignored.
+        },
+        {
+          command: ["ping", "localhost"],
+          status: {
+            tag: "Killing",
+            terminal: fakeTerminal({ pid: 12345 }),
+            slow: false,
+            lastKillPress: undefined,
+          },
+          statusFromRules: "!", // Should be ignored.
+        },
+        {
+          command: ["yes"],
+          status: {
+            tag: "Running",
+            terminal: fakeTerminal({ pid: 123456 }),
+          },
+        },
+        {
+          command: ["npm", "start"],
+          status: {
+            tag: "Running",
+            terminal: fakeTerminal({ pid: 123456 }),
+          },
+          statusFromRules: "🚨",
+          title:
+            "very long title for some reason that needs to be cut off at some point",
+        },
+      ])
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘    echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'hel…⧘
       ⧙[⧘⧙2⧘⧙]⧘  ⚪⧘  ⧙exit 130⧘  npm run server⧘
@@ -274,8 +397,7 @@ describe("dashboard", () => {
             tag: "Running",
             terminal: fakeTerminal({ pid: 9980 + i }),
           },
-        })),
-        80
+        }))
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  echo 0⧘
@@ -424,7 +546,7 @@ describe("focused command", () => {
   test("exit 0 with cwd", () => {
     expect(
       render(
-        (command) => exitText([], command, 0),
+        (command) => exitText([], command, 0, false),
         "frontend: npm start",
         "frontend",
         "web/frontend"
@@ -440,10 +562,10 @@ describe("focused command", () => {
     `);
   });
 
-  test("exit 1 without cwd", () => {
+  test("exit 0 without cwd", () => {
     expect(
       render(
-        (command) => exitText([], command, 0),
+        (command) => exitText([], command, 0, false),
         "frontend: npm start",
         "frontend",
         "frontend"
@@ -451,6 +573,41 @@ describe("focused command", () => {
     ).toMatchInlineSnapshot(`
       ⚪ frontend: npm start⧘
       exit 0
+
+      ⧙[⧘⧙enter⧘⧙]⧘  restart
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+    `);
+  });
+
+  test("exit 0 with auto exit (cannot be restarted)", () => {
+    expect(
+      render(
+        (command) => exitText([], command, 0, true),
+        "frontend: npm start",
+        "frontend",
+        "frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      ⚪ frontend: npm start⧘
+      exit 0
+
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+    `);
+  });
+
+  test("exit 1 with auto exit (can be restarted)", () => {
+    expect(
+      render(
+        (command) => exitText([], command, 1, true),
+        "frontend: npm start",
+        "frontend",
+        "frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      🔴 frontend: npm start⧘
+      exit 1
 
       ⧙[⧘⧙enter⧘⧙]⧘  restart
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
@@ -513,9 +670,10 @@ describe("parse args", () => {
   test("commands", () => {
     /**
      * @param {Array<Array<string>>} commands
+     * @param {{ autoExit?: boolean }} options
      * @returns {import("../run-pty").ParseResult}
      */
-    function parsedCommands(commands) {
+    function parsedCommands(commands, { autoExit = false } = {}) {
       return {
         tag: "Parsed",
         commands: commands.map((command) => ({
@@ -526,6 +684,7 @@ describe("parse args", () => {
           title: commandToPresentationName(command),
           killAllSequence: "\x03",
         })),
+        autoExit,
       };
     }
 
@@ -571,6 +730,12 @@ describe("parse args", () => {
 
     expect(parseArgs(["+", "one", "+", "+", "+two", "+"])).toStrictEqual(
       parsedCommands([["one"], ["+two"]])
+    );
+
+    expect(
+      parseArgs(["--auto-exit", "%", "one", "%", "two", "--auto-exit"])
+    ).toStrictEqual(
+      parsedCommands([["one"], ["two", "--auto-exit"]], { autoExit: true })
     );
   });
 });
@@ -700,6 +865,7 @@ describe("parse json", () => {
           killAllSequence: "\x03",
         },
       ],
+      autoExit: false,
     });
   });
 });
