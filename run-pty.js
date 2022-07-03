@@ -55,11 +55,8 @@ const KEY_CODES = {
   restart: "\r",
   dashboard: "\x1a",
   up: "\x1B[A",
-  upVim: "k",
   down: "\x1B[B",
-  downVim: "j",
   enter: "\r",
-  enterVim: "o",
   esc: "\x1B",
 };
 
@@ -1552,7 +1549,6 @@ const onStdin = (
           return undefined;
 
         case KEY_CODES.enter:
-        case KEY_CODES.enterVim:
           if (selection.tag === "Invisible") {
             restartExited();
           } else {
@@ -1561,7 +1557,6 @@ const onStdin = (
           return undefined;
 
         case KEY_CODES.up:
-        case KEY_CODES.upVim:
           setSelection({
             tag: "Keyboard",
             index:
@@ -1574,7 +1569,6 @@ const onStdin = (
           return undefined;
 
         case KEY_CODES.down:
-        case KEY_CODES.downVim:
           setSelection({
             tag: "Keyboard",
             index:
