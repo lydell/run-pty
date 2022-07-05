@@ -297,7 +297,7 @@ Environment variables:
 const killAllLabel = (commands) =>
   commands.some((command) => command.status.tag === "Killing")
     ? `kill all ${dim("(double-press to force) ")}`
-    : commands.every((command) => command.status.tag === "Exit")
+    : commands.every((command) => !("terminal" in command.status))
     ? "exit"
     : "kill all";
 
@@ -449,13 +449,12 @@ ${autoExitText}
 const isDone = ({ commands, attemptedKillAll, autoExit }) =>
   // All commands are killed:
   (attemptedKillAll &&
-    commands.every((command) => command.status.tag === "Exit")) ||
+    commands.every((command) => !("terminal" in command.status))) ||
   // --auto-exit and all commands are “exit 0”:
   (autoExit.tag === "AutoExit" &&
     commands.every(
       (command) =>
-        (command.status.tag === "Exit" && command.status.exitCode === 0) ||
-        (attemptedKillAll && command.status.tag === "Waiting")
+        command.status.tag === "Exit" && command.status.exitCode === 0
     ));
 
 /**
