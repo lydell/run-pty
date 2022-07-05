@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("path");
+const os = require("os");
 
 const {
   __forTests: {
@@ -12,8 +13,10 @@ const {
     historyStart,
     killingText,
     parseArgs,
+    runningIndicator,
     runningText,
     summarizeLabels,
+    waitingText,
   },
 } = require("../run-pty");
 
@@ -70,6 +73,10 @@ describe("help", () => {
 
           ⧙run-pty⧘ --auto-exit ⧙%⧘ npm ci ⧙%⧘ dotnet restore ⧙&&⧘ ./build.bash
 
+          --auto-exit           auto exit when done, no parallel limit
+          --auto-exit=<number>  at most <number> parallel processes
+          --auto-exit=auto      uses the number of logical CPU cores
+
       Keyboard shortcuts:
 
           ⧙[⧘⧙ctrl+z⧘⧙]⧘ Dashboard
@@ -99,12 +106,16 @@ describe("dashboard", () => {
    *   statusFromRules?: string;
    *   title?: string;
    * }>} items
-   * @param {{width?: number, attemptedKillAll?: boolean, autoExit?: boolean}} options
+   * @param {{width?: number, attemptedKillAll?: boolean, autoExit?: import("../run-pty").AutoExit}} options
    * @returns {string}
    */
   function testDashboard(
     items,
-    { width = 80, attemptedKillAll = false, autoExit = false } = {}
+    {
+      width = 80,
+      attemptedKillAll = false,
+      autoExit = { tag: "NoAutoExit" },
+    } = {}
   ) {
     return replaceAnsi(
       drawDashboard({
@@ -114,7 +125,7 @@ describe("dashboard", () => {
               ? commandToPresentationName(item.command)
               : item.title;
           return {
-            label: ALL_LABELS[index] || "",
+            label: ALL_LABELS[index],
             title,
             titleWithGraphicRenditions: title,
             formattedCommandWithTitle: commandToPresentationName(item.command),
@@ -207,7 +218,7 @@ describe("dashboard", () => {
             status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
         ],
-        { autoExit: true }
+        { autoExit: { tag: "AutoExit", maxParallel: Infinity } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -216,6 +227,52 @@ describe("dashboard", () => {
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
+      The session ends automatically once all commands are ⧙exit 0⧘.
+    `);
+  });
+
+  test("auto exit, max 1", () => {
+    expect(
+      testDashboard(
+        [
+          {
+            command: ["npm", "start"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
+          },
+        ],
+        { autoExit: { tag: "AutoExit", maxParallel: 1 } }
+      )
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
+
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+
+      At most 1 command runs at a time.
+      The session ends automatically once all commands are ⧙exit 0⧘.
+    `);
+  });
+
+  test("auto exit, max 2", () => {
+    expect(
+      testDashboard(
+        [
+          {
+            command: ["npm", "start"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
+          },
+        ],
+        { autoExit: { tag: "AutoExit", maxParallel: 2 } }
+      )
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
+
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+
+      At most 2 commands run at a time.
       The session ends automatically once all commands are ⧙exit 0⧘.
     `);
   });
@@ -235,7 +292,7 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: true }
+        { autoExit: { tag: "AutoExit", maxParallel: Infinity } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -289,7 +346,10 @@ describe("dashboard", () => {
             },
           },
         ],
-        { attemptedKillAll: true, autoExit: true }
+        {
+          attemptedKillAll: true,
+          autoExit: { tag: "AutoExit", maxParallel: Infinity },
+        }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⭕⧘  npm start⧘
@@ -311,7 +371,10 @@ describe("dashboard", () => {
             status: { tag: "Exit", exitCode: 0 },
           },
         ],
-        { attemptedKillAll: true, autoExit: true }
+        {
+          attemptedKillAll: true,
+          autoExit: { tag: "AutoExit", maxParallel: Infinity },
+        }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘␊
@@ -483,8 +546,14 @@ describe("focused command", () => {
   }
 
   test("just a command", () => {
-    expect(render(historyStart, "npm start", "npm start", "./"))
-      .toMatchInlineSnapshot(`
+    expect(
+      render(
+        (command) => historyStart(runningIndicator, command),
+        "npm start",
+        "npm start",
+        "./"
+      )
+    ).toMatchInlineSnapshot(`
       🟢 npm start⧘␊
 
     `);
@@ -492,7 +561,12 @@ describe("focused command", () => {
 
   test("title with command and changed cwd", () => {
     expect(
-      render(historyStart, "frontend: npm start", "frontend", "web/frontend")
+      render(
+        (command) => historyStart(runningIndicator, command),
+        "frontend: npm start",
+        "frontend",
+        "web/frontend"
+      )
     ).toMatchInlineSnapshot(`
       🟢 frontend: npm start⧘
       📂 ⧙web/frontend⧘␊
@@ -501,8 +575,14 @@ describe("focused command", () => {
   });
 
   test("cwd not shown if same as title", () => {
-    expect(render(historyStart, "frontend: npm start", "frontend", "frontend"))
-      .toMatchInlineSnapshot(`
+    expect(
+      render(
+        (command) => historyStart(runningIndicator, command),
+        "frontend: npm start",
+        "frontend",
+        "frontend"
+      )
+    ).toMatchInlineSnapshot(`
       🟢 frontend: npm start⧘␊
 
     `);
@@ -546,7 +626,7 @@ describe("focused command", () => {
   test("exit 0 with cwd", () => {
     expect(
       render(
-        (command) => exitText([], command, 0, false),
+        (command) => exitText([], command, 0, { tag: "NoAutoExit" }),
         "frontend: npm start",
         "frontend",
         "web/frontend"
@@ -565,7 +645,7 @@ describe("focused command", () => {
   test("exit 0 without cwd", () => {
     expect(
       render(
-        (command) => exitText([], command, 0, false),
+        (command) => exitText([], command, 0, { tag: "NoAutoExit" }),
         "frontend: npm start",
         "frontend",
         "frontend"
@@ -583,7 +663,8 @@ describe("focused command", () => {
   test("exit 0 with auto exit (cannot be restarted)", () => {
     expect(
       render(
-        (command) => exitText([], command, 0, true),
+        (command) =>
+          exitText([], command, 0, { tag: "AutoExit", maxParallel: Infinity }),
         "frontend: npm start",
         "frontend",
         "frontend"
@@ -600,7 +681,7 @@ describe("focused command", () => {
   test("exit 1 with auto exit (can be restarted)", () => {
     expect(
       render(
-        (command) => exitText([], command, 1, true),
+        (command) => exitText([], command, 1, { tag: "NoAutoExit" }),
         "frontend: npm start",
         "frontend",
         "frontend"
@@ -610,6 +691,22 @@ describe("focused command", () => {
       exit 1
 
       ⧙[⧘⧙enter⧘⧙]⧘  restart
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+    `);
+  });
+
+  test("waiting text", () => {
+    expect(
+      render(
+        () => waitingText([]),
+        "frontend: npm start",
+        "frontend",
+        "frontend"
+      )
+    ).toMatchInlineSnapshot(`
+      Waiting for other commands to finish before starting.
+
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -653,8 +750,7 @@ describe("parse args", () => {
   });
 
   test("no commands", () => {
-    const error = parseArgs(["%"]);
-    expect(error).toMatchInlineSnapshot(`
+    expect(parseArgs(["%"])).toMatchInlineSnapshot(`
       Object {
         message: The first argument is either the delimiter to use between commands,
       or the path to a JSON file that describes the commands.
@@ -667,13 +763,42 @@ describe("parse args", () => {
     expect(parseArgs(["%", "%", "%"])).toStrictEqual({ tag: "NoCommands" });
   });
 
+  test("unknown flag", () => {
+    expect(parseArgs(["--unknown"])).toMatchInlineSnapshot(`
+      Object {
+        message: Bad flag: --unknown
+      Only these forms are accepted:
+          --auto-exit           auto exit when done, no parallel limit
+          --auto-exit=<number>  at most <number> parallel processes
+          --auto-exit=auto      uses the number of logical CPU cores,
+        tag: Error,
+      }
+    `);
+  });
+
+  test("bad auto exit value", () => {
+    expect(parseArgs(["--auto-exit=nope"])).toMatchInlineSnapshot(`
+      Object {
+        message: Bad flag: --auto-exit=nope
+      Only these forms are accepted:
+          --auto-exit           auto exit when done, no parallel limit
+          --auto-exit=<number>  at most <number> parallel processes
+          --auto-exit=auto      uses the number of logical CPU cores,
+        tag: Error,
+      }
+    `);
+  });
+
   test("commands", () => {
     /**
      * @param {Array<Array<string>>} commands
-     * @param {{ autoExit?: boolean }} options
+     * @param {{ autoExit?: import("../run-pty").AutoExit }} options
      * @returns {import("../run-pty").ParseResult}
      */
-    function parsedCommands(commands, { autoExit = false } = {}) {
+    function parsedCommands(
+      commands,
+      { autoExit = { tag: "NoAutoExit" } } = {}
+    ) {
       return {
         tag: "Parsed",
         commands: commands.map((command) => ({
@@ -732,10 +857,48 @@ describe("parse args", () => {
       parsedCommands([["one"], ["+two"]])
     );
 
+    expect(parseArgs(["-", "one", "-", "-two", "-"])).toStrictEqual(
+      parsedCommands([["one"], ["-two"]])
+    );
+
+    expect(parseArgs(["--", "one", "--", "--two", "--"])).toStrictEqual(
+      parsedCommands([["one"], ["--two"]])
+    );
+
+    expect(parseArgs(["---", "one", "---", "---two", "---"])).toStrictEqual(
+      parsedCommands([["one"], ["---two"]])
+    );
+
     expect(
       parseArgs(["--auto-exit", "%", "one", "%", "two", "--auto-exit"])
     ).toStrictEqual(
-      parsedCommands([["one"], ["two", "--auto-exit"]], { autoExit: true })
+      parsedCommands([["one"], ["two", "--auto-exit"]], {
+        autoExit: { tag: "AutoExit", maxParallel: Infinity },
+      })
+    );
+
+    expect(
+      parseArgs(["--auto-exit=1", "%", "one", "%", "two", "--auto-exit"])
+    ).toStrictEqual(
+      parsedCommands([["one"], ["two", "--auto-exit"]], {
+        autoExit: { tag: "AutoExit", maxParallel: 1 },
+      })
+    );
+
+    expect(
+      parseArgs(["--auto-exit=234", "%", "one", "%", "two", "--auto-exit"])
+    ).toStrictEqual(
+      parsedCommands([["one"], ["two", "--auto-exit"]], {
+        autoExit: { tag: "AutoExit", maxParallel: 234 },
+      })
+    );
+
+    expect(
+      parseArgs(["--auto-exit=auto", "%", "one", "%", "two", "--auto-exit"])
+    ).toStrictEqual(
+      parsedCommands([["one"], ["two", "--auto-exit"]], {
+        autoExit: { tag: "AutoExit", maxParallel: os.cpus().length },
+      })
     );
   });
 });
@@ -865,7 +1028,7 @@ describe("parse json", () => {
           killAllSequence: "\x03",
         },
       ],
-      autoExit: false,
+      autoExit: { tag: "NoAutoExit" },
     });
   });
 });

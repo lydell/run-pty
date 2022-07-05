@@ -116,11 +116,11 @@ const CLEAR_REGEX = (() => {
   return RegExp(`(?:${variants.join("|")})$`);
 })();
 
-// TODO
+// TODO: NO_COLOR and WINDOWS icons.
 const waitingIndicator = NO_COLOR
   ? "○"
   : IS_WINDOWS
-  ? `\x1B[91m○${RESET_COLOR}`
+  ? `\x1B[93m○${RESET_COLOR}`
   : "🥱";
 
 const runningIndicator = NO_COLOR
@@ -244,7 +244,9 @@ const autoExitHelp = `
     --auto-exit           auto exit when done, no parallel limit
     --auto-exit=<number>  at most <number> parallel processes
     --auto-exit=auto      uses the number of logical CPU cores
-`.trim();
+`
+  .slice(1)
+  .trimEnd();
 
 const help = `
 Run several commands concurrently.
@@ -414,8 +416,8 @@ const drawDashboard = ({
           enter === "" ? undefined : "",
           Number.isFinite(autoExit.maxParallel)
             ? `At most ${autoExit.maxParallel} ${
-                autoExit.maxParallel === 1 ? "command" : "commands"
-              }`
+                autoExit.maxParallel === 1 ? "command runs" : "commands run"
+              } at a time.`
             : undefined,
           `The session ends automatically once all commands are ${bold(
             "exit 0"
@@ -485,11 +487,12 @@ const cwdText = (command) =>
     : `${folder}${EMOJI_WIDTH_FIX} ${dim(command.cwd)}\n`;
 
 /**
+ * @param {string} indicator
  * @param {CommandText} command
  * @returns {string}
  */
-const historyStart = (command) =>
-  `${runningIndicator}${EMOJI_WIDTH_FIX} ${
+const historyStart = (indicator, command) =>
+  `${indicator}${EMOJI_WIDTH_FIX} ${
     command.formattedCommandWithTitle
   }${RESET_COLOR}\n${cwdText(command)}`;
 
@@ -728,32 +731,30 @@ const parseArgs = (args) => {
   /** @type {AutoExit} */
   let autoExit = { tag: "NoAutoExit" };
 
-  for (const iterator of flags) {
-    for (const flag of iterator) {
-      if (args[0] === "-h" || args[0] === "--help") {
-        return { tag: "Help" };
-      }
-      const match = AUTO_EXIT_REGEX.exec(flag);
-      if (match !== null) {
-        autoExit = {
-          tag: "AutoExit",
-          maxParallel:
-            match[1] === undefined
-              ? Infinity
-              : match[1] === "auto"
-              ? os.cpus().length
-              : Number(match[1]),
-        };
-      } else {
-        return {
-          tag: "Error",
-          message: [
-            `Bad flag: ${flag}`,
-            "Only these forms are accepted:",
-            autoExitHelp,
-          ].join("\n"),
-        };
-      }
+  for (const flag of flags) {
+    if (args[0] === "-h" || args[0] === "--help") {
+      return { tag: "Help" };
+    }
+    const match = AUTO_EXIT_REGEX.exec(flag);
+    if (match !== null) {
+      autoExit = {
+        tag: "AutoExit",
+        maxParallel:
+          match[1] === undefined
+            ? Infinity
+            : match[1] === "auto"
+            ? os.cpus().length
+            : Number(match[1]),
+      };
+    } else {
+      return {
+        tag: "Error",
+        message: [
+          `Bad flag: ${flag}`,
+          "Only these forms are accepted:",
+          autoExitHelp,
+        ].join("\n"),
+      };
     }
   }
 
@@ -970,19 +971,18 @@ class Command {
     this.onData = onData;
     this.onRequest = onRequest;
     this.onExit = onExit;
-    this.history = "";
+    this.history = historyStart(waitingIndicator, this);
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     /** @type {Status} */
-    this.status = { tag: "Exit", exitCode: 0 };
+    this.status = { tag: "Waiting" };
     /** @type {string | undefined} */
     this.statusFromRules = extractStatus(defaultStatus);
     /** @type {[string, string] | undefined} */
     this.defaultStatus = defaultStatus;
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
-    this.start();
   }
 
   /**
@@ -995,7 +995,7 @@ class Command {
       );
     }
 
-    this.history = historyStart(this);
+    this.history = historyStart(runningIndicator, this);
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
@@ -1386,7 +1386,7 @@ const runCommands = (commandDescriptions, autoExit) => {
   const killAll = () => {
     attemptedKillAll = true;
     const notExited = commands.filter(
-      (command) => command.status.tag !== "Exit"
+      (command) => "terminal" in command.status
     );
     if (notExited.length === 0) {
       switchToDashboard();
@@ -1481,6 +1481,13 @@ const runCommands = (commandDescriptions, autoExit) => {
             process.exit(
               autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
             );
+          }
+
+          const nextWaiting = commands.find(
+            (command) => command.status.tag === "Waiting"
+          );
+          if (nextWaiting !== undefined) {
+            nextWaiting.start();
           }
 
           switch (current.tag) {
@@ -1601,6 +1608,12 @@ const runCommands = (commandDescriptions, autoExit) => {
       SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + DISABLE_MOUSE + RESET_COLOR
     );
   });
+
+  const maxParallel =
+    autoExit.tag === "AutoExit" ? autoExit.maxParallel : Infinity;
+  for (const command of commands.slice(0, maxParallel)) {
+    command.start();
+  }
 
   if (commandDescriptions.length === 1) {
     switchToCommand(0);
@@ -1862,7 +1875,9 @@ module.exports = {
     historyStart,
     killingText,
     parseArgs,
+    runningIndicator,
     runningText,
     summarizeLabels,
+    waitingText,
   },
 };
