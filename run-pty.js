@@ -10,6 +10,7 @@ const Decode = require("tiny-decoders");
 
 /**
  * @typedef {
+    | { tag: "Waiting" }
     | { tag: "Running", terminal: import("node-pty").IPty }
     | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined }
     | { tag: "Exit", exitCode: number }
@@ -114,6 +115,13 @@ const CLEAR_REGEX = (() => {
 
   return RegExp(`(?:${variants.join("|")})$`);
 })();
+
+// TODO
+const waitingIndicator = NO_COLOR
+  ? "○"
+  : IS_WINDOWS
+  ? `\x1B[91m○${RESET_COLOR}`
+  : "🥱";
 
 const runningIndicator = NO_COLOR
   ? "›"
@@ -453,6 +461,8 @@ const isDone = ({ commands, attemptedKillAll, autoExit }) =>
  */
 const getPid = (command) => {
   switch (command.status.tag) {
+    case "Waiting":
+      return "";
     case "Running":
     case "Killing":
       return ` ${dim(`(pid ${command.status.terminal.pid})`)}`;
@@ -482,6 +492,18 @@ const historyStart = (command) =>
   `${runningIndicator}${EMOJI_WIDTH_FIX} ${
     command.formattedCommandWithTitle
   }${RESET_COLOR}\n${cwdText(command)}`;
+
+/**
+ * @param {Array<Command>} commands
+ * @returns {string}
+ */
+const waitingText = (commands) =>
+  `
+Waiting for other commands to finish before starting.
+
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
+${shortcut(KEYS.dashboard)} dashboard
+`.trim();
 
 /**
  * @param {number} pid
@@ -533,6 +555,9 @@ ${shortcut(KEYS.dashboard)} dashboard
  */
 const statusText = (status, statusFromRules = runningIndicator) => {
   switch (status.tag) {
+    case "Waiting":
+      return [waitingIndicator, undefined];
+
     case "Running":
       return [statusFromRules, undefined];
 
@@ -964,9 +989,9 @@ class Command {
    * @returns {void}
    */
   start() {
-    if (this.status.tag !== "Exit") {
+    if ("terminal" in this.status) {
       throw new Error(
-        `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.title}`
+        `Cannot start pty with pid ${this.status.terminal.pid} because ${this.status.tag} for: ${this.title}`
       );
     }
 
@@ -1058,8 +1083,11 @@ class Command {
         return undefined;
       }
 
+      case "Waiting":
       case "Exit":
-        throw new Error(`Cannot kill already exited pty for: ${this.title}`);
+        throw new Error(
+          `Cannot kill ${this.status.tag} pty for: ${this.title}`
+        );
     }
   }
 
@@ -1266,6 +1294,7 @@ const runCommands = (commandDescriptions, autoExit) => {
         );
         return undefined;
 
+      case "Waiting":
       case "Exit": {
         const lastLine = removeGraphicRenditions(getLastLine(command.history));
         const newlines =
@@ -1283,7 +1312,9 @@ const runCommands = (commandDescriptions, autoExit) => {
             RESET_COLOR +
             disableAlternateScreen +
             newlines +
-            exitText(commands, command, command.status.exitCode, autoExit)
+            (command.status.tag === "Waiting"
+              ? waitingText(commands)
+              : exitText(commands, command, command.status.exitCode, autoExit))
         );
 
         extraTextPrinted = false;
@@ -1421,9 +1452,10 @@ const runCommands = (commandDescriptions, autoExit) => {
                   case "Killing":
                     printDataWithExtraText(command, data);
                     return undefined;
+                  case "Waiting":
                   case "Exit":
                     throw new Error(
-                      `Received unexpected output from already exited pty for: ${command.title}\n${data}`
+                      `Received unexpected output from ${command.status.tag} pty for: ${command.title}\n${data}`
                     );
                 }
               }
@@ -1518,6 +1550,7 @@ const runCommands = (commandDescriptions, autoExit) => {
               }
             }
             break;
+          case "Waiting":
           case "Exit":
             break;
         }
@@ -1551,7 +1584,7 @@ const runCommands = (commandDescriptions, autoExit) => {
     process.on(event, (error) => {
       console.error(error);
       for (const command of commands) {
-        if (command.status.tag !== "Exit") {
+        if ("terminal" in command.status) {
           if (IS_WINDOWS) {
             command.status.terminal.kill();
           } else {
@@ -1605,6 +1638,20 @@ const onStdin = (
     case "Command": {
       const command = commands[current.index];
       switch (command.status.tag) {
+        case "Waiting":
+          switch (data) {
+            case KEY_CODES.kill:
+              killAll();
+              return undefined;
+
+            case KEY_CODES.dashboard:
+              switchToDashboard();
+              return undefined;
+
+            default:
+              return undefined;
+          }
+
         case "Running":
         case "Killing":
           switch (data) {
