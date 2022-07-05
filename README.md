@@ -199,6 +199,8 @@ $ run-pty --auto-exit % npm ci % dotnet restore && ./build.bash
 - If you exit run-pty before all commands have exited with code 0, run-pty exits with code 1, so that if run-pty was part of a longer command chain, that chain is ended.
 - Note that run-pty is interactive and requires a TTY to run, so this cannot be used in CI, but it can be handy when a human operates the terminal.
 
+To limit how many commands run in parallel, use for example `--auto-exit=5` or `--auto-exit=auto` (uses the number of logical CPU cores).
+
 ## Credits
 
 - [microsoft/node-pty] does all the heavy lifting of running the commands.
