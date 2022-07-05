@@ -4,6 +4,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const pty = require("node-pty");
 const Decode = require("tiny-decoders");
 
@@ -208,7 +209,7 @@ const [ICON_WIDTH, EMOJI_WIDTH_FIX] =
   IS_WINDOWS || NO_COLOR ? [1, ""] : [2, cursorHorizontalAbsolute(3)];
 
 /**
- * @param {Array<string>} labels
+ * @param {Array<string | undefined>} labels
  * @returns {string}
  */
 const summarizeLabels = (labels) => {
@@ -231,6 +232,12 @@ const summarizeLabels = (labels) => {
     .join("/");
 };
 
+const autoExitHelp = `
+    --auto-exit           auto exit when done, no parallel limit
+    --auto-exit=<number>  at most <number> parallel processes
+    --auto-exit=auto      uses the number of logical CPU cores
+`.trim();
+
 const help = `
 Run several commands concurrently.
 Show output for one command at a time.
@@ -252,6 +259,8 @@ Alternatively, specify the commands in a JSON file:
 You can tell run-pty to exit once all commands have exited with status 0:
 
     ${runPty} --auto-exit ${pc} npm ci ${pc} dotnet restore ${et} ./build.bash
+
+${autoExitHelp}
 
 Keyboard shortcuts:
 
@@ -291,8 +300,9 @@ const killAllLabel = (commands) =>
 const drawDashboardCommandLines = (commands, width, selection) => {
   const lines = commands.map((command) => {
     const [icon, status] = statusText(command.status, command.statusFromRules);
+    const { label = " " } = command;
     return {
-      label: shortcut(command.label || " ", { pad: false }),
+      label: shortcut(label, { pad: false }),
       icon,
       status,
       title: command.titleWithGraphicRenditions,
@@ -339,7 +349,7 @@ const drawDashboardCommandLines = (commands, width, selection) => {
     commands: Array<Command>,
     width: number,
     attemptedKillAll: boolean,
-    autoExit: boolean,
+    autoExit: AutoExit,
     selection: Selection,
    }} options
  * @returns {string}
@@ -376,7 +386,7 @@ const drawDashboard = ({
 
   const enter =
     pid === undefined
-      ? autoExit
+      ? autoExit.tag === "AutoExit"
         ? commands.some(
             (command) =>
               command.status.tag === "Exit" && command.status.exitCode !== 0
@@ -390,11 +400,22 @@ const drawDashboard = ({
           KEYS.unselect
         )} unselect`;
 
-  const autoExitText = autoExit
-    ? `${
-        enter === "" ? "" : "\n"
-      }The session ends automatically once all commands are ${bold("exit 0")}.`
-    : "";
+  const autoExitText =
+    autoExit.tag === "AutoExit"
+      ? [
+          enter === "" ? undefined : "",
+          Number.isFinite(autoExit.maxParallel)
+            ? `At most ${autoExit.maxParallel} ${
+                autoExit.maxParallel === 1 ? "command" : "commands"
+              }`
+            : undefined,
+          `The session ends automatically once all commands are ${bold(
+            "exit 0"
+          )}.`,
+        ]
+          .filter((x) => x !== undefined)
+          .join("\n")
+      : "";
 
   return `
 ${finalLines}
@@ -411,7 +432,7 @@ ${autoExitText}
  * @param {{
     commands: Array<Command>,
     attemptedKillAll: boolean,
-    autoExit: boolean,
+    autoExit: AutoExit,
    }} options
  * @returns {boolean}
  */
@@ -420,7 +441,7 @@ const isDone = ({ commands, attemptedKillAll, autoExit }) =>
   (attemptedKillAll &&
     commands.every((command) => command.status.tag === "Exit")) ||
   // --auto-exit and all commands are “exit 0”:
-  (autoExit &&
+  (autoExit.tag === "AutoExit" &&
     commands.every(
       (command) =>
         command.status.tag === "Exit" && command.status.exitCode === 0
@@ -486,12 +507,14 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @param {Array<Command>} commands
  * @param {CommandText} command
  * @param {number} exitCode
- * @param {boolean} autoExit
+ * @param {AutoExit} autoExit
  * @returns {string}
  */
 const exitText = (commands, command, exitCode, autoExit) => {
   const restart =
-    autoExit && exitCode === 0 ? "" : `${shortcut(KEYS.enter)} restart\n`;
+    autoExit.tag === "AutoExit" && exitCode === 0
+      ? ""
+      : `${shortcut(KEYS.enter)} restart\n`;
   return `
 ${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
     command.formattedCommandWithTitle
@@ -641,12 +664,14 @@ const cmdEscapeArg = (arg) =>
     `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
   );
 
+const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto))?$/;
+
 /**
  * @typedef {
     | { tag: "Help" }
     | { tag: "NoCommands" }
     | { tag: "Error", message: string }
-    | { tag: "Parsed", commands: Array<CommandDescription>, autoExit: boolean }
+    | { tag: "Parsed", commands: Array<CommandDescription>, autoExit: AutoExit }
    } ParseResult
  *
  * @typedef {{
@@ -657,6 +682,11 @@ const cmdEscapeArg = (arg) =>
     defaultStatus?: [string, string],
     killAllSequence: string,
    }} CommandDescription
+ *
+ * @typedef {
+    | { tag: "NoAutoExit" }
+    | { tag: "AutoExit", maxParallel: number }
+   } AutoExit
  */
 
 /**
@@ -664,18 +694,47 @@ const cmdEscapeArg = (arg) =>
  * @returns {ParseResult}
  */
 const parseArgs = (args) => {
-  if (args.length === 0 || args[0] === "-h" || args[0] === "--help") {
+  if (args.length === 0) {
     return { tag: "Help" };
   }
 
-  const autoExit = args[0] === "--auto-exit";
-  if (autoExit) {
-    args.shift();
+  const [flags, restArgs] = partitionArgs(args);
+
+  /** @type {AutoExit} */
+  let autoExit = { tag: "NoAutoExit" };
+
+  for (const iterator of flags) {
+    for (const flag of iterator) {
+      if (args[0] === "-h" || args[0] === "--help") {
+        return { tag: "Help" };
+      }
+      const match = AUTO_EXIT_REGEX.exec(flag);
+      if (match !== null) {
+        autoExit = {
+          tag: "AutoExit",
+          maxParallel:
+            match[1] === undefined
+              ? Infinity
+              : match[1] === "auto"
+              ? os.cpus().length
+              : Number(match[1]),
+        };
+      } else {
+        return {
+          tag: "Error",
+          message: [
+            `Bad flag: ${flag}`,
+            "Only these forms are accepted:",
+            autoExitHelp,
+          ].join("\n"),
+        };
+      }
+    }
   }
 
-  if (args.length === 1) {
+  if (restArgs.length === 1) {
     try {
-      const commands = parseInputFile(fs.readFileSync(args[0], "utf8"));
+      const commands = parseInputFile(fs.readFileSync(restArgs[0], "utf8"));
       return commands.length === 0
         ? { tag: "NoCommands" }
         : { tag: "Parsed", commands, autoExit };
@@ -703,12 +762,12 @@ const parseArgs = (args) => {
     }
   }
 
-  const delimiter = args[0];
+  const delimiter = restArgs[0];
 
   let command = [];
   const commands = [];
 
-  for (const arg of args) {
+  for (const arg of restArgs) {
     if (arg === delimiter) {
       if (command.length > 0) {
         commands.push(command);
@@ -739,6 +798,20 @@ const parseArgs = (args) => {
     })),
     autoExit,
   };
+};
+
+const LOOKS_LIKE_FLAG = /^--?\w/;
+
+/**
+ * @param {Array<string>} args
+ * @returns {[Array<string>, Array<string>]}
+ */
+const partitionArgs = (args) => {
+  let index = 0;
+  while (index < args.length && LOOKS_LIKE_FLAG.test(args[index])) {
+    index++;
+  }
+  return [args.slice(0, index), args.slice(index)];
 };
 
 /**
@@ -834,7 +907,7 @@ const joinHistory = (command) =>
 class Command {
   /**
    * @param {{
-      label: string,
+      label: string | undefined,
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onRequest: (data: string) => undefined,
@@ -1102,7 +1175,7 @@ const getLastLine = (string) => {
 
 /**
  * @param {Array<CommandDescription>} commandDescriptions
- * @param {boolean} autoExit
+ * @param {AutoExit} autoExit
  * @returns {void}
  */
 const runCommands = (commandDescriptions, autoExit) => {
@@ -1286,7 +1359,7 @@ const runCommands = (commandDescriptions, autoExit) => {
     );
     if (notExited.length === 0) {
       switchToDashboard();
-      process.exit(autoExit ? 1 : 0);
+      process.exit(autoExit.tag === "AutoExit" ? 1 : 0);
     } else {
       for (const command of notExited) {
         command.kill();
@@ -1300,12 +1373,13 @@ const runCommands = (commandDescriptions, autoExit) => {
    * @returns {void}
    */
   const restartExited = () => {
-    const exited = autoExit
-      ? commands.filter(
-          (command) =>
-            command.status.tag === "Exit" && command.status.exitCode !== 0
-        )
-      : commands.filter((command) => command.status.tag === "Exit");
+    const exited =
+      autoExit.tag === "AutoExit"
+        ? commands.filter(
+            (command) =>
+              command.status.tag === "Exit" && command.status.exitCode !== 0
+          )
+        : commands.filter((command) => command.status.tag === "Exit");
     if (exited.length > 0) {
       for (const command of exited) {
         command.start();
@@ -1335,7 +1409,7 @@ const runCommands = (commandDescriptions, autoExit) => {
   const commands = commandDescriptions.map(
     (commandDescription, index) =>
       new Command({
-        label: ALL_LABELS[index] || "",
+        label: ALL_LABELS[index],
         commandDescription,
         onData: (data, statusFromRulesChanged) => {
           switch (current.tag) {
@@ -1372,7 +1446,9 @@ const runCommands = (commandDescriptions, autoExit) => {
           // Exit the whole program if all commands have exited.
           if (isDone({ commands, attemptedKillAll, autoExit })) {
             switchToDashboard();
-            process.exit(autoExit && attemptedKillAll ? 1 : 0);
+            process.exit(
+              autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
+            );
           }
 
           switch (current.tag) {
@@ -1505,7 +1581,7 @@ const runCommands = (commandDescriptions, autoExit) => {
  * @param {Current} current
  * @param {Array<Command>} commands
  * @param {Selection} selection
- * @param {boolean} autoExit
+ * @param {AutoExit} autoExit
  * @param {() => void} switchToDashboard
  * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
@@ -1560,7 +1636,9 @@ const onStdin = (
               return undefined;
 
             case KEY_CODES.restart:
-              if (!(autoExit && command.status.exitCode === 0)) {
+              if (
+                !(autoExit.tag === "AutoExit" && command.status.exitCode === 0)
+              ) {
                 command.start();
                 switchToCommand(current.index);
               }
