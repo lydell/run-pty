@@ -41,7 +41,7 @@
   "scripts": {
     "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node get-cursor-position.js % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\" % make watch % make signals % node test-clear-down.js % node colored-log.js",
     "example": "node run-pty.js example.json",
-    "auto-exit": "node run-pty.js --auto-exit % node -v % npm -v && echo success",
+    "auto-exit": "node run-pty.js --auto-exit=2 % sleep 3 % sleep 1 % sleep 2 % sleep 1 % sleep 1 && echo success",
     "test": "npm run auto-exit && prettier --check . && eslint . --report-unused-disable-directives && tsc && jest",
     "prepublishOnly": "npm test"
   },
