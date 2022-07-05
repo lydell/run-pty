@@ -1483,11 +1483,18 @@ const runCommands = (commandDescriptions, autoExit) => {
             );
           }
 
-          const nextWaiting = commands.find(
+          const nextWaitingIndex = commands.findIndex(
             (command) => command.status.tag === "Waiting"
           );
-          if (nextWaiting !== undefined && !attemptedKillAll) {
-            nextWaiting.start();
+          if (nextWaitingIndex !== -1 && !attemptedKillAll) {
+            commands[nextWaitingIndex].start();
+            // If starting the command we’re currently on, redraw to remove `waitingText`.
+            if (
+              current.tag === "Command" &&
+              current.index === nextWaitingIndex
+            ) {
+              switchToCommand(current.index);
+            }
           }
 
           switch (current.tag) {
