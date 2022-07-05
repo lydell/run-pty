@@ -454,7 +454,8 @@ const isDone = ({ commands, attemptedKillAll, autoExit }) =>
   (autoExit.tag === "AutoExit" &&
     commands.every(
       (command) =>
-        command.status.tag === "Exit" && command.status.exitCode === 0
+        (command.status.tag === "Exit" && command.status.exitCode === 0) ||
+        (attemptedKillAll && command.status.tag === "Waiting")
     ));
 
 /**
@@ -1486,7 +1487,7 @@ const runCommands = (commandDescriptions, autoExit) => {
           const nextWaiting = commands.find(
             (command) => command.status.tag === "Waiting"
           );
-          if (nextWaiting !== undefined) {
+          if (nextWaiting !== undefined && !attemptedKillAll) {
             nextWaiting.start();
           }
 
