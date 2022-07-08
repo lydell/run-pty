@@ -116,11 +116,10 @@ const CLEAR_REGEX = (() => {
   return RegExp(`(?:${variants.join("|")})$`);
 })();
 
-// TODO: NO_COLOR and WINDOWS icons.
 const waitingIndicator = NO_COLOR
-  ? "○"
+  ? "■"
   : IS_WINDOWS
-  ? `\x1B[93m○${RESET_COLOR}`
+  ? `\x1B[93m■${RESET_COLOR}`
   : "🥱";
 
 const runningIndicator = NO_COLOR
