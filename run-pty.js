@@ -1531,7 +1531,7 @@ const runCommands = (commandDescriptions, autoExit) => {
     }
   });
 
-  process.stdin.setRawMode(true);
+  // process.stdin.setRawMode(true);
 
   process.stdin.on("data", (data) => {
     for (const [index, part] of data
@@ -1842,8 +1842,8 @@ const getCommandIndexFromMousePosition = (commands, { x, y }) => {
  */
 const run = () => {
   if (!process.stdin.isTTY) {
-    console.error("run-pty requires stdin to be a TTY to run properly.");
-    process.exit(1);
+    // console.error("run-pty requires stdin to be a TTY to run properly.");
+    // process.exit(1);
   }
 
   const parseResult = parseArgs(process.argv.slice(2));

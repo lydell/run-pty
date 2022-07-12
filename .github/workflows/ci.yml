@@ -29,6 +29,9 @@ jobs:
         if: steps.cache-node_modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      - name: CI PTY
+        run: echo | node run-pty.js --auto-exit=1 % sleep 2 % sleep 1
+
       - name: tsc
         run: npx tsc
 
