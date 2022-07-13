@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const stream = require("stream");
+const pty = require("node-pty");
 const Decode = require("tiny-decoders");
 
 /**
@@ -674,20 +674,6 @@ const commandToPresentationName = (command) =>
     .join(" ");
 
 /**
- * @param {Array<string>} command
- * @param {string} title
- * @returns
- */
-const getFormattedCommandWithTitle = (command, title) => {
-  const formattedCommand = commandToPresentationName(command);
-  return title === formattedCommand
-    ? formattedCommand
-    : NO_COLOR
-    ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
-    : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
-};
-
-/**
  * @param {string} arg
  * @returns {string}
  */
@@ -947,26 +933,6 @@ const joinHistory = (command) =>
       command.historyAlternateScreen +
       (command.isOnAlternateScreen ? "" : DISABLE_ALTERNATE_SCREEN));
 
-/**
- *
- * @param {Array<string>} command
- * @returns {[string, Array<string>]}
- */
-const getRunnableCommand = ([file, ...args]) =>
-  IS_WINDOWS
-    ? [
-        "cmd.exe",
-        [
-          "/d",
-          "/s",
-          "/q",
-          "/c",
-          cmdEscapeMetaChars(file),
-          ...args.map(cmdEscapeArg),
-        ],
-      ]
-    : [file, args];
-
 class Command {
   /**
    * @param {{
@@ -982,7 +948,7 @@ class Command {
     commandDescription: {
       title,
       cwd,
-      command,
+      command: [file, ...args],
       status: statusRules,
       defaultStatus,
       killAllSequence,
@@ -991,16 +957,20 @@ class Command {
     onRequest,
     onExit,
   }) {
+    const formattedCommand = commandToPresentationName([file, ...args]);
     this.label = label;
-    this.command = command;
+    this.file = file;
+    this.args = args;
     this.cwd = cwd;
     this.killAllSequence = killAllSequence;
     this.title = removeGraphicRenditions(title);
     this.titleWithGraphicRenditions = title;
-    this.formattedCommandWithTitle = getFormattedCommandWithTitle(
-      command,
-      title
-    );
+    this.formattedCommandWithTitle =
+      title === formattedCommand
+        ? formattedCommand
+        : NO_COLOR
+        ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
+        : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
     this.onData = onData;
     this.onRequest = onRequest;
     this.onExit = onExit;
@@ -1034,18 +1004,26 @@ class Command {
     this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
 
-    const [file, args] = getRunnableCommand(this.command);
-    const terminal = require("node-pty").spawn(
-      file,
-      IS_WINDOWS ? args.join(" ") : args,
-      {
-        cwd: path.resolve(this.cwd),
-        cols: process.stdout.columns,
-        rows: process.stdout.rows,
-        // Avoid conpty adding escape sequences to clear the screen:
-        conptyInheritCursor: true,
-      }
-    );
+    const [file, args] = IS_WINDOWS
+      ? [
+          "cmd.exe",
+          [
+            "/d",
+            "/s",
+            "/q",
+            "/c",
+            cmdEscapeMetaChars(this.file),
+            ...this.args.map(cmdEscapeArg),
+          ].join(" "),
+        ]
+      : [this.file, this.args];
+    const terminal = pty.spawn(file, args, {
+      cwd: path.resolve(this.cwd),
+      cols: process.stdout.columns,
+      rows: process.stdout.rows,
+      // Avoid conpty adding escape sequences to clear the screen:
+      conptyInheritCursor: true,
+    });
 
     const disposeOnData = terminal.onData((data) => {
       for (const [index, part] of data.split(ESCAPES_REQUEST).entries()) {
@@ -1543,7 +1521,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   process.stdout.on("resize", () => {
     for (const command of commands) {
-      if (command.status.tag === "Running") {
+      if ("terminal" in command.status) {
         command.status.terminal.resize(
           process.stdout.columns,
           process.stdout.rows
@@ -1863,140 +1841,158 @@ const getCommandIndexFromMousePosition = (commands, { x, y }) => {
   return undefined;
 };
 
-class MemoryWriteStream extends stream.Writable {
-  content = "";
-
-  /**
-   * @param {Buffer | string} chunk
-   * @param {BufferEncoding} _encoding
-   * @param {(error?: Error | null) => void} callback
-   */
-  _write(chunk, _encoding, callback) {
-    this.content += chunk.toString();
-    callback();
-  }
-}
-
-/**
- * 
- * @returns {{
-  markedStream: stream.Writable;
-  unmarkedStream: MemoryWriteStream;
-}}
- */
-function duoStream() {
-  const unmarkedStream = new MemoryWriteStream();
-
-  class MarkedWriteStream extends stream.Writable {
-    /**
-     * @param {Buffer | string} chunk
-     * @param {BufferEncoding} _encoding
-     * @param {(error?: Error | null) => void} callback
-     */
-    _write(chunk, _encoding, callback) {
-      unmarkedStream.write(`⟪${chunk.toString()}⟫`);
-      callback();
-    }
-  }
-
-  return {
-    markedStream: new MarkedWriteStream(),
-    unmarkedStream,
-  };
-}
-
 /**
  * @param {Array<CommandDescription>} commandDescriptions
  * @param {number} maxParallel
  * @returns {void}
  */
 const runNonInteractively = (commandDescriptions, maxParallel) => {
-  let commandIndex = 0;
-  let failed = false;
+  let attemptedKillAll = false;
 
-  // TODO: Hook ctrl+c etc and properly kill child processes.
-  // Or is that even needed? Try it out! The sub process needs to start another sub process in turn
-  // that starts a server so it’s easy to see port conflict errors.
-
-  const runNextCommand = () => {
-    if (commandIndex >= commandDescriptions.length) {
-      process.exit(failed ? 1 : 0);
+  /**
+   * @returns {void}
+   */
+  const killAll = () => {
+    attemptedKillAll = true;
+    const notExited = commands.filter(
+      (command) => "terminal" in command.status
+    );
+    if (notExited.length === 0) {
+      // TODO: Maybe print a summary here.
+      // switchToDashboard();
+      process.exit(1);
+    } else {
+      for (const command of notExited) {
+        command.kill();
+      }
+      // TODO: Maybe print the ones killing here.
+      // So you can see how killing other commands go:
+      // switchToDashboard();
     }
-
-    const command = commandDescriptions[commandIndex];
-    commandIndex++;
-
-    /** @type {CommandText} */
-    const commandText = {
-      formattedCommandWithTitle: getFormattedCommandWithTitle(
-        command.command,
-        command.title
-      ),
-      title: command.title,
-      cwd: command.cwd,
-    };
-
-    // TODO: Log x/y as well.
-    process.stdout.write(historyStart(runningIndicator, commandText));
-
-    const [file, args] = getRunnableCommand(command.command);
-    const child = require("child_process").spawn(file, args, {
-      cwd: path.resolve(command.cwd),
-    });
-
-    // TODO: Interleave them in the future.
-    let stdout = "";
-    let stderr = "";
-
-    /**
-     * @param {Error} error
-     * @returns {void}
-     */
-    const handleError = (error) => {
-      if (failed) {
-        return;
-      }
-      // TODO: Print nicely.
-      console.log("error", error);
-      failed = true;
-      runNextCommand();
-    };
-
-    child.on("error", handleError);
-
-    child.stdout.on("error", handleError);
-
-    child.stderr.on("error", handleError);
-
-    child.stdout.on(
-      "data",
-      /** @type {(chunk: Buffer) => void} */ (chunk) => {
-        stdout += chunk.toString("utf8");
-      }
-    );
-
-    child.stderr.on(
-      "data",
-      /** @type {(chunk: Buffer) => void} */ (chunk) => {
-        stderr += chunk.toString("utf8");
-      }
-    );
-
-    child.on("exit", (code, signal) => {
-      if (failed) {
-        return;
-      }
-      // TODO: Print nicely.
-      console.log("exit", code, signal, stdout, "|||", stderr);
-      if (code !== 0) {
-        failed = true;
-      }
-      runNextCommand();
-    });
   };
 
-  for (let i = 0; i < Math.min(maxParallel, commandDescriptions.length); i++) {
-    runNextCommand();
+  /** @type {Array<{ commandIndex: number, data: string }>} */
+  const requests = [];
+  let requestInFlight = false;
+
+  /**
+   * @returns {void}
+   */
+  const handleNextRequest = () => {
+    if (requestInFlight || requests.length === 0) {
+      return;
+    }
+    const request = requests[0];
+    process.stdout.write(request.data);
+    requestInFlight = true;
+  };
+
+  /** @type {Array<Command>} */
+  const commands = commandDescriptions.map(
+    (commandDescription, index) =>
+      new Command({
+        label: ALL_LABELS[index],
+        commandDescription,
+        onData: () => undefined,
+        onRequest: (data) => {
+          requests.push({ commandIndex: index, data });
+          handleNextRequest();
+          return undefined;
+        },
+        onExit: () => {
+          // Exit the whole program if all commands have exited.
+          if (
+            isDone({
+              commands,
+              attemptedKillAll,
+              autoExit: { tag: "AutoExit", maxParallel },
+            })
+          ) {
+            // TODO: Maybe print a summary here.
+            // switchToDashboard();
+            process.exit(attemptedKillAll ? 1 : 0);
+          }
+
+          const nextWaitingIndex = commands.findIndex(
+            (command) => command.status.tag === "Waiting"
+          );
+          if (nextWaitingIndex !== -1 && !attemptedKillAll) {
+            const command = commands[nextWaitingIndex];
+            command.start();
+            // TODO: Print newline?
+            process.stdout.write(command.history);
+            // If starting the command we’re currently on, redraw to remove `waitingText`.
+            // if (
+            //   current.tag === "Command" &&
+            //   current.index === nextWaitingIndex
+            // ) {
+            //   switchToCommand(current.index);
+            // }
+          }
+
+          // switch (current.tag) {
+          //   case "Command":
+          //     if (current.index === index) {
+          //       const command = commands[index];
+          //       printDataWithExtraText(command, "", {
+          //         ignoreAlternateScreen: true,
+          //       });
+          //     }
+          //     return undefined;
+
+          //   case "Dashboard":
+          //     // Redraw dashboard.
+          //     switchToDashboard();
+          //     return undefined;
+          // }
+          return undefined;
+        },
+      })
+  );
+
+  process.stdout.on("resize", () => {
+    for (const command of commands) {
+      if ("terminal" in command.status) {
+        command.status.terminal.resize(
+          process.stdout.columns,
+          process.stdout.rows
+        );
+      }
+    }
+  });
+
+  // TODO: Is it possible to handle stdin for requests?
+
+  // Clean up all commands if someone tries to kill run-pty.
+  for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+    process.on(signal, killAll);
+  }
+
+  // Don’t leave running processes behind in case of an unexpected error.
+  for (const event of ["uncaughtException", "unhandledRejection"]) {
+    process.on(event, (error) => {
+      console.error(error);
+      for (const command of commands) {
+        if ("terminal" in command.status) {
+          if (IS_WINDOWS) {
+            command.status.terminal.kill();
+          } else {
+            command.status.terminal.kill("SIGKILL");
+          }
+        }
+      }
+      process.exit(1);
+    });
+  }
+
+  // TODO: Print which ones are waiting as well?
+  // Maybe: Always print a summary of everything (like the dashboard)
+  // whenever there’s an update?
+
+  for (const command of commands.slice(0, maxParallel)) {
+    command.start();
+    // TODO: Print newline?
+    process.stdout.write(command.history);
   }
 };
 
