@@ -30,7 +30,7 @@ jobs:
         run: npm ci
 
       - name: CI PTY
-        run: echo | node run-pty.js --auto-exit=1 % sleep 2 % sleep 1
+        run: node ci-pty.js
 
       - name: tsc
         run: npx tsc
