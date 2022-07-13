@@ -2,6 +2,10 @@
 
 const pty = require("node-pty");
 
+console.log("stdin", process.stdin.isTTY);
+console.log("stdout", process.stdout.isTTY);
+console.log("stderr", process.stderr.isTTY);
+
 const terminal = pty.spawn("node", ["tmp.js"], {
   cwd: process.cwd(),
   cols: process.stdout.columns,
