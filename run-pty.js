@@ -1885,6 +1885,11 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
     const notExited = commands.filter(
       (command) => "terminal" in command.status
     );
+
+    // Pressing ctrl+c prints `^C` to the terminal. Move the cursor back so we
+    // overwrite that. `^C` will be seen in each command history.
+    process.stdout.write("\r");
+
     if (notExited.length === 0) {
       // TODO: Maybe print a summary here.
       // switchToDashboard();
@@ -2027,10 +2032,6 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
       process.exit(1);
     });
   }
-
-  // TODO: Print which ones are waiting as well?
-  // Maybe: Always print a summary of everything (like the dashboard)
-  // whenever there’s an update?
 
   for (const [index, command] of commands.entries()) {
     if (index < maxParallel) {
