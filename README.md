@@ -197,7 +197,7 @@ $ run-pty --auto-exit % npm ci % dotnet restore && ./build.bash
 - Once all commands exit with code 0 (success), run-pty exits with code 0 as well.
 - If some command fails, run-pty does _not_ exit, so you can inspect the failure, and re-run that command if you want.
 - If you exit run-pty before all commands have exited with code 0, run-pty exits with code 1, so that if run-pty was part of a longer command chain, that chain is ended.
-- Note that run-pty is interactive and requires a TTY to run, so this cannot be used in CI, but it can be handy when a human operates the terminal.
+- In CI – where there is no TTY – the `--auto-exit` mode degrades to a simpler, non-interactive UI.
 
 To limit how many commands run in parallel, use for example `--auto-exit=5` or `--auto-exit=auto` (uses the number of logical CPU cores).
 
