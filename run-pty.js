@@ -917,6 +917,10 @@ const statusDecoder = Decode.nullable(
  * @returns {string}
  */
 const joinHistory = (command) =>
+  historyStart(
+    command.status.tag === "Waiting" ? waitingIndicator : runningIndicator,
+    command
+  ) +
   command.history +
   (command.historyAlternateScreen === ""
     ? command.isOnAlternateScreen
@@ -967,7 +971,7 @@ class Command {
     this.onData = onData;
     this.onRequest = onRequest;
     this.onExit = onExit;
-    this.history = historyStart(waitingIndicator, this);
+    this.history = "";
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
@@ -991,7 +995,7 @@ class Command {
       );
     }
 
-    this.history = historyStart(runningIndicator, this);
+    this.history = "";
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
