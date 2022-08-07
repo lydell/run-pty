@@ -1593,6 +1593,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
     }
   });
 
+  setupSignalHandlers(commands, killAll);
+
   process.stdin.setRawMode(true);
 
   process.stdin.on("data", (data) => {
@@ -1648,28 +1650,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
       }
     }
   });
-
-  // Clean up all commands if someone tries to kill run-pty.
-  for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
-    process.on(signal, killAll);
-  }
-
-  // Don’t leave running processes behind in case of an unexpected error.
-  for (const event of ["uncaughtException", "unhandledRejection"]) {
-    process.on(event, (error) => {
-      console.error(error);
-      for (const command of commands) {
-        if ("terminal" in command.status) {
-          if (IS_WINDOWS) {
-            command.status.terminal.kill();
-          } else {
-            command.status.terminal.kill("SIGKILL");
-          }
-        }
-      }
-      process.exit(1);
-    });
-  }
 
   process.on("exit", () => {
     process.stdout.write(
@@ -2011,6 +1991,28 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
     }
   });
 
+  setupSignalHandlers(commands, killAll);
+
+  for (const [index, command] of commands.entries()) {
+    if (index < maxParallel) {
+      command.start();
+      process.stdout.write(
+        `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+      );
+    } else {
+      process.stdout.write(
+        `${commandTitleWithIndicator(waitingIndicator, command)}\n\n`
+      );
+    }
+  }
+};
+
+/**
+ * @param {Array<Command>} commands
+ * @param {() => void} killAll
+ * @returns {void}
+ */
+const setupSignalHandlers = (commands, killAll) => {
   // Clean up all commands if someone tries to kill run-pty.
   for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
     process.on(signal, killAll);
@@ -2031,19 +2033,6 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
       }
       process.exit(1);
     });
-  }
-
-  for (const [index, command] of commands.entries()) {
-    if (index < maxParallel) {
-      command.start();
-      process.stdout.write(
-        `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
-      );
-    } else {
-      process.stdout.write(
-        `${commandTitleWithIndicator(waitingIndicator, command)}\n\n`
-      );
-    }
   }
 };
 
