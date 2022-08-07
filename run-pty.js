@@ -484,9 +484,15 @@ const cwdText = (command) =>
  * @returns {string}
  */
 const historyStart = (indicator, command) =>
-  `${indicator}${EMOJI_WIDTH_FIX} ${
-    command.formattedCommandWithTitle
-  }${RESET_COLOR}\n${cwdText(command)}`;
+  `${simpleHistoryStart(indicator, command)}${cwdText(command)}`;
+
+/**
+ * @param {string} indicator
+ * @param {CommandText} command
+ * @returns {string}
+ */
+const simpleHistoryStart = (indicator, command) =>
+  `${indicator}${EMOJI_WIDTH_FIX} ${command.formattedCommandWithTitle}${RESET_COLOR}\n`;
 
 /**
  * @param {Array<Command>} commands
@@ -533,15 +539,41 @@ const exitText = (commands, command, exitCode, autoExit) => {
       ? ""
       : `${shortcut(KEYS.enter)} restart\n`;
   return `
-${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
-    command.formattedCommandWithTitle
-  }${RESET_COLOR}
+${simpleExitText(command, exitCode)}
 ${cwdText(command)}exit ${exitCode}
 
 ${restart}${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
 };
+
+/**
+ * @param {{ command: Command, exitCode: number, numExited: number, numTotal: number }} options
+ * @returns {string}
+ */
+const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
+  const lastLine = removeGraphicRenditions(getLastLine(command.history));
+  const newline =
+    // If the last line is empty, no extra newline is needed.
+    lastLine.trim() === "" ? "" : "\n";
+  return `
+${simpleExitText(command, exitCode)}${newline}${command.history}
+${bold(`exit ${exitCode}`)} ${dim(`(${numExited}/${numTotal} exited)`)}
+
+`.trimStart();
+};
+
+/**
+ * @param {CommandText} command
+ * @param {number} exitCode
+ * @returns {string}
+ */
+const simpleExitText = (command, exitCode) =>
+  `
+${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
+    command.formattedCommandWithTitle
+  }${RESET_COLOR}
+`.trim();
 
 /**
  * @param {Status} status
@@ -937,7 +969,7 @@ class Command {
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onRequest: (data: string) => undefined,
-      onExit: () => undefined,
+      onExit: (exitCode: number) => undefined,
      }} commandInit
    */
   constructor({
@@ -1037,7 +1069,7 @@ class Command {
       disposeOnData.dispose();
       disposeOnExit.dispose();
       this.status = { tag: "Exit", exitCode };
-      this.onExit();
+      this.onExit(exitCode);
     });
 
     this.status = { tag: "Running", terminal };
@@ -1885,67 +1917,81 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
   };
 
   /** @type {Array<Command>} */
-  const commands = commandDescriptions.map(
-    (commandDescription, index) =>
-      new Command({
-        label: ALL_LABELS[index],
-        commandDescription,
-        onData: () => undefined,
-        onRequest: (data) => {
-          requests.push({ commandIndex: index, data });
-          handleNextRequest();
-          return undefined;
-        },
-        onExit: () => {
-          // Exit the whole program if all commands have exited.
-          if (
-            isDone({
-              commands,
-              attemptedKillAll,
-              autoExit: { tag: "AutoExit", maxParallel },
-            })
-          ) {
-            // TODO: Maybe print a summary here.
-            // switchToDashboard();
-            process.exit(attemptedKillAll ? 1 : 0);
-          }
+  const commands = commandDescriptions.map((commandDescription, index) => {
+    const thisCommand = new Command({
+      label: ALL_LABELS[index],
+      commandDescription,
+      onData: () => undefined,
+      onRequest: (data) => {
+        requests.push({ commandIndex: index, data });
+        handleNextRequest();
+        return undefined;
+      },
+      onExit: (exitCode) => {
+        process.stdout.write(
+          exitTextAndHistory({
+            command: thisCommand,
+            exitCode,
+            numExited: commands.filter(
+              (command) => command.status.tag === "Exit"
+            ).length,
+            numTotal: commands.length,
+          })
+        );
 
-          const nextWaitingIndex = commands.findIndex(
-            (command) => command.status.tag === "Waiting"
+        // Exit the whole program if all commands have exited.
+        // TODO: This only exits if all commands are exit 0.
+        // Also need to quit on exit 1 (with overall code 1).
+        if (
+          isDone({
+            commands,
+            attemptedKillAll,
+            autoExit: { tag: "AutoExit", maxParallel },
+          })
+        ) {
+          // TODO: Maybe print a summary here.
+          // switchToDashboard();
+          process.exit(attemptedKillAll ? 1 : 0);
+        }
+
+        const nextWaitingIndex = commands.findIndex(
+          (command) => command.status.tag === "Waiting"
+        );
+        if (nextWaitingIndex !== -1 && !attemptedKillAll) {
+          const command = commands[nextWaitingIndex];
+          command.start();
+          process.stdout.write(
+            `${simpleHistoryStart(runningIndicator, command)}\n`
           );
-          if (nextWaitingIndex !== -1 && !attemptedKillAll) {
-            const command = commands[nextWaitingIndex];
-            command.start();
-            // TODO: Print newline?
-            process.stdout.write(command.history);
-            // If starting the command we’re currently on, redraw to remove `waitingText`.
-            // if (
-            //   current.tag === "Command" &&
-            //   current.index === nextWaitingIndex
-            // ) {
-            //   switchToCommand(current.index);
-            // }
-          }
-
-          // switch (current.tag) {
-          //   case "Command":
-          //     if (current.index === index) {
-          //       const command = commands[index];
-          //       printDataWithExtraText(command, "", {
-          //         ignoreAlternateScreen: true,
-          //       });
-          //     }
-          //     return undefined;
-
-          //   case "Dashboard":
-          //     // Redraw dashboard.
-          //     switchToDashboard();
-          //     return undefined;
+          // If starting the command we’re currently on, redraw to remove `waitingText`.
+          // if (
+          //   current.tag === "Command" &&
+          //   current.index === nextWaitingIndex
+          // ) {
+          //   switchToCommand(current.index);
           // }
-          return undefined;
-        },
-      })
-  );
+        }
+
+        // switch (current.tag) {
+        //   case "Command":
+        //     if (current.index === index) {
+        //       const command = commands[index];
+        //       printDataWithExtraText(command, "", {
+        //         ignoreAlternateScreen: true,
+        //       });
+        //     }
+        //     return undefined;
+        //   case "Dashboard":
+        //     // Redraw dashboard.
+        //     switchToDashboard();
+        //     return undefined;
+        // }
+        return undefined;
+      },
+    });
+
+    return thisCommand;
+  });
 
   process.stdout.on("resize", () => {
     for (const command of commands) {
@@ -1986,10 +2032,17 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
   // Maybe: Always print a summary of everything (like the dashboard)
   // whenever there’s an update?
 
-  for (const command of commands.slice(0, maxParallel)) {
-    command.start();
-    // TODO: Print newline?
-    process.stdout.write(command.history);
+  for (const [index, command] of commands.entries()) {
+    if (index < maxParallel) {
+      command.start();
+      process.stdout.write(
+        `${simpleHistoryStart(runningIndicator, command)}\n`
+      );
+    } else {
+      process.stdout.write(
+        `${simpleHistoryStart(waitingIndicator, command)}\n`
+      );
+    }
   }
 };
 
