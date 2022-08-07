@@ -650,10 +650,25 @@ const NOT_SIMPLE_LOG_ESCAPE =
 // - t: Report window position, size, title etc.
 // - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
 const ESCAPES_REQUEST =
-  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1b\]1[01];\?\x07)/g;
+  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\]1[01];\?\x07)/g;
 const ESCAPES_RESPONSE =
-  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1b\]1[01];[^\x07]+\x07)/g;
+  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1B\]1[01];[^\x07]+\x07)/g;
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
+
+/**
+ * @param {string} request
+ * @returns {string}
+ */
+const respondToRequestFake = (request) =>
+  request.endsWith("6n")
+    ? "\x1B[1;1R"
+    : request.endsWith("t")
+    ? "\x1B[3;0;0t"
+    : request.startsWith("\x1B]10;")
+    ? "\x1B]10;rgb:ffff/ffff/ffff\x07"
+    : request.startsWith("\x1B]11;")
+    ? "\x1B]11;rgb:0000/0000/0000\x07"
+    : "";
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
@@ -1918,31 +1933,21 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
     }
   };
 
-  /** @type {Array<{ commandIndex: number, data: string }>} */
-  const requests = [];
-  let requestInFlight = false;
-
-  /**
-   * @returns {void}
-   */
-  const handleNextRequest = () => {
-    if (requestInFlight || requests.length === 0) {
-      return;
-    }
-    const request = requests[0];
-    process.stdout.write(request.data);
-    requestInFlight = true;
-  };
-
   /** @type {Array<Command>} */
   const commands = commandDescriptions.map((commandDescription, index) => {
     const thisCommand = new Command({
       label: ALL_LABELS[index],
       commandDescription,
       onData: () => undefined,
+      // `process.stdin.setRawMode(true)` is required to make real requests to
+      // the terminal, but that is not possible when `process.stdin.isTTY === false`.
+      // The best we can do is respond immediately with a fake response so
+      // programs don’t get stuck. This is important on Windows – see the
+      // comment for `ESCAPES_REQUEST`.
       onRequest: (data) => {
-        requests.push({ commandIndex: index, data });
-        handleNextRequest();
+        if ("terminal" in thisCommand.status) {
+          thisCommand.status.terminal.write(respondToRequestFake(data));
+        }
         return undefined;
       },
       onExit: (exitCode) => {
@@ -2007,8 +2012,6 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
       }
     }
   });
-
-  // TODO: Is it possible to handle stdin for requests?
 
   // Clean up all commands if someone tries to kill run-pty.
   for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
