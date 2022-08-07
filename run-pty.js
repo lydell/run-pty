@@ -438,6 +438,29 @@ ${autoExitText}
 };
 
 /**
+ * @param {Array<Command>} commands
+ * @param {boolean} attemptedKillAll
+ * @returns {string}
+ */
+const printSummary = (commands, attemptedKillAll) => {
+  const summary = attemptedKillAll
+    ? "aborted"
+    : commands.every(
+        (command) =>
+          command.status.tag === "Exit" && command.status.exitCode === 0
+      )
+    ? "success"
+    : "failure";
+  const lines = commands.map((command) => {
+    const [indicator, status] = statusText(command.status);
+    return `${indicator}${EMOJI_WIDTH_FIX} ${
+      status === undefined ? "" : `${status} `
+    }${command.formattedCommandWithTitle}${RESET_COLOR}`;
+  });
+  return `\n${bold(`Summary – ${summary}:`)}\n${lines.join("\n")}\n`;
+};
+
+/**
  * @param {{
     commands: Array<Command>,
     attemptedKillAll: boolean,
@@ -484,15 +507,15 @@ const cwdText = (command) =>
  * @returns {string}
  */
 const historyStart = (indicator, command) =>
-  `${simpleHistoryStart(indicator, command)}${cwdText(command)}`;
+  `${commandTitleWithIndicator(indicator, command)}\n${cwdText(command)}`;
 
 /**
  * @param {string} indicator
  * @param {CommandText} command
  * @returns {string}
  */
-const simpleHistoryStart = (indicator, command) =>
-  `${indicator}${EMOJI_WIDTH_FIX} ${command.formattedCommandWithTitle}${RESET_COLOR}\n`;
+const commandTitleWithIndicator = (indicator, command) =>
+  `${indicator}${EMOJI_WIDTH_FIX} ${command.formattedCommandWithTitle}${RESET_COLOR}`;
 
 /**
  * @param {Array<Command>} commands
@@ -539,7 +562,7 @@ const exitText = (commands, command, exitCode, autoExit) => {
       ? ""
       : `${shortcut(KEYS.enter)} restart\n`;
   return `
-${simpleExitText(command, exitCode)}
+${commandTitleWithIndicator(exitIndicator(exitCode), command)}
 ${cwdText(command)}exit ${exitCode}
 
 ${restart}${shortcut(KEYS.kill)} ${killAllLabel(commands)}
@@ -557,22 +580,14 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
     // If the last line is empty, no extra newline is needed.
     lastLine.trim() === "" ? "" : "\n";
   return `
-${simpleExitText(command, exitCode)}${newline}${command.history}
-${bold(`exit ${exitCode}`)} ${dim(`(${numExited}/${numTotal} exited)`)}
+${commandTitleWithIndicator(exitIndicator(exitCode), command)}${newline}${
+    command.history
+  }
+${cwdText(command)}${bold(`exit ${exitCode}`)} ${dim(
+    `(${numExited}/${numTotal} exited)`
+  )}
 `.trimStart();
 };
-
-/**
- * @param {CommandText} command
- * @param {number} exitCode
- * @returns {string}
- */
-const simpleExitText = (command, exitCode) =>
-  `
-${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
-    command.formattedCommandWithTitle
-  }${RESET_COLOR}
-`.trim();
 
 /**
  * @param {Status} status
@@ -1891,16 +1906,15 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
     process.stdout.write("\r");
 
     if (notExited.length === 0) {
-      // TODO: Maybe print a summary here.
-      // switchToDashboard();
+      process.stdout.write(printSummary(commands, attemptedKillAll));
       process.exit(1);
     } else {
       for (const command of notExited) {
         command.kill();
+        process.stdout.write(
+          `${commandTitleWithIndicator(killingIndicator, command)}\n\n`
+        );
       }
-      // TODO: Maybe print the ones killing here.
-      // So you can see how killing other commands go:
-      // switchToDashboard();
     }
   };
 
@@ -1959,8 +1973,7 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
           (attemptedKillAll && numRunning === 0) ||
           numExit === commands.length
         ) {
-          // TODO: Maybe print a summary here.
-          // switchToDashboard();
+          process.stdout.write(printSummary(commands, attemptedKillAll));
           process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
         }
 
@@ -1971,26 +1984,12 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
           const command = commands[nextWaitingIndex];
           command.start();
           process.stdout.write(
-            `\n${simpleHistoryStart(runningIndicator, command)}\n`
+            `\n${commandTitleWithIndicator(runningIndicator, command)}\n\n`
           );
         } else {
           process.stdout.write("\n");
         }
 
-        // switch (current.tag) {
-        //   case "Command":
-        //     if (current.index === index) {
-        //       const command = commands[index];
-        //       printDataWithExtraText(command, "", {
-        //         ignoreAlternateScreen: true,
-        //       });
-        //     }
-        //     return undefined;
-        //   case "Dashboard":
-        //     // Redraw dashboard.
-        //     switchToDashboard();
-        //     return undefined;
-        // }
         return undefined;
       },
     });
@@ -2037,11 +2036,11 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
     if (index < maxParallel) {
       command.start();
       process.stdout.write(
-        `${simpleHistoryStart(runningIndicator, command)}\n`
+        `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
       );
     } else {
       process.stdout.write(
-        `${simpleHistoryStart(waitingIndicator, command)}\n`
+        `${commandTitleWithIndicator(waitingIndicator, command)}\n\n`
       );
     }
   }
