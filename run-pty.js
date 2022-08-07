@@ -1951,17 +1951,6 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
         return undefined;
       },
       onExit: (exitCode) => {
-        process.stdout.write(
-          exitTextAndHistory({
-            command: thisCommand,
-            exitCode,
-            numExited: commands.filter(
-              (command) => command.status.tag === "Exit"
-            ).length,
-            numTotal: commands.length,
-          })
-        );
-
         const numRunning = commands.filter(
           (command) => "terminal" in command.status
         ).length;
@@ -1972,6 +1961,15 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
           (command) =>
             command.status.tag === "Exit" && command.status.exitCode === 0
         ).length;
+
+        process.stdout.write(
+          exitTextAndHistory({
+            command: thisCommand,
+            exitCode,
+            numExited: numExit,
+            numTotal: commands.length,
+          })
+        );
 
         // Exit the whole program if all commands have exited.
         if (
