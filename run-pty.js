@@ -460,17 +460,10 @@ const isDone = ({ commands, attemptedKillAll, autoExit }) =>
  * @param {Command} command
  * @returns {string}
  */
-const getPid = (command) => {
-  switch (command.status.tag) {
-    case "Waiting":
-      return "";
-    case "Running":
-    case "Killing":
-      return ` ${dim(`(pid ${command.status.terminal.pid})`)}`;
-    case "Exit":
-      return "";
-  }
-};
+const getPid = (command) =>
+  "terminal" in command.status
+    ? ` ${dim(`(pid ${command.status.terminal.pid})`)}`
+    : "";
 
 /**
  * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "cwd">} CommandText
