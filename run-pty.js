@@ -559,7 +559,6 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
   return `
 ${simpleExitText(command, exitCode)}${newline}${command.history}
 ${bold(`exit ${exitCode}`)} ${dim(`(${numExited}/${numTotal} exited)`)}
-
 `.trimStart();
 };
 
@@ -1939,19 +1938,25 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
           })
         );
 
+        const numRunning = commands.filter(
+          (command) => "terminal" in command.status
+        ).length;
+        const numExit = commands.filter(
+          (command) => command.status.tag === "Exit"
+        ).length;
+        const numExit0 = commands.filter(
+          (command) =>
+            command.status.tag === "Exit" && command.status.exitCode === 0
+        ).length;
+
         // Exit the whole program if all commands have exited.
-        // TODO: This only exits if all commands are exit 0.
-        // Also need to quit on exit 1 (with overall code 1).
         if (
-          isDone({
-            commands,
-            attemptedKillAll,
-            autoExit: { tag: "AutoExit", maxParallel },
-          })
+          (attemptedKillAll && numRunning === 0) ||
+          numExit === commands.length
         ) {
           // TODO: Maybe print a summary here.
           // switchToDashboard();
-          process.exit(attemptedKillAll ? 1 : 0);
+          process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
         }
 
         const nextWaitingIndex = commands.findIndex(
@@ -1961,15 +1966,10 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
           const command = commands[nextWaitingIndex];
           command.start();
           process.stdout.write(
-            `${simpleHistoryStart(runningIndicator, command)}\n`
+            `\n${simpleHistoryStart(runningIndicator, command)}\n`
           );
-          // If starting the command we’re currently on, redraw to remove `waitingText`.
-          // if (
-          //   current.tag === "Command" &&
-          //   current.index === nextWaitingIndex
-          // ) {
-          //   switchToCommand(current.index);
-          // }
+        } else {
+          process.stdout.write("\n");
         }
 
         // switch (current.tag) {
