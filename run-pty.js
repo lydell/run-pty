@@ -1615,7 +1615,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
                 const numLines = (
                   command.isOnAlternateScreen
                     ? command.historyAlternateScreen
-                    : command.history
+                    : historyStart(waitingIndicator, command) + command.history
                 ).split("\n").length;
                 const likelyRow = Math.min(numLines, process.stdout.rows);
                 command.status.terminal.write(
