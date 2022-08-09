@@ -240,9 +240,9 @@ const summarizeLabels = (labels) => {
 };
 
 const autoExitHelp = `
-    --auto-exit           auto exit when done, no parallel limit
-    --auto-exit=<number>  at most <number> parallel processes
+    --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
     --auto-exit=auto      uses the number of logical CPU cores
+    --auto-exit           defaults to auto
 `
   .slice(1)
   .trimEnd();
@@ -413,11 +413,9 @@ const drawDashboard = ({
     autoExit.tag === "AutoExit"
       ? [
           enter === "" ? undefined : "",
-          Number.isFinite(autoExit.maxParallel)
-            ? `At most ${autoExit.maxParallel} ${
-                autoExit.maxParallel === 1 ? "command runs" : "commands run"
-              } at a time.`
-            : undefined,
+          `At most ${autoExit.maxParallel} ${
+            autoExit.maxParallel === 1 ? "command runs" : "commands run"
+          } at a time.`,
           `The session ends automatically once all commands are ${bold(
             "exit 0"
           )}.`,
@@ -791,9 +789,7 @@ const parseArgs = (args) => {
     const match = AUTO_EXIT_REGEX.exec(flag);
     if (match !== null) {
       const maxParallel =
-        match[1] === undefined
-          ? Infinity
-          : match[1] === "auto"
+        match[1] === undefined || match[1] === "auto"
           ? os.cpus().length
           : Number(match[1]);
       if (maxParallel === 0) {

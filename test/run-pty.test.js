@@ -73,9 +73,9 @@ describe("help", () => {
 
           ⧙run-pty⧘ --auto-exit ⧙%⧘ npm ci ⧙%⧘ dotnet restore ⧙&&⧘ ./build.bash
 
-          --auto-exit           auto exit when done, no parallel limit
-          --auto-exit=<number>  at most <number> parallel processes
+          --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
           --auto-exit=auto      uses the number of logical CPU cores
+          --auto-exit           defaults to auto
 
       Keyboard shortcuts:
 
@@ -218,7 +218,8 @@ describe("dashboard", () => {
             status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
         ],
-        { autoExit: { tag: "AutoExit", maxParallel: Infinity } }
+
+        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -227,6 +228,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
+      At most 3 commands run at a time.
       The session ends automatically once all commands are ⧙exit 0⧘.
     `);
   });
@@ -292,7 +294,7 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: Infinity } }
+        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -303,6 +305,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
       ⧙[⧘⧙enter⧘⧙]⧘  restart failed
 
+      At most 3 commands run at a time.
       The session ends automatically once all commands are ⧙exit 0⧘.
     `);
   });
@@ -346,9 +349,10 @@ describe("dashboard", () => {
             },
           },
         ],
+
         {
           attemptedKillAll: true,
-          autoExit: { tag: "AutoExit", maxParallel: Infinity },
+          autoExit: { tag: "AutoExit", maxParallel: 3 },
         }
       )
     ).toMatchInlineSnapshot(`
@@ -358,6 +362,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
+      At most 3 commands run at a time.
       The session ends automatically once all commands are ⧙exit 0⧘.
     `);
   });
@@ -373,7 +378,7 @@ describe("dashboard", () => {
         ],
         {
           attemptedKillAll: true,
-          autoExit: { tag: "AutoExit", maxParallel: Infinity },
+          autoExit: { tag: "AutoExit", maxParallel: 3 },
         }
       )
     ).toMatchInlineSnapshot(`
@@ -664,7 +669,7 @@ describe("focused command", () => {
     expect(
       render(
         (command) =>
-          exitText([], command, 0, { tag: "AutoExit", maxParallel: Infinity }),
+          exitText([], command, 0, { tag: "AutoExit", maxParallel: 3 }),
         "frontend: npm start",
         "frontend",
         "frontend"
@@ -768,9 +773,9 @@ describe("parse args", () => {
       Object {
         message: Bad flag: --unknown
       Only these forms are accepted:
-          --auto-exit           auto exit when done, no parallel limit
-          --auto-exit=<number>  at most <number> parallel processes
-          --auto-exit=auto      uses the number of logical CPU cores,
+          --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
+          --auto-exit=auto      uses the number of logical CPU cores
+          --auto-exit           defaults to auto,
         tag: Error,
       }
     `);
@@ -781,9 +786,9 @@ describe("parse args", () => {
       Object {
         message: Bad flag: --auto-exit=nope
       Only these forms are accepted:
-          --auto-exit           auto exit when done, no parallel limit
-          --auto-exit=<number>  at most <number> parallel processes
-          --auto-exit=auto      uses the number of logical CPU cores,
+          --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
+          --auto-exit=auto      uses the number of logical CPU cores
+          --auto-exit           defaults to auto,
         tag: Error,
       }
     `);
@@ -873,7 +878,7 @@ describe("parse args", () => {
       parseArgs(["--auto-exit", "%", "one", "%", "two", "--auto-exit"])
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
-        autoExit: { tag: "AutoExit", maxParallel: Infinity },
+        autoExit: { tag: "AutoExit", maxParallel: os.cpus().length },
       })
     );
 
