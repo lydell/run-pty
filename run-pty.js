@@ -2070,9 +2070,19 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
  * @returns {void}
  */
 const setupSignalHandlers = (commands, killAll) => {
+  let lastSignalTimestamp = 0;
+
   // Clean up all commands if someone tries to kill run-pty.
   for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
-    process.on(signal, killAll);
+    process.on(signal, () => {
+      const now = Date.now();
+      // When running via `npm run` or `npx`, one often gets two SIGINTs in a row
+      // when pressing ctrl+c. https://stackoverflow.com/a/60273973
+      if (now - lastSignalTimestamp > 10) {
+        killAll();
+      }
+      lastSignalTimestamp = now;
+    });
   }
 
   // Don’t leave running processes behind in case of an unexpected error.
