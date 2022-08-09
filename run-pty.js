@@ -480,7 +480,7 @@ const printSummary = (commands, attemptedKillAll) => {
       status === undefined ? "" : `${status} `
     }${command.formattedCommandWithTitle}${RESET_COLOR}`;
   });
-  return `\n${bold(`Summary – ${summary}:`)}\n${lines.join("\n")}\n`;
+  return `${bold(`Summary – ${summary}:`)}\n${lines.join("\n")}\n`;
 };
 
 /**
@@ -607,6 +607,7 @@ ${commandTitleWithIndicator(exitIndicator(exitCode), command)}
 ${command.history}${newline}${cwdText(command)}${bold(
     `exit ${exitCode}`
   )} ${dim(`(${numExited}/${numTotal} exited)`)}
+
 `.trimStart();
 };
 
@@ -2019,18 +2020,13 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
             (command) => command.status.tag === "Waiting"
           );
           if (failFast && exitCode !== 0) {
-            if (numRunning > 0) {
-              process.stdout.write("\n");
-            }
             killAll();
           } else if (nextWaitingIndex !== -1) {
             const command = commands[nextWaitingIndex];
             command.start();
             process.stdout.write(
-              `\n${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+              `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
             );
-          } else {
-            process.stdout.write("\n");
           }
         }
 
