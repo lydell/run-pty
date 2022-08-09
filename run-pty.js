@@ -1950,8 +1950,9 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
     );
 
     // Pressing ctrl+c prints `^C` to the terminal. Move the cursor back so we
-    // overwrite that. `^C` will be seen in each command history.
-    process.stdout.write("\r");
+    // overwrite that. We also need to clear since ⭕️ is see-through. `^C` will
+    // be seen in each command history.
+    process.stdout.write(`\r${CLEAR_RIGHT}`);
 
     if (notExited.length === 0) {
       process.stdout.write(printSummary(commands, attemptedKillAll));
