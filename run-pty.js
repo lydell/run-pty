@@ -13,7 +13,7 @@ const Decode = require("tiny-decoders");
     | { tag: "Waiting" }
     | { tag: "Running", terminal: import("node-pty").IPty }
     | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined }
-    | { tag: "Exit", exitCode: number }
+    | { tag: "Exit", exitCode: number, wasKilled: boolean }
    } Status
  *
  * @typedef {
@@ -133,6 +133,13 @@ const killingIndicator = NO_COLOR
   : IS_WINDOWS
   ? `\x1B[91m○${RESET_COLOR}`
   : "⭕";
+
+// TODO: NO_COLOR and IS_WINDOWS icons
+const abortedIndicator = NO_COLOR
+  ? "○"
+  : IS_WINDOWS
+  ? `\x1B[91m○${RESET_COLOR}`
+  : "⛔️";
 
 /**
  * @param {number} exitCode
@@ -304,13 +311,20 @@ const killAllLabel = (commands) =>
 
 /**
  * @param {Array<Command>} commands
- * @param {number} width
  * @param {Selection} selection
+ * @param {{ width: number, useSeparateKilledIndicator: boolean }} options
  * @returns {Array<{ line: string, length: number }>}
  */
-const drawDashboardCommandLines = (commands, width, selection) => {
+const drawDashboardCommandLines = (
+  commands,
+  selection,
+  { width, useSeparateKilledIndicator }
+) => {
   const lines = commands.map((command) => {
-    const [icon, status] = statusText(command.status, command.statusFromRules);
+    const [icon, status] = statusText(command.status, {
+      statusFromRules: command.statusFromRules,
+      useSeparateKilledIndicator,
+    });
     const { label = " " } = command;
     return {
       label: shortcut(label, { pad: false }),
@@ -376,8 +390,11 @@ const drawDashboard = ({
 
   const finalLines = drawDashboardCommandLines(
     commands,
-    width,
-    done ? { tag: "Invisible", index: 0 } : selection
+    done ? { tag: "Invisible", index: 0 } : selection,
+    {
+      width,
+      useSeparateKilledIndicator: autoExit.tag === "AutoExit",
+    }
   )
     .map(({ line }) => line)
     .join("\n");
@@ -456,7 +473,9 @@ const printSummary = (commands, attemptedKillAll) => {
     ? "success"
     : "failure";
   const lines = commands.map((command) => {
-    const [indicator, status] = statusText(command.status);
+    const [indicator, status] = statusText(command.status, {
+      useSeparateKilledIndicator: true,
+    });
     return `${indicator}${EMOJI_WIDTH_FIX} ${
       status === undefined ? "" : `${status} `
     }${command.formattedCommandWithTitle}${RESET_COLOR}`;
@@ -593,10 +612,16 @@ ${command.history}${newline}${cwdText(command)}${bold(
 
 /**
  * @param {Status} status
- * @param {string | undefined} statusFromRules
+ * @param {{ statusFromRules?: string, useSeparateKilledIndicator?: boolean }} options
  * @returns {[string, string | undefined]}
  */
-const statusText = (status, statusFromRules = runningIndicator) => {
+const statusText = (
+  status,
+  {
+    statusFromRules = runningIndicator,
+    useSeparateKilledIndicator = false,
+  } = {}
+) => {
   switch (status.tag) {
     case "Waiting":
       return [waitingIndicator, undefined];
@@ -608,7 +633,12 @@ const statusText = (status, statusFromRules = runningIndicator) => {
       return [killingIndicator, undefined];
 
     case "Exit":
-      return [exitIndicator(status.exitCode), bold(`exit ${status.exitCode}`)];
+      return [
+        status.wasKilled && useSeparateKilledIndicator
+          ? abortedIndicator
+          : exitIndicator(status.exitCode),
+        bold(`exit ${status.exitCode}`),
+      ];
   }
 };
 
@@ -1099,7 +1129,11 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
-      this.status = { tag: "Exit", exitCode };
+      this.status = {
+        tag: "Exit",
+        exitCode,
+        wasKilled: this.status.tag === "Killing",
+      };
       this.onExit(exitCode);
     });
 
@@ -1875,10 +1909,17 @@ const parseMouse = (string) => {
  * @param {{ x: number, y: number }} mousePosition
  */
 const getCommandIndexFromMousePosition = (commands, { x, y }) => {
-  const lines = drawDashboardCommandLines(commands, process.stdout.columns, {
-    tag: "Invisible",
-    index: 0,
-  });
+  const lines = drawDashboardCommandLines(
+    commands,
+    {
+      tag: "Invisible",
+      index: 0,
+    },
+    {
+      width: process.stdout.columns,
+      useSeparateKilledIndicator: false,
+    }
+  );
 
   if (y >= 0 && y < lines.length) {
     const line = lines[y];

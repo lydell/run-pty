@@ -198,7 +198,7 @@ describe("dashboard", () => {
       testDashboard([
         {
           command: ["npm", "start"],
-          status: { tag: "Exit", exitCode: 0 },
+          status: { tag: "Exit", exitCode: 0, wasKilled: false },
         },
       ])
     ).toMatchInlineSnapshot(`
@@ -294,7 +294,7 @@ describe("dashboard", () => {
 
           {
             command: ["npm", "run", "build"],
-            status: { tag: "Exit", exitCode: 1 },
+            status: { tag: "Exit", exitCode: 1, wasKilled: true },
           },
         ],
 
@@ -302,7 +302,7 @@ describe("dashboard", () => {
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
-      ⧙[⧘⧙2⧘⧙]⧘  🔴⧘  ⧙exit 1⧘  npm run build⧘
+      ⧙[⧘⧙2⧘⧙]⧘  ⛔️⧘  ⧙exit 1⧘  npm run build⧘
 
       ⧙[⧘⧙1-2⧘⧙]⧘    focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
@@ -376,16 +376,17 @@ describe("dashboard", () => {
         [
           {
             command: ["npm", "start"],
-            status: { tag: "Exit", exitCode: 0 },
+            status: { tag: "Exit", exitCode: 0, wasKilled: true },
           },
         ],
+
         {
           attemptedKillAll: true,
           autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false },
         }
       )
     ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘␊
+      ⧙[⧘⧙1⧘⧙]⧘  ⛔️⧘  ⧙exit 0⧘  npm start⧘␊
 
     `);
   });
@@ -403,17 +404,17 @@ describe("dashboard", () => {
             "'quoted'th|ng'",
             "hello world",
           ],
-          status: { tag: "Exit", exitCode: 0 },
+          status: { tag: "Exit", exitCode: 0, wasKilled: false },
           statusFromRules: "!", // Should be ignored.
         },
         {
           command: ["npm", "run", "server"],
-          status: { tag: "Exit", exitCode: 130 },
+          status: { tag: "Exit", exitCode: 130, wasKilled: false },
           statusFromRules: "!", // Should be ignored.
         },
         {
           command: ["ping", "nope"],
-          status: { tag: "Exit", exitCode: 68 },
+          status: { tag: "Exit", exitCode: 68, wasKilled: false },
           statusFromRules: "!", // Should be ignored.
         },
         {
