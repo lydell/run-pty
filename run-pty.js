@@ -603,9 +603,12 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
     lastLine.trim() === "" ? "" : "\n";
   return `
 ${commandTitleWithIndicator(exitIndicator(exitCode), command)}
-${command.history}${newline}${cwdText(command)}${bold(
-    `exit ${exitCode}`
-  )} ${dim(`(${numExited}/${numTotal} exited)`)}
+${command.history.replace(
+  NOT_SIMPLE_LOG_ESCAPE_REPLACE,
+  ""
+)}${newline}${cwdText(command)}${bold(`exit ${exitCode}`)} ${dim(
+    `(${numExited}/${numTotal} exited)`
+  )}
 
 `.trimStart();
 };
@@ -660,8 +663,14 @@ const statusText = (
 // - T: Scroll down.
 // - s: Save cursor position.
 // - u: Restore cursor position.
-const NOT_SIMPLE_LOG_ESCAPE =
+//
+// In non interactive mode, we use `NOT_SIMPLE_LOG_ESCAPE_REPLACE` to remove all
+// cursor movements that break things, including clearing the screen. This is
+// especially needed on Windows, where the pty always prints cursor movements.
+const NOT_SIMPLE_LOG_ESCAPE_TEST =
   /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
+const NOT_SIMPLE_LOG_ESCAPE_REPLACE =
+  /\x1B\[(?:\d*[AEFJLMST]|[su]|(?:\d+(?:;\d+)?)?[fH])/g;
 
 // These escapes should be printed when they first occur, but not when
 // re-printing history.  They result in getting a response on stdin. The
@@ -1228,7 +1237,7 @@ class Command {
               if (this.history.length > MAX_HISTORY) {
                 this.history = this.history.slice(-MAX_HISTORY);
               }
-              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(part)) {
+              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE_TEST.test(part)) {
                 this.isSimpleLog = false;
               }
             }
