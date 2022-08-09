@@ -584,12 +584,10 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
     // If the last line is empty, no extra newline is needed.
     lastLine.trim() === "" ? "" : "\n";
   return `
-${commandTitleWithIndicator(exitIndicator(exitCode), command)}${newline}${
-    command.history
-  }
-${cwdText(command)}${bold(`exit ${exitCode}`)} ${dim(
-    `(${numExited}/${numTotal} exited)`
-  )}
+${commandTitleWithIndicator(exitIndicator(exitCode), command)}
+${command.history}${newline}${cwdText(command)}${bold(
+    `exit ${exitCode}`
+  )} ${dim(`(${numExited}/${numTotal} exited)`)}
 `.trimStart();
 };
 
