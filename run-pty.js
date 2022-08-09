@@ -134,11 +134,10 @@ const killingIndicator = NO_COLOR
   ? `\x1B[91m○${RESET_COLOR}`
   : "⭕";
 
-// TODO: NO_COLOR and IS_WINDOWS icons
 const abortedIndicator = NO_COLOR
-  ? "○"
+  ? "▲"
   : IS_WINDOWS
-  ? `\x1B[91m○${RESET_COLOR}`
+  ? `\x1B[91m▲${RESET_COLOR}`
   : "⛔️";
 
 /**
