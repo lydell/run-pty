@@ -73,9 +73,11 @@ describe("help", () => {
 
           ⧙run-pty⧘ --auto-exit ⧙%⧘ npm ci ⧙%⧘ dotnet restore ⧙&&⧘ ./build.bash
 
-          --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
-          --auto-exit=auto      uses the number of logical CPU cores
-          --auto-exit           defaults to auto
+          --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
+          --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
+          --auto-exit=1.         run sequentially
+          --auto-exit=auto       uses the number of logical CPU cores
+          --auto-exit            defaults to auto
 
       Keyboard shortcuts:
 
@@ -219,7 +221,7 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
+        { autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -233,7 +235,7 @@ describe("dashboard", () => {
     `);
   });
 
-  test("auto exit, max 1", () => {
+  test("auto exit, max 1, fail fast", () => {
     expect(
       testDashboard(
         [
@@ -242,7 +244,8 @@ describe("dashboard", () => {
             status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
         ],
-        { autoExit: { tag: "AutoExit", maxParallel: 1 } }
+
+        { autoExit: { tag: "AutoExit", maxParallel: 1, failFast: true } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -252,7 +255,8 @@ describe("dashboard", () => {
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
       At most 1 command runs at a time.
-      The session ends automatically once all commands are ⧙exit 0⧘.
+      The session ends automatically once all commands are ⧙exit 0⧘,
+      or when a command fails (⧙exit non-0⧘).
     `);
   });
 
@@ -265,7 +269,7 @@ describe("dashboard", () => {
             status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
         ],
-        { autoExit: { tag: "AutoExit", maxParallel: 2 } }
+        { autoExit: { tag: "AutoExit", maxParallel: 2, failFast: false } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -294,7 +298,7 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
+        { autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -349,10 +353,9 @@ describe("dashboard", () => {
             },
           },
         ],
-
         {
           attemptedKillAll: true,
-          autoExit: { tag: "AutoExit", maxParallel: 3 },
+          autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false },
         }
       )
     ).toMatchInlineSnapshot(`
@@ -378,7 +381,7 @@ describe("dashboard", () => {
         ],
         {
           attemptedKillAll: true,
-          autoExit: { tag: "AutoExit", maxParallel: 3 },
+          autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false },
         }
       )
     ).toMatchInlineSnapshot(`
@@ -669,7 +672,11 @@ describe("focused command", () => {
     expect(
       render(
         (command) =>
-          exitText([], command, 0, { tag: "AutoExit", maxParallel: 3 }),
+          exitText([], command, 0, {
+            tag: "AutoExit",
+            maxParallel: 3,
+            failFast: false,
+          }),
         "frontend: npm start",
         "frontend",
         "frontend"
@@ -773,9 +780,11 @@ describe("parse args", () => {
       Object {
         message: Bad flag: --unknown
       Only these forms are accepted:
-          --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
-          --auto-exit=auto      uses the number of logical CPU cores
-          --auto-exit           defaults to auto,
+          --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
+          --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
+          --auto-exit=1.         run sequentially
+          --auto-exit=auto       uses the number of logical CPU cores
+          --auto-exit            defaults to auto,
         tag: Error,
       }
     `);
@@ -786,9 +795,11 @@ describe("parse args", () => {
       Object {
         message: Bad flag: --auto-exit=nope
       Only these forms are accepted:
-          --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
-          --auto-exit=auto      uses the number of logical CPU cores
-          --auto-exit           defaults to auto,
+          --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
+          --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
+          --auto-exit=1.         run sequentially
+          --auto-exit=auto       uses the number of logical CPU cores
+          --auto-exit            defaults to auto,
         tag: Error,
       }
     `);
@@ -878,15 +889,19 @@ describe("parse args", () => {
       parseArgs(["--auto-exit", "%", "one", "%", "two", "--auto-exit"])
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
-        autoExit: { tag: "AutoExit", maxParallel: os.cpus().length },
+        autoExit: {
+          tag: "AutoExit",
+          maxParallel: os.cpus().length,
+          failFast: false,
+        },
       })
     );
 
     expect(
-      parseArgs(["--auto-exit=1", "%", "one", "%", "two", "--auto-exit"])
+      parseArgs(["--auto-exit=1.", "%", "one", "%", "two", "--auto-exit"])
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
-        autoExit: { tag: "AutoExit", maxParallel: 1 },
+        autoExit: { tag: "AutoExit", maxParallel: 1, failFast: true },
       })
     );
 
@@ -894,7 +909,7 @@ describe("parse args", () => {
       parseArgs(["--auto-exit=234", "%", "one", "%", "two", "--auto-exit"])
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
-        autoExit: { tag: "AutoExit", maxParallel: 234 },
+        autoExit: { tag: "AutoExit", maxParallel: 234, failFast: false },
       })
     );
 
@@ -902,7 +917,11 @@ describe("parse args", () => {
       parseArgs(["--auto-exit=auto", "%", "one", "%", "two", "--auto-exit"])
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
-        autoExit: { tag: "AutoExit", maxParallel: os.cpus().length },
+        autoExit: {
+          tag: "AutoExit",
+          maxParallel: os.cpus().length,
+          failFast: false,
+        },
       })
     );
   });

@@ -240,9 +240,11 @@ const summarizeLabels = (labels) => {
 };
 
 const autoExitHelp = `
-    --auto-exit=<number>  auto exit when done, with at most <number> parallel processes
-    --auto-exit=auto      uses the number of logical CPU cores
-    --auto-exit           defaults to auto
+    --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
+    --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
+    --auto-exit=1.         run sequentially
+    --auto-exit=auto       uses the number of logical CPU cores
+    --auto-exit            defaults to auto
 `
   .slice(1)
   .trimEnd();
@@ -418,7 +420,11 @@ const drawDashboard = ({
           } at a time.`,
           `The session ends automatically once all commands are ${bold(
             "exit 0"
-          )}.`,
+          )}${
+            autoExit.failFast
+              ? `,\nor when a command fails (${bold("exit non-0")}).`
+              : "."
+          }`,
         ]
           .filter((x) => x !== undefined)
           .join("\n")
@@ -743,7 +749,7 @@ const cmdEscapeArg = (arg) =>
     `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
   );
 
-const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto))?$/;
+const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+\.?|auto))?$/;
 
 /**
  * @typedef {
@@ -764,7 +770,7 @@ const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto))?$/;
  *
  * @typedef {
     | { tag: "NoAutoExit" }
-    | { tag: "AutoExit", maxParallel: number }
+    | { tag: "AutoExit", maxParallel: number, failFast: boolean }
    } AutoExit
  */
 
@@ -795,9 +801,11 @@ const parseArgs = (args) => {
       if (maxParallel === 0) {
         return { tag: "Error", message: "--auto-exit=0 will never finish." };
       }
+      const failFast = match[1] === undefined ? false : match[1].endsWith(".");
       autoExit = {
         tag: "AutoExit",
         maxParallel,
+        failFast,
       };
     } else {
       return {
@@ -1531,13 +1539,22 @@ const runInteractively = (commandDescriptions, autoExit) => {
           handleNextRequest();
           return undefined;
         },
-        onExit: () => {
+        onExit: (exitCode) => {
           // Exit the whole program if all commands have exited.
           if (isDone({ commands, attemptedKillAll, autoExit })) {
             switchToDashboard();
             process.exit(
               autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
             );
+          }
+
+          if (
+            autoExit.tag === "AutoExit" &&
+            autoExit.failFast &&
+            exitCode !== 0 &&
+            !attemptedKillAll
+          ) {
+            killAll();
           }
 
           const nextWaitingIndex = commands.findIndex(
@@ -1878,9 +1895,10 @@ const getCommandIndexFromMousePosition = (commands, { x, y }) => {
 /**
  * @param {Array<CommandDescription>} commandDescriptions
  * @param {number} maxParallel
+ * @param {boolean} failFast
  * @returns {void}
  */
-const runNonInteractively = (commandDescriptions, maxParallel) => {
+const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
   let attemptedKillAll = false;
 
   /**
@@ -1954,6 +1972,11 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
         ) {
           process.stdout.write(printSummary(commands, attemptedKillAll));
           process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
+        }
+
+        if (failFast && exitCode !== 0 && !attemptedKillAll) {
+          // TODO: Newlines?
+          killAll();
         }
 
         const nextWaitingIndex = commands.findIndex(
@@ -2052,7 +2075,8 @@ const run = () => {
       } else if (parseResult.autoExit.tag === "AutoExit") {
         runNonInteractively(
           parseResult.commands,
-          parseResult.autoExit.maxParallel
+          parseResult.autoExit.maxParallel,
+          parseResult.autoExit.failFast
         );
       } else {
         console.error(
