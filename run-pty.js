@@ -1972,22 +1972,24 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
           process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
         }
 
-        if (failFast && exitCode !== 0 && !attemptedKillAll) {
-          // TODO: Newlines?
-          killAll();
-        }
-
-        const nextWaitingIndex = commands.findIndex(
-          (command) => command.status.tag === "Waiting"
-        );
-        if (nextWaitingIndex !== -1 && !attemptedKillAll) {
-          const command = commands[nextWaitingIndex];
-          command.start();
-          process.stdout.write(
-            `\n${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+        if (!attemptedKillAll) {
+          const nextWaitingIndex = commands.findIndex(
+            (command) => command.status.tag === "Waiting"
           );
-        } else {
-          process.stdout.write("\n");
+          if (failFast && exitCode !== 0) {
+            if (numRunning > 0) {
+              process.stdout.write("\n");
+            }
+            killAll();
+          } else if (nextWaitingIndex !== -1) {
+            const command = commands[nextWaitingIndex];
+            command.start();
+            process.stdout.write(
+              `\n${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+            );
+          } else {
+            process.stdout.write("\n");
+          }
         }
 
         return undefined;
