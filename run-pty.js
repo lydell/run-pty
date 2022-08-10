@@ -1033,6 +1033,9 @@ const joinHistory = (command) =>
       command.historyAlternateScreen +
       (command.isOnAlternateScreen ? "" : DISABLE_ALTERNATE_SCREEN));
 
+/**
+ * @typedef {Command} CommandTypeForTest
+ */
 class Command {
   /**
    * @param {{
@@ -2159,6 +2162,7 @@ module.exports = {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
+    drawSummary,
     exitText,
     help,
     historyStart,

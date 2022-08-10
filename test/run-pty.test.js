@@ -8,6 +8,7 @@ const {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
+    drawSummary,
     exitText,
     help,
     historyStart,
@@ -19,6 +20,75 @@ const {
     waitingText,
   },
 } = require("../run-pty");
+
+/**
+ * @param {{ pid: number }} init
+ * @returns {import("node-pty").IPty}
+ */
+function fakeTerminal({ pid }) {
+  return {
+    pid,
+    // Unused in this case:
+    cols: 0,
+    rows: 0,
+    process: "process",
+    handleFlowControl: false,
+    onData: () => notCalled("onData") || { dispose: () => undefined },
+    onExit: () => notCalled("onExit") || { dispose: () => undefined },
+    on: () => notCalled("on"),
+    pause: () => notCalled("pause"),
+    resume: () => notCalled("resume"),
+    resize: () => notCalled("resize"),
+    write: () => notCalled("write"),
+    kill: () => notCalled("kill"),
+  };
+}
+
+/**
+ * @typedef {{
+ *   command: Array<string>;
+ *   status: import("../run-pty").Status;
+ *   statusFromRules?: string;
+ *   title?: string;
+ * }} FakeCommand
+ *
+ * @param {FakeCommand} item
+ * @param {number} index
+ * @returns {import("../run-pty").CommandTypeForTest}
+ */
+
+function fakeCommand(item, index) {
+  const title =
+    item.title === undefined
+      ? commandToPresentationName(item.command)
+      : item.title;
+  return {
+    label: ALL_LABELS[index],
+    title,
+    titleWithGraphicRenditions: title,
+    formattedCommandWithTitle: commandToPresentationName(item.command),
+    status: item.status,
+    // Unused in this case:
+    file: "file",
+    args: [],
+    cwd: ".",
+    killAllSequence: "\x03",
+    history: "",
+    historyAlternateScreen: "",
+    isSimpleLog: true,
+    isOnAlternateScreen: false,
+    statusFromRules: item.statusFromRules,
+    defaultStatus: undefined,
+    statusRules: [],
+    onData: () => notCalled("onData"),
+    onRequest: () => notCalled("onRequest"),
+    onExit: () => notCalled("onExit"),
+    pushHistory: () => notCalled("pushHistory"),
+    start: () => notCalled("start"),
+    kill: () => notCalled("kill"),
+    updateStatusFromRules: () => notCalled("updateStatusFromRules"),
+  };
+}
 
 /**
  * @param {string} string
@@ -102,13 +172,7 @@ describe("help", () => {
 
 describe("dashboard", () => {
   /**
-   *
-   * @param {Array<{
-   *   command: Array<string>;
-   *   status: import("../run-pty").Status;
-   *   statusFromRules?: string;
-   *   title?: string;
-   * }>} items
+   * @param {Array<FakeCommand>} items
    * @param {{width?: number, attemptedKillAll?: boolean, autoExit?: import("../run-pty").AutoExit}} options
    * @returns {string}
    */
@@ -122,68 +186,13 @@ describe("dashboard", () => {
   ) {
     return replaceAnsi(
       drawDashboard({
-        commands: items.map((item, index) => {
-          const title =
-            item.title === undefined
-              ? commandToPresentationName(item.command)
-              : item.title;
-          return {
-            label: ALL_LABELS[index],
-            title,
-            titleWithGraphicRenditions: title,
-            formattedCommandWithTitle: commandToPresentationName(item.command),
-            status: item.status,
-            // Unused in this case:
-            file: "file",
-            args: [],
-            cwd: ".",
-            killAllSequence: "\x03",
-            history: "",
-            historyAlternateScreen: "",
-            isSimpleLog: true,
-            isOnAlternateScreen: false,
-            statusFromRules: item.statusFromRules,
-            defaultStatus: undefined,
-            statusRules: [],
-            onData: () => notCalled("onData"),
-            onRequest: () => notCalled("onRequest"),
-            onExit: () => notCalled("onExit"),
-            pushHistory: () => notCalled("pushHistory"),
-            start: () => notCalled("start"),
-            kill: () => notCalled("kill"),
-            updateStatusFromRules: () => notCalled("updateStatusFromRules"),
-          };
-        }),
+        commands: items.map(fakeCommand),
         width,
         attemptedKillAll,
         autoExit,
         selection: { tag: "Invisible", index: 0 },
       })
     );
-  }
-
-  /**
-   *
-   * @param {{ pid: number }} init
-   * @returns {import("node-pty").IPty}
-   */
-  function fakeTerminal({ pid }) {
-    return {
-      pid,
-      // Unused in this case:
-      cols: 0,
-      rows: 0,
-      process: "process",
-      handleFlowControl: false,
-      onData: () => notCalled("onData") || { dispose: () => undefined },
-      onExit: () => notCalled("onExit") || { dispose: () => undefined },
-      on: () => notCalled("on"),
-      pause: () => notCalled("pause"),
-      resume: () => notCalled("resume"),
-      resize: () => notCalled("resize"),
-      write: () => notCalled("write"),
-      kill: () => notCalled("kill"),
-    };
   }
 
   test("empty", () => {
@@ -539,6 +548,103 @@ describe("dashboard", () => {
       ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+    `);
+  });
+});
+
+describe("summary", () => {
+  /**
+   * @param {Array<FakeCommand>} items
+   * @param {{attemptedKillAll?: boolean}} options
+   * @returns {string}
+   */
+  function testSummary(items, { attemptedKillAll = false } = {}) {
+    return replaceAnsi(
+      drawSummary(items.map(fakeCommand), attemptedKillAll).trim()
+    );
+  }
+
+  test("empty", () => {
+    expect(testSummary([])).toMatchInlineSnapshot(`⧙Summary – success:⧘`);
+  });
+
+  test("one command", () => {
+    expect(
+      testSummary([
+        {
+          command: ["npm", "start"],
+          status: { tag: "Exit", exitCode: 0, wasKilled: false },
+        },
+      ])
+    ).toMatchInlineSnapshot(`
+      ⧙Summary – success:⧘
+      ⚪ ⧙exit 0⧘ npm start⧘
+    `);
+  });
+
+  test("one success, one failure", () => {
+    expect(
+      testSummary([
+        {
+          command: ["npm", "start"],
+          status: { tag: "Exit", exitCode: 0, wasKilled: false },
+        },
+
+        {
+          command: ["npm", "test"],
+          status: { tag: "Exit", exitCode: 1, wasKilled: false },
+        },
+      ])
+    ).toMatchInlineSnapshot(`
+      ⧙Summary – failure:⧘
+      ⚪ ⧙exit 0⧘ npm start⧘
+      🔴 ⧙exit 1⧘ npm test⧘
+    `);
+  });
+
+  test("one success, one aborted", () => {
+    expect(
+      testSummary([
+        {
+          command: ["npm", "start"],
+          status: { tag: "Exit", exitCode: 0, wasKilled: false },
+        },
+
+        {
+          command: ["npm", "test"],
+          status: { tag: "Exit", exitCode: 0, wasKilled: true },
+        },
+      ])
+    ).toMatchInlineSnapshot(`
+      ⧙Summary – success:⧘
+      ⚪ ⧙exit 0⧘ npm start⧘
+      ⛔️ ⧙exit 0⧘ npm test⧘
+    `);
+  });
+
+  test("one failure, one aborted, one success", () => {
+    expect(
+      testSummary([
+        {
+          command: ["npm", "start"],
+          status: { tag: "Exit", exitCode: 126, wasKilled: false },
+        },
+
+        {
+          command: ["ping", "localhost"],
+          status: { tag: "Exit", exitCode: 2, wasKilled: true },
+        },
+
+        {
+          command: ["npm", "test"],
+          status: { tag: "Exit", exitCode: 0, wasKilled: false },
+        },
+      ])
+    ).toMatchInlineSnapshot(`
+      ⧙Summary – failure:⧘
+      🔴 ⧙exit 126⧘ npm start⧘
+      ⛔️ ⧙exit 2⧘ ping localhost⧘
+      ⚪ ⧙exit 0⧘ npm test⧘
     `);
   });
 });
