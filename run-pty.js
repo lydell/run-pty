@@ -460,18 +460,24 @@ ${autoExitText}
 
 /**
  * @param {Array<Command>} commands
- * @param {boolean} attemptedKillAll
  * @returns {string}
  */
-const drawSummary = (commands, attemptedKillAll) => {
-  const summary = attemptedKillAll
-    ? "aborted"
-    : commands.every(
-        (command) =>
-          command.status.tag === "Exit" && command.status.exitCode === 0
-      )
+const drawSummary = (commands) => {
+  const summary = commands.every(
+    (command) =>
+      command.status.tag === "Exit" &&
+      command.status.exitCode === 0 &&
+      !command.status.wasKilled
+  )
     ? "success"
-    : "failure";
+    : commands.some(
+        (command) =>
+          command.status.tag === "Exit" &&
+          command.status.exitCode !== 0 &&
+          !command.status.wasKilled
+      )
+    ? "failure"
+    : "aborted";
   const lines = commands.map((command) => {
     const [indicator, status] = statusText(command.status, {
       useSeparateKilledIndicator: true,
@@ -512,7 +518,7 @@ const getPid = (command) =>
     : "";
 
 /**
- * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "cwd">} CommandText
+ * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "cwd" | "history">} CommandText
  */
 
 /**
@@ -594,7 +600,7 @@ ${shortcut(KEYS.dashboard)} dashboard
 };
 
 /**
- * @param {{ command: Command, exitCode: number, numExited: number, numTotal: number }} options
+ * @param {{ command: CommandText, exitCode: number, numExited: number, numTotal: number }} options
  * @returns {string}
  */
 const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
@@ -1968,7 +1974,7 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
     process.stdout.write(`\r${CLEAR_RIGHT}`);
 
     if (notExited.length === 0) {
-      process.stdout.write(drawSummary(commands, attemptedKillAll));
+      process.stdout.write(drawSummary(commands));
       process.exit(1);
     } else {
       for (const command of notExited) {
@@ -2023,7 +2029,7 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
           (attemptedKillAll && numRunning === 0) ||
           numExit === commands.length
         ) {
-          process.stdout.write(drawSummary(commands, attemptedKillAll));
+          process.stdout.write(drawSummary(commands));
           process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
         }
 
@@ -2164,6 +2170,7 @@ module.exports = {
     drawDashboard,
     drawSummary,
     exitText,
+    exitTextAndHistory,
     help,
     historyStart,
     killingText,

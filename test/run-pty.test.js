@@ -10,6 +10,7 @@ const {
     drawDashboard,
     drawSummary,
     exitText,
+    exitTextAndHistory,
     help,
     historyStart,
     killingText,
@@ -57,7 +58,7 @@ function fakeTerminal({ pid }) {
  * @returns {import("../run-pty").CommandTypeForTest}
  */
 
-function fakeCommand(item, index) {
+function fakeCommand(item, index = 0) {
   const title =
     item.title === undefined
       ? commandToPresentationName(item.command)
@@ -555,13 +556,10 @@ describe("dashboard", () => {
 describe("summary", () => {
   /**
    * @param {Array<FakeCommand>} items
-   * @param {{attemptedKillAll?: boolean}} options
    * @returns {string}
    */
-  function testSummary(items, { attemptedKillAll = false } = {}) {
-    return replaceAnsi(
-      drawSummary(items.map(fakeCommand), attemptedKillAll).trim()
-    );
+  function testSummary(items) {
+    return replaceAnsi(drawSummary(items.map(fakeCommand)).trim());
   }
 
   test("empty", () => {
@@ -616,7 +614,7 @@ describe("summary", () => {
         },
       ])
     ).toMatchInlineSnapshot(`
-      ⧙Summary – success:⧘
+      ⧙Summary – aborted:⧘
       ⚪ ⧙exit 0⧘ npm start⧘
       ⛔️ ⧙exit 0⧘ npm test⧘
     `);
@@ -658,7 +656,9 @@ describe("focused command", () => {
    * @returns {string}
    */
   function render(f, formattedCommandWithTitle, title, cwd) {
-    return replaceAnsi(f({ formattedCommandWithTitle, title, cwd }));
+    return replaceAnsi(
+      f({ formattedCommandWithTitle, title, cwd, history: "" })
+    );
   }
 
   test("just a command", () => {
@@ -829,6 +829,29 @@ describe("focused command", () => {
 
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+    `);
+  });
+});
+
+describe("exit text and history", () => {
+  test("one command, no history", () => {
+    expect(
+      replaceAnsi(
+        exitTextAndHistory({
+          command: {
+            cwd: ".",
+            formattedCommandWithTitle: "npm test",
+            title: "npm test",
+            history: "",
+          },
+          exitCode: 0,
+          numExited: 1,
+          numTotal: 1,
+        }).trim()
+      )
+    ).toMatchInlineSnapshot(`
+      ⚪ npm test⧘
+      ⧙exit 0⧘ ⧙(1/1 exited)⧘
     `);
   });
 });
