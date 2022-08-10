@@ -250,6 +250,7 @@ const autoExitHelp = `
     --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
     --auto-exit=1.         run sequentially
     --auto-exit=auto       uses the number of logical CPU cores
+    --auto-exit=auto.      same thing but fail fast
     --auto-exit            defaults to auto
 `
   .slice(1)
@@ -786,7 +787,7 @@ const cmdEscapeArg = (arg) =>
     `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
   );
 
-const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+\.?|auto))?$/;
+const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto)(\.?))?$/;
 
 /**
  * @typedef {
@@ -838,7 +839,7 @@ const parseArgs = (args) => {
       if (maxParallel === 0) {
         return { tag: "Error", message: "--auto-exit=0 will never finish." };
       }
-      const failFast = match[1] === undefined ? false : match[1].endsWith(".");
+      const failFast = match[2] === ".";
       autoExit = {
         tag: "AutoExit",
         maxParallel,

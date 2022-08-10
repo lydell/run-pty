@@ -77,6 +77,7 @@ describe("help", () => {
           --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
           --auto-exit=1.         run sequentially
           --auto-exit=auto       uses the number of logical CPU cores
+          --auto-exit=auto.      same thing but fail fast
           --auto-exit            defaults to auto
 
       Keyboard shortcuts:
@@ -785,6 +786,7 @@ describe("parse args", () => {
           --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
           --auto-exit=1.         run sequentially
           --auto-exit=auto       uses the number of logical CPU cores
+          --auto-exit=auto.      same thing but fail fast
           --auto-exit            defaults to auto,
         tag: Error,
       }
@@ -800,6 +802,7 @@ describe("parse args", () => {
           --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
           --auto-exit=1.         run sequentially
           --auto-exit=auto       uses the number of logical CPU cores
+          --auto-exit=auto.      same thing but fail fast
           --auto-exit            defaults to auto,
         tag: Error,
       }
@@ -922,6 +925,16 @@ describe("parse args", () => {
           tag: "AutoExit",
           maxParallel: os.cpus().length,
           failFast: false,
+        },
+      })
+    );
+
+    expect(parseArgs(["--auto-exit=auto.", "%", "one"])).toStrictEqual(
+      parsedCommands([["one"]], {
+        autoExit: {
+          tag: "AutoExit",
+          maxParallel: os.cpus().length,
+          failFast: true,
         },
       })
     );
