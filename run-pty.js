@@ -604,10 +604,10 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
     lastLine.trim() === "" ? "" : "\n";
   return `
 ${commandTitleWithIndicator(exitIndicator(exitCode), command)}
-${command.history.replace(
-  NOT_SIMPLE_LOG_ESCAPE_REPLACE,
-  ""
-)}${newline}${cwdText(command)}${bold(`exit ${exitCode}`)} ${dim(
+${cwdText(command)}${command.history.replace(
+    NOT_SIMPLE_LOG_ESCAPE_REPLACE,
+    ""
+  )}${newline}${bold(`exit ${exitCode}`)} ${dim(
     `(${numExited}/${numTotal} exited)`
   )}
 
