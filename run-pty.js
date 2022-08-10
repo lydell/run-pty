@@ -463,7 +463,7 @@ ${autoExitText}
  * @param {boolean} attemptedKillAll
  * @returns {string}
  */
-const printSummary = (commands, attemptedKillAll) => {
+const drawSummary = (commands, attemptedKillAll) => {
   const summary = attemptedKillAll
     ? "aborted"
     : commands.every(
@@ -1965,7 +1965,7 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
     process.stdout.write(`\r${CLEAR_RIGHT}`);
 
     if (notExited.length === 0) {
-      process.stdout.write(printSummary(commands, attemptedKillAll));
+      process.stdout.write(drawSummary(commands, attemptedKillAll));
       process.exit(1);
     } else {
       for (const command of notExited) {
@@ -2020,7 +2020,7 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
           (attemptedKillAll && numRunning === 0) ||
           numExit === commands.length
         ) {
-          process.stdout.write(printSummary(commands, attemptedKillAll));
+          process.stdout.write(drawSummary(commands, attemptedKillAll));
           process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
         }
 
