@@ -847,11 +847,65 @@ describe("exit text and history", () => {
           exitCode: 0,
           numExited: 1,
           numTotal: 1,
-        }).trim()
+        })
       )
     ).toMatchInlineSnapshot(`
       ⚪ npm test⧘
-      ⧙exit 0⧘ ⧙(1/1 exited)⧘
+      ⧙exit 0⧘ ⧙(1/1 exited)⧘␊
+      ␊
+
+    `);
+  });
+
+  test("many commands, history", () => {
+    expect(
+      replaceAnsi(
+        exitTextAndHistory({
+          command: {
+            cwd: ".",
+            formattedCommandWithTitle: "npm test",
+            title: "npm test",
+            history: ["First line", "Second line", ""].join("\n"),
+          },
+          exitCode: 1,
+          numExited: 2,
+          numTotal: 11,
+        })
+      )
+    ).toMatchInlineSnapshot(`
+      🔴 npm test⧘
+      First line
+      Second line
+      ⧙exit 1⧘ ⧙(2/11 exited)⧘␊
+      ␊
+
+    `);
+  });
+
+  test("cwd, no newline at end of history", () => {
+    expect(
+      replaceAnsi(
+        exitTextAndHistory({
+          command: {
+            cwd: "web/frontend",
+            formattedCommandWithTitle: "npm test",
+            title: "npm test",
+            history: ["First line", "Second line"].join("\n"),
+          },
+
+          exitCode: 2,
+          numExited: 11,
+          numTotal: 11,
+        })
+      )
+    ).toMatchInlineSnapshot(`
+      🔴 npm test⧘
+      📂 ⧙web/frontend⧘
+      First line
+      Second line
+      ⧙exit 2⧘ ⧙(11/11 exited)⧘␊
+      ␊
+
     `);
   });
 });
