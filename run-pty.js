@@ -1391,7 +1391,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
      * @returns {void}
      */
     const helper = (extraText) => {
-      if (command.isSimpleLog && !(IS_WINDOWS && !IS_WINDOWS_TERMINAL)) {
+      const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
+      if (command.isSimpleLog && (!isBadWindows || data.endsWith("\n"))) {
         const numLines = extraText.split("\n").length;
         // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
         // the new line. We print the INDs so that if we’re at the bottom of the
@@ -1406,12 +1407,13 @@ const runInteractively = (commandDescriptions, autoExit) => {
         // `\f` works the same way as `\x1BD`. However, cmd.exe prints `\f` as
         // “♀”, and Windows Terminal treats it as `\n`. Linux, macOS and Windows
         // Terminal do support IND. I have not found any way to do this in cmd.exe
-        // and the old PowerShell app, so we simply skip the whole feature there.
+        // and the old PowerShell app, so there we only print the extra text only if
+        // we’re at the start of a new line.
         // https://github.com/microsoft/terminal/issues/3189
         // https://github.com/microsoft/terminal/pull/3271/files#diff-6d7a2ad03ef14def98192607612a235f881368c3828b3b732abdf8f8ecf9b03bR4322
         process.stdout.write(
           data +
-            "\x1BD".repeat(numLines) +
+            (isBadWindows ? "\n" : "\x1BD").repeat(numLines) +
             cursorUp(numLines) +
             SAVE_CURSOR +
             RESET_COLOR +
