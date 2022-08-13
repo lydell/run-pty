@@ -201,6 +201,8 @@ $ run-pty --auto-exit % npm ci % dotnet restore && ./build.bash
 
 To limit how many commands run in parallel, use for example `--auto-exit=5`. Add a period (full stop) at the end to stop as soon as one command fails (fail fast). For example, `--auto-exit=1.` would run sequentially. Just `--auto-exit` is the same as `--auto-exit=auto`, which uses the number of logical CPU cores.
 
+Note: `--auto-exit` is for conveniently running a couple of commands in parallel and get to know once they are done. I don’t want the feature to grow to [GNU Parallel] levels of complexity.
+
 ## Credits
 
 - [microsoft/node-pty] does all the heavy lifting of running the commands.
@@ -222,6 +224,7 @@ There might still be occasional flicker. Hopefully the iTerm2 developers will im
 
 [apiel/run-screen]: https://github.com/apiel/run-screen
 [concurrently]: https://github.com/kimmobrunfeldt/concurrently
+[gnu parallel]: https://www.gnu.org/software/parallel/
 [graphic renditions]: https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
 [iterm2]: https://www.iterm2.com/
 [microsoft/node-pty]: https://github.com/microsoft/node-pty
