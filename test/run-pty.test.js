@@ -589,7 +589,6 @@ describe("summary", () => {
           command: ["npm", "start"],
           status: { tag: "Exit", exitCode: 0, wasKilled: false },
         },
-
         {
           command: ["npm", "test"],
           status: { tag: "Exit", exitCode: 1, wasKilled: false },
@@ -609,7 +608,6 @@ describe("summary", () => {
           command: ["npm", "start"],
           status: { tag: "Exit", exitCode: 0, wasKilled: false },
         },
-
         {
           command: ["npm", "test"],
           status: { tag: "Exit", exitCode: 0, wasKilled: true },
@@ -629,12 +627,10 @@ describe("summary", () => {
           command: ["npm", "start"],
           status: { tag: "Exit", exitCode: 126, wasKilled: false },
         },
-
         {
           command: ["ping", "localhost"],
           status: { tag: "Exit", exitCode: 2, wasKilled: true },
         },
-
         {
           command: ["npm", "test"],
           status: { tag: "Exit", exitCode: 0, wasKilled: false },
