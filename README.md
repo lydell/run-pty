@@ -1,6 +1,6 @@
 # run-pty
 
-`run-pty` is a command line tool that lets you run several commands _concurrently_ and _interactively._ Show output for one command at a time. Kill all at once. Nothing more, nothing less.
+`run-pty` is a command line tool that lets you run several commands _concurrently_ and _interactively._ Show output for one command at a time. Kill all at once.
 
 It’s like [concurrently] but the command outputs aren’t mixed, and you can restart commands individually and interact with them. I bet you can do the same with [tmux] if you – and your team mates – feel like installing and learning it. In `bash` you can use `command1 & command2` together with `fg`, `bg`, `jobs` and <kbd>ctrl+z</kbd> to achieve a similar result, but run-pty tries to be easier to use, and cross-platform.
 
@@ -9,6 +9,8 @@ It’s like [concurrently] but the command outputs aren’t mixed, and you can r
 <kbd>ctrl+c</kbd> kills commands.
 
 A use case is running several watchers. Maybe one or two for frontend (webpack, Parcel, Vite), and one for backend (nodemon, or even some watcher for another programming language).
+
+Another use case is running a couple of commands in parallel, using [--auto-exit](#--auto-exit).
 
 ## Example
 
