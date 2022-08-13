@@ -672,12 +672,13 @@ const statusText = (
 // - u: Restore cursor position.
 //
 // In non interactive mode, we use `NOT_SIMPLE_LOG_ESCAPE_REPLACE` to remove all
-// cursor movements that break things, including clearing the screen. This is
-// especially needed on Windows, where the pty always prints cursor movements.
+// cursor movements that break things, including clearing the screen (except
+// downwards: `J` and `0J`). This is especially needed on Windows, where the pty
+// always prints cursor movements.
 const NOT_SIMPLE_LOG_ESCAPE_TEST =
   /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 const NOT_SIMPLE_LOG_ESCAPE_REPLACE =
-  /\x1B\[(?:\d*[AEFJLMST]|[su]|(?:\d+(?:;\d+)?)?[fH])/g;
+  /\x1B\[(?:\d*[AEFLMST]|[123]J|[su]|(?:\d+(?:;\d+)?)?[fH])/g;
 
 // These escapes should be printed when they first occur, but not when
 // re-printing history.  They result in getting a response on stdin. The
