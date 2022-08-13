@@ -1392,7 +1392,11 @@ const runInteractively = (commandDescriptions, autoExit) => {
      */
     const helper = (extraText) => {
       const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
-      if (command.isSimpleLog && (!isBadWindows || data.endsWith("\n"))) {
+      if (
+        command.isSimpleLog &&
+        (!isBadWindows ||
+          removeGraphicRenditions(getLastLine(command.history)) === "")
+      ) {
         const numLines = extraText.split("\n").length;
         // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
         // the new line. We print the INDs so that if we’re at the bottom of the
