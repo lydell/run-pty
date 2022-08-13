@@ -1385,18 +1385,24 @@ const runInteractively = (commandDescriptions, autoExit) => {
     const helper = (extraText) => {
       if (command.isSimpleLog) {
         const numLines = extraText.split("\n").length;
-        // `\f` is like `\n` except the cursor column is preserved on the new
-        // line. We print the `\f`s so that if we’re at the bottom of the
+        // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
+        // the new line. We print the INDs so that if we’re at the bottom of the
         // terminal window, empty space is created for `extraText`. However, if
         // there’s currently a background color, the new lines will be colored.
         // We can’t solve that with doing `RESET_COLOR` and `SAVE_CURSOR`
-        // earlier, because the `\f`s might cause scrolling but `SAVE_CURSOR`
-        // and `RESTORE_CURSOR` are relative to the screen, not the content. As
-        // a workaround we let the lines be colored, and later clear that using
+        // earlier, because the INDs might cause scrolling but `SAVE_CURSOR` and
+        // `RESTORE_CURSOR` are relative to the screen, not the content. As a
+        // workaround we let the lines be colored, and later clear that using
         // `CLEAR_DOWN`. (There’s no text to clear at that point; only color.)
+        // Note: On Linux and macOS (at least in the terminals I’ve tested),
+        // `\f` works the same way as `\x1BD`. However, cmd.exe prints `\f` as
+        // “♀”, and Windows Terminal treats it as `\n`. Linux, macOS and Windows
+        // Terminal do support IND.
+        // https://github.com/microsoft/terminal/issues/3189
+        // https://github.com/microsoft/terminal/pull/3271/files#diff-6d7a2ad03ef14def98192607612a235f881368c3828b3b732abdf8f8ecf9b03bR4322
         process.stdout.write(
           data +
-            "\f".repeat(numLines) +
+            "\x1BD".repeat(numLines) +
             cursorUp(numLines) +
             SAVE_CURSOR +
             RESET_COLOR +
