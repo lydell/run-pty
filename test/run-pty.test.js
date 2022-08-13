@@ -88,6 +88,7 @@ function fakeCommand(item, index = 0) {
     start: () => notCalled("start"),
     kill: () => notCalled("kill"),
     updateStatusFromRules: () => notCalled("updateStatusFromRules"),
+    windowsConptyCursorMoveWorkaround: false,
   };
 }
 

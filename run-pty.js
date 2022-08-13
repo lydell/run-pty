@@ -610,12 +610,9 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
     lastLine.trim() === "" ? "" : "\n";
   return `
 ${commandTitleWithIndicator(exitIndicator(exitCode), command)}
-${cwdText(command)}${command.history.replace(
-    NOT_SIMPLE_LOG_ESCAPE_REPLACE,
-    ""
-  )}${newline}${bold(`exit ${exitCode}`)} ${dim(
-    `(${numExited}/${numTotal} exited)`
-  )}
+${cwdText(command)}${command.history}${newline}${bold(
+    `exit ${exitCode}`
+  )} ${dim(`(${numExited}/${numTotal} exited)`)}
 
 `.trimStart();
 };
@@ -657,7 +654,7 @@ const statusText = (
 //
 // - A, B: Cursor up/down. Moving down should be safe.
 // - C, D: Cursor left/right. Should be safe! Parcel does this.
-// - E, F: Cursor up/down, and to the start of the line.
+// - E, F: Cursor down/up, and to the start of the line. Moving down should be safe.
 // - G: Cursor absolute position within line. Should be safe! Again, Parcel.
 // - H, f: Cursor absolute position, both x and y. Exception: Moving to the
 //         top-left corner and clearing the screen (ctrl+l).
@@ -670,18 +667,11 @@ const statusText = (
 // - T: Scroll down.
 // - s: Save cursor position.
 // - u: Restore cursor position.
-//
-// In non interactive mode, we use `NOT_SIMPLE_LOG_ESCAPE_REPLACE` to remove all
-// cursor movements that break things, including clearing the screen (except
-// downwards: `J` and `0J`). This is especially needed on Windows, where the pty
-// always prints cursor movements.
-const NOT_SIMPLE_LOG_ESCAPE_TEST =
-  /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
-const NOT_SIMPLE_LOG_ESCAPE_REPLACE =
-  /\x1B\[(?:\d*[AEFLMST]|[123]J|[su]|(?:\d+(?:;\d+)?)?[fH])/g;
+const NOT_SIMPLE_LOG_ESCAPE =
+  /\x1B\[(?:\d*[AFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 
 // These escapes should be printed when they first occur, but not when
-// re-printing history.  They result in getting a response on stdin. The
+// re-printing history. They result in getting a response on stdin. The
 // commands might not be in a state where they expect such stdin at the time we
 // re-print history. For example, Vim asks for the terminal
 // background/foreground colors on startup.  But if it receives such a response
@@ -691,7 +681,15 @@ const NOT_SIMPLE_LOG_ESCAPE_REPLACE =
 // to get the cursor position, and then waits for the response before actually
 // starting the command. There used to be a problem where the commands
 // effectively wouldn’t start executing until focused. That’s solved by handling
-// requests and responses this way.
+// requests and responses this way. The pty then writes a cursor move like `5;1H`.
+// The line (5) varies depending on what we replied to that first 6n escape and
+// how many lines have been printed so far. The column seems to always be 1. So
+// on Windows, we always reply with `1;1` to the first 6n request, and then
+// translate the absolute `5;1H` cursor move to a relative cursor move, the
+// appropriate amount of lines down. Note: The `5;1H` stuff seems to only be
+// triggered when using `npm run`. `run-pty % npx prettier --check .` does not
+// trigger it, but `run-pty % npm run prettier` (with `"prettier": "prettier
+// --check ."` in package.json) does.
 //
 // https://xfree86.org/current/ctlseqs.html
 //
@@ -703,6 +701,7 @@ const ESCAPES_REQUEST =
 const ESCAPES_RESPONSE =
   /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1B\]1[01];[^\x07]+\x07)/g;
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
+const CONPTY_CURSOR_MOVE = /\x1B\[(\d+);1H/;
 
 /**
  * @param {string} request
@@ -1096,6 +1095,8 @@ class Command {
     this.defaultStatus = defaultStatus;
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
+    // See the comment for `CONPTY_CURSOR_MOVE`.
+    this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
   }
 
   /**
@@ -1136,7 +1137,19 @@ class Command {
     });
 
     const disposeOnData = terminal.onData((data) => {
-      for (const [index, part] of data.split(ESCAPES_REQUEST).entries()) {
+      for (const [index, rawPart] of data.split(ESCAPES_REQUEST).entries()) {
+        let part = rawPart;
+        if (
+          this.windowsConptyCursorMoveWorkaround &&
+          CONPTY_CURSOR_MOVE.test(rawPart)
+        ) {
+          part = rawPart.replace(
+            CONPTY_CURSOR_MOVE,
+            (_, n) =>
+              `\x1B[${Number(n) - (this.history + rawPart).split("\n").length}E`
+          );
+          this.windowsConptyCursorMoveWorkaround = false;
+        }
         if (index % 2 === 0) {
           const statusFromRulesChanged = this.pushHistory(part);
           this.onData(part, statusFromRulesChanged);
@@ -1248,7 +1261,7 @@ class Command {
               if (this.history.length > MAX_HISTORY) {
                 this.history = this.history.slice(-MAX_HISTORY);
               }
-              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE_TEST.test(part)) {
+              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(part)) {
                 this.isSimpleLog = false;
               }
             }
@@ -1675,7 +1688,12 @@ const runInteractively = (commandDescriptions, autoExit) => {
           case "Killing":
             switch (current.tag) {
               case "Command":
-                command.status.terminal.write(part);
+                command.status.terminal.write(
+                  command.windowsConptyCursorMoveWorkaround
+                    ? // Always respond with line 1 in the workaround.
+                      part.replace(CURSOR_POSITION_RESPONSE, "$11;1R")
+                    : part
+                );
                 break;
               // In the dashboard, make an educated guess where the cursor would be in the command.
               case "Dashboard": {
@@ -1684,7 +1702,9 @@ const runInteractively = (commandDescriptions, autoExit) => {
                     ? command.historyAlternateScreen
                     : historyStart(waitingIndicator, command) + command.history
                 ).split("\n").length;
-                const likelyRow = Math.min(numLines, process.stdout.rows);
+                const likelyRow = command.windowsConptyCursorMoveWorkaround
+                  ? 1 // Always respond with line 1 in the workaround.
+                  : Math.min(numLines, process.stdout.rows);
                 command.status.terminal.write(
                   part.replace(CURSOR_POSITION_RESPONSE, `$1${likelyRow};1R`)
                 );
