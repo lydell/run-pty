@@ -138,7 +138,7 @@ const killingIndicator = NO_COLOR
 
 const abortedIndicator = NO_COLOR
   ? "▲"
-  : SUPPORTS_EMOJI
+  : !SUPPORTS_EMOJI
   ? `\x1B[91m▲${RESET_COLOR}`
   : "⛔️";
 
