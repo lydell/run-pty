@@ -23,6 +23,8 @@ const Decode = require("tiny-decoders");
  */
 
 const IS_WINDOWS = process.platform === "win32";
+const IS_WINDOWS_TERMINAL = "WT_SESSION" in process.env; // https://github.com/microsoft/terminal/issues/1040
+const SUPPORTS_EMOJI = !IS_WINDOWS || IS_WINDOWS_TERMINAL;
 
 // https://github.com/sindresorhus/ansi-escapes/blob/2b3b59c56ff77a2afdee946bff96f1779d10d775/index.js#L5
 const IS_TERMINAL_APP = process.env.TERM_PROGRAM === "Apple_Terminal";
@@ -118,25 +120,25 @@ const CLEAR_REGEX = (() => {
 
 const waitingIndicator = NO_COLOR
   ? "■"
-  : IS_WINDOWS
+  : !SUPPORTS_EMOJI
   ? `\x1B[93m■${RESET_COLOR}`
   : "🥱";
 
 const runningIndicator = NO_COLOR
   ? "›"
-  : IS_WINDOWS
+  : !SUPPORTS_EMOJI
   ? `\x1B[92m●${RESET_COLOR}`
   : "🟢";
 
 const killingIndicator = NO_COLOR
   ? "○"
-  : IS_WINDOWS
+  : !SUPPORTS_EMOJI
   ? `\x1B[91m○${RESET_COLOR}`
   : "⭕";
 
 const abortedIndicator = NO_COLOR
   ? "▲"
-  : IS_WINDOWS
+  : SUPPORTS_EMOJI
   ? `\x1B[91m▲${RESET_COLOR}`
   : "⛔️";
 
@@ -149,16 +151,20 @@ const exitIndicator = (exitCode) =>
   exitCode === 0 || exitCode === 130
     ? NO_COLOR
       ? "●"
-      : IS_WINDOWS
+      : !SUPPORTS_EMOJI
       ? `\x1B[97m●${RESET_COLOR}`
       : "⚪"
     : NO_COLOR
     ? "×"
-    : IS_WINDOWS
+    : !SUPPORTS_EMOJI
     ? `\x1B[91m●${RESET_COLOR}`
     : "🔴";
 
-const folder = NO_COLOR ? "⌂" : IS_WINDOWS ? `\x1B[2m⌂${RESET_COLOR}` : "📂";
+const folder = NO_COLOR
+  ? "⌂"
+  : !SUPPORTS_EMOJI
+  ? `\x1B[2m⌂${RESET_COLOR}`
+  : "📂";
 
 /**
  * @param {number} n
@@ -219,7 +225,7 @@ const at = dim("@");
 const et = dim("&&");
 
 const [ICON_WIDTH, EMOJI_WIDTH_FIX] =
-  IS_WINDOWS || NO_COLOR ? [1, ""] : [2, cursorHorizontalAbsolute(3)];
+  !SUPPORTS_EMOJI || NO_COLOR ? [1, ""] : [2, cursorHorizontalAbsolute(3)];
 
 /**
  * @param {Array<string | undefined>} labels
@@ -405,6 +411,8 @@ const drawDashboard = ({
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
+  // Clicks might be supported in Windows 11, but not Windows 10.
+  // https://github.com/microsoft/terminal/issues/376
   const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
 
   const pid =
@@ -1304,7 +1312,7 @@ const extractStatus = (status) =>
     ? undefined
     : NO_COLOR
     ? removeGraphicRenditions(status[1])
-    : IS_WINDOWS
+    : !SUPPORTS_EMOJI
     ? status[1]
     : status[0];
 
@@ -1383,7 +1391,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
      * @returns {void}
      */
     const helper = (extraText) => {
-      if (command.isSimpleLog) {
+      if (command.isSimpleLog && !(IS_WINDOWS && !IS_WINDOWS_TERMINAL)) {
         const numLines = extraText.split("\n").length;
         // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
         // the new line. We print the INDs so that if we’re at the bottom of the
@@ -1397,7 +1405,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
         // Note: On Linux and macOS (at least in the terminals I’ve tested),
         // `\f` works the same way as `\x1BD`. However, cmd.exe prints `\f` as
         // “♀”, and Windows Terminal treats it as `\n`. Linux, macOS and Windows
-        // Terminal do support IND.
+        // Terminal do support IND. I have not found any way to do this in cmd.exe
+        // and the old PowerShell app, so we simply skip the whole feature there.
         // https://github.com/microsoft/terminal/issues/3189
         // https://github.com/microsoft/terminal/pull/3271/files#diff-6d7a2ad03ef14def98192607612a235f881368c3828b3b732abdf8f8ecf9b03bR4322
         process.stdout.write(
