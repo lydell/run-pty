@@ -1,5 +1,6 @@
 "use strict";
 
+const childProcess = require("child_process");
 const path = require("path");
 const os = require("os");
 
@@ -1252,5 +1253,151 @@ describe("parse json", () => {
       ],
       autoExit: { tag: "NoAutoExit" },
     });
+  });
+});
+
+describe("--auto-exit runs", () => {
+  /**
+   * @param {Array<string>} args
+   * @returns {{ status: number | null, stdout: string }}
+   */
+  function run(args) {
+    const child = childProcess.spawnSync(
+      "node",
+      [path.join(__dirname, "..", "run-pty.js"), ...args],
+      { encoding: "utf8" }
+    );
+
+    expect(child.error).toBeUndefined();
+
+    expect(replaceAnsi(child.stderr)).toBe("");
+
+    return {
+      status: child.status,
+      stdout: replaceAnsi(child.stdout).replace(/\r/g, ""),
+    };
+  }
+
+  test("success", () => {
+    const { status, stdout } = run([
+      "--auto-exit=2",
+      "%",
+      "true",
+      "%",
+      "sleep",
+      "0.1",
+      "%",
+      "echo",
+      "hello",
+    ]);
+
+    expect(stdout).toMatchInlineSnapshot(`
+      🟢 true⧘
+
+      🟢 sleep 0.1⧘
+
+      🥱 echo hello⧘
+
+      ⚪ true⧘
+      ⧙exit 0⧘ ⧙(1/3 exited)⧘
+
+      🟢 echo hello⧘
+
+      ⚪ echo hello⧘
+      hello
+      ⧙exit 0⧘ ⧙(2/3 exited)⧘
+
+      ⚪ sleep 0.1⧘
+      ⧙exit 0⧘ ⧙(3/3 exited)⧘
+
+      ⧙Summary – success:⧘
+      ⚪ ⧙exit 0⧘ true⧘
+      ⚪ ⧙exit 0⧘ sleep 0.1⧘
+      ⚪ ⧙exit 0⧘ echo hello⧘␊
+
+    `);
+
+    expect(status).toBe(0);
+  });
+
+  test("failure", () => {
+    const { status, stdout } = run([
+      "--auto-exit=2",
+      "%",
+      "sleep",
+      "0.1",
+      "%",
+      "false",
+      "%",
+      "echo",
+      "hello",
+    ]);
+
+    expect(stdout).toMatchInlineSnapshot(`
+      🟢 sleep 0.1⧘
+
+      🟢 false⧘
+
+      🥱 echo hello⧘
+
+      🔴 false⧘
+      ⧙exit 1⧘ ⧙(1/3 exited)⧘
+
+      🟢 echo hello⧘
+
+      ⚪ echo hello⧘
+      hello
+      ⧙exit 0⧘ ⧙(2/3 exited)⧘
+
+      ⚪ sleep 0.1⧘
+      ⧙exit 0⧘ ⧙(3/3 exited)⧘
+
+      ⧙Summary – failure:⧘
+      ⚪ ⧙exit 0⧘ sleep 0.1⧘
+      🔴 ⧙exit 1⧘ false⧘
+      ⚪ ⧙exit 0⧘ echo hello⧘␊
+
+    `);
+
+    expect(status).toBe(1);
+  });
+
+  test("failure, fail fast", () => {
+    const { status, stdout } = run([
+      "--auto-exit=2.",
+      "%",
+      "sleep",
+      "10",
+      "%",
+      "false",
+      "%",
+      "echo",
+      "hello",
+    ]);
+
+    expect(stdout).toMatchInlineSnapshot(`
+      🟢 sleep 10⧘
+
+      🟢 false⧘
+
+      🥱 echo hello⧘
+
+      🔴 false⧘
+      ⧙exit 1⧘ ⧙(1/3 exited)⧘
+
+      ⭕ sleep 10⧘
+
+      ⚪ sleep 10⧘
+      ^C
+      ⧙exit 0⧘ ⧙(2/3 exited)⧘
+
+      ⧙Summary – failure:⧘
+      ⛔️ ⧙exit 0⧘ sleep 10⧘
+      🔴 ⧙exit 1⧘ false⧘
+      🥱 echo hello⧘␊
+
+    `);
+
+    expect(status).toBe(1);
   });
 });
