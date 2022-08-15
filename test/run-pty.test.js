@@ -77,6 +77,7 @@ function fakeCommand(item, index = 0) {
     killAllSequence: "\x03",
     history: "",
     historyAlternateScreen: "",
+    addHistoryStart: false,
     isSimpleLog: true,
     isOnAlternateScreen: false,
     statusFromRules: item.statusFromRules,

@@ -1025,10 +1025,6 @@ const statusDecoder = Decode.nullable(
  * @returns {string}
  */
 const joinHistory = (command) =>
-  historyStart(
-    command.status.tag === "Waiting" ? waitingIndicator : runningIndicator,
-    command
-  ) +
   command.history +
   (command.historyAlternateScreen === ""
     ? command.isOnAlternateScreen
@@ -1045,6 +1041,7 @@ class Command {
   /**
    * @param {{
       label: string | undefined,
+      addHistoryStart: boolean,
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onRequest: (data: string) => undefined,
@@ -1053,6 +1050,7 @@ class Command {
    */
   constructor({
     label,
+    addHistoryStart,
     commandDescription: {
       title,
       cwd,
@@ -1082,8 +1080,7 @@ class Command {
     this.onData = onData;
     this.onRequest = onRequest;
     this.onExit = onExit;
-    this.history = "";
-    this.historyAlternateScreen = "";
+    this.addHistoryStart = addHistoryStart;
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     /** @type {Status} */
@@ -1096,6 +1093,15 @@ class Command {
     this.statusRules = statusRules;
     // See the comment for `CONPTY_CURSOR_MOVE`.
     this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
+
+    // When adding --auto-exit, I first tried to always set `this.history = ""`
+    // and add `historyStart()` in `joinHistory`. However, that doesn’t work
+    // properly because `this.history` can be truncated based on `CLEAR_REGEX`
+    // and `MAX_HISTORY` – and that should include the `historyStart` bit.
+    // (We don’t want `historyStart` for --auto-exit.)
+    /** @type {string} */
+    this.history = addHistoryStart ? historyStart(waitingIndicator, this) : "";
+    this.historyAlternateScreen = "";
   }
 
   /**
@@ -1108,7 +1114,9 @@ class Command {
       );
     }
 
-    this.history = "";
+    this.history = this.addHistoryStart
+      ? historyStart(runningIndicator, this)
+      : "";
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
@@ -1583,6 +1591,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
     (commandDescription, index) =>
       new Command({
         label: ALL_LABELS[index],
+        addHistoryStart: true,
         commandDescription,
         onData: (data, statusFromRulesChanged) => {
           switch (current.tag) {
@@ -1703,7 +1712,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
                 const numLines = (
                   command.isOnAlternateScreen
                     ? command.historyAlternateScreen
-                    : historyStart(waitingIndicator, command) + command.history
+                    : command.history
                 ).split("\n").length;
                 const likelyRow = command.windowsConptyCursorMoveWorkaround
                   ? 1 // Always respond with line 1 in the workaround.
@@ -2013,6 +2022,7 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
   const commands = commandDescriptions.map((commandDescription, index) => {
     const thisCommand = new Command({
       label: ALL_LABELS[index],
+      addHistoryStart: false,
       commandDescription,
       onData: () => undefined,
       // `process.stdin.setRawMode(true)` is required to make real requests to
