@@ -4,14 +4,16 @@
 
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const pty = require("node-pty");
 const Decode = require("tiny-decoders");
 
 /**
  * @typedef {
+    | { tag: "Waiting" }
     | { tag: "Running", terminal: import("node-pty").IPty }
     | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined }
-    | { tag: "Exit", exitCode: number }
+    | { tag: "Exit", exitCode: number, wasKilled: boolean }
    } Status
  *
  * @typedef {
@@ -21,6 +23,8 @@ const Decode = require("tiny-decoders");
  */
 
 const IS_WINDOWS = process.platform === "win32";
+const IS_WINDOWS_TERMINAL = "WT_SESSION" in process.env; // https://github.com/microsoft/terminal/issues/1040
+const SUPPORTS_EMOJI = !IS_WINDOWS || IS_WINDOWS_TERMINAL;
 
 // https://github.com/sindresorhus/ansi-escapes/blob/2b3b59c56ff77a2afdee946bff96f1779d10d775/index.js#L5
 const IS_TERMINAL_APP = process.env.TERM_PROGRAM === "Apple_Terminal";
@@ -114,17 +118,29 @@ const CLEAR_REGEX = (() => {
   return RegExp(`(?:${variants.join("|")})$`);
 })();
 
+const waitingIndicator = NO_COLOR
+  ? "■"
+  : !SUPPORTS_EMOJI
+  ? `\x1B[93m■${RESET_COLOR}`
+  : "🥱";
+
 const runningIndicator = NO_COLOR
   ? "›"
-  : IS_WINDOWS
+  : !SUPPORTS_EMOJI
   ? `\x1B[92m●${RESET_COLOR}`
   : "🟢";
 
 const killingIndicator = NO_COLOR
   ? "○"
-  : IS_WINDOWS
+  : !SUPPORTS_EMOJI
   ? `\x1B[91m○${RESET_COLOR}`
   : "⭕";
+
+const abortedIndicator = NO_COLOR
+  ? "▲"
+  : !SUPPORTS_EMOJI
+  ? `\x1B[91m▲${RESET_COLOR}`
+  : "⛔️";
 
 /**
  * @param {number} exitCode
@@ -135,16 +151,20 @@ const exitIndicator = (exitCode) =>
   exitCode === 0 || exitCode === 130
     ? NO_COLOR
       ? "●"
-      : IS_WINDOWS
+      : !SUPPORTS_EMOJI
       ? `\x1B[97m●${RESET_COLOR}`
       : "⚪"
     : NO_COLOR
     ? "×"
-    : IS_WINDOWS
+    : !SUPPORTS_EMOJI
     ? `\x1B[91m●${RESET_COLOR}`
     : "🔴";
 
-const folder = NO_COLOR ? "⌂" : IS_WINDOWS ? `\x1B[2m⌂${RESET_COLOR}` : "📂";
+const folder = NO_COLOR
+  ? "⌂"
+  : !SUPPORTS_EMOJI
+  ? `\x1B[2m⌂${RESET_COLOR}`
+  : "📂";
 
 /**
  * @param {number} n
@@ -202,12 +222,13 @@ const shortcut = (string, { pad = true } = {}) =>
 const runPty = bold("run-pty");
 const pc = dim("%");
 const at = dim("@");
+const et = dim("&&");
 
 const [ICON_WIDTH, EMOJI_WIDTH_FIX] =
-  IS_WINDOWS || NO_COLOR ? [1, ""] : [2, cursorHorizontalAbsolute(3)];
+  !SUPPORTS_EMOJI || NO_COLOR ? [1, ""] : [2, cursorHorizontalAbsolute(3)];
 
 /**
- * @param {Array<string>} labels
+ * @param {Array<string | undefined>} labels
  * @returns {string}
  */
 const summarizeLabels = (labels) => {
@@ -230,6 +251,17 @@ const summarizeLabels = (labels) => {
     .join("/");
 };
 
+const autoExitHelp = `
+    --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
+    --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
+    --auto-exit=1.         run sequentially
+    --auto-exit=auto       uses the number of logical CPU cores
+    --auto-exit=auto.      same thing but fail fast
+    --auto-exit            defaults to auto
+`
+  .slice(1)
+  .trimEnd();
+
 const help = `
 Run several commands concurrently.
 Show output for one command at a time.
@@ -247,6 +279,12 @@ Use ${bold("sh -c '...'")} or similar if you need that.
 Alternatively, specify the commands in a JSON file:
 
     ${runPty} run-pty.json
+
+You can tell run-pty to exit once all commands have exited with status 0:
+
+    ${runPty} --auto-exit ${pc} npm ci ${pc} dotnet restore ${et} ./build.bash
+
+${autoExitHelp}
 
 Keyboard shortcuts:
 
@@ -273,21 +311,29 @@ Environment variables:
 const killAllLabel = (commands) =>
   commands.some((command) => command.status.tag === "Killing")
     ? `kill all ${dim("(double-press to force) ")}`
-    : commands.every((command) => command.status.tag === "Exit")
+    : commands.every((command) => !("terminal" in command.status))
     ? "exit"
     : "kill all";
 
 /**
  * @param {Array<Command>} commands
- * @param {number} width
  * @param {Selection} selection
+ * @param {{ width: number, useSeparateKilledIndicator: boolean }} options
  * @returns {Array<{ line: string, length: number }>}
  */
-const drawDashboardCommandLines = (commands, width, selection) => {
+const drawDashboardCommandLines = (
+  commands,
+  selection,
+  { width, useSeparateKilledIndicator }
+) => {
   const lines = commands.map((command) => {
-    const [icon, status] = statusText(command.status, command.statusFromRules);
+    const [icon, status] = statusText(command.status, {
+      statusFromRules: command.statusFromRules,
+      useSeparateKilledIndicator,
+    });
+    const { label = " " } = command;
     return {
-      label: shortcut(command.label || " ", { pad: false }),
+      label: shortcut(label, { pad: false }),
       icon,
       status,
       title: command.titleWithGraphicRenditions,
@@ -330,21 +376,31 @@ const drawDashboardCommandLines = (commands, width, selection) => {
 };
 
 /**
- * @param {Array<Command>} commands
- * @param {number} width
- * @param {boolean} attemptedKillAll
- * @param {Selection} selection
+ * @param {{
+    commands: Array<Command>,
+    width: number,
+    attemptedKillAll: boolean,
+    autoExit: AutoExit,
+    selection: Selection,
+   }} options
  * @returns {string}
  */
-const drawDashboard = (commands, width, attemptedKillAll, selection) => {
-  const done =
-    attemptedKillAll &&
-    commands.every((command) => command.status.tag === "Exit");
+const drawDashboard = ({
+  commands,
+  width,
+  attemptedKillAll,
+  autoExit,
+  selection,
+}) => {
+  const done = isDone({ commands, attemptedKillAll, autoExit });
 
   const finalLines = drawDashboardCommandLines(
     commands,
-    width,
-    done ? { tag: "Invisible", index: 0 } : selection
+    done ? { tag: "Invisible", index: 0 } : selection,
+    {
+      width,
+      useSeparateKilledIndicator: autoExit.tag === "AutoExit",
+    }
   )
     .map(({ line }) => line)
     .join("\n");
@@ -355,6 +411,8 @@ const drawDashboard = (commands, width, attemptedKillAll, selection) => {
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
+  // Clicks might be supported in Windows 11, but not Windows 10.
+  // https://github.com/microsoft/terminal/issues/376
   const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
 
   const pid =
@@ -364,12 +422,38 @@ const drawDashboard = (commands, width, attemptedKillAll, selection) => {
 
   const enter =
     pid === undefined
-      ? commands.some((command) => command.status.tag === "Exit")
+      ? autoExit.tag === "AutoExit"
+        ? commands.some(
+            (command) =>
+              command.status.tag === "Exit" && command.status.exitCode !== 0
+          )
+          ? `${shortcut(KEYS.enter)} restart failed`
+          : ""
+        : commands.some((command) => command.status.tag === "Exit")
         ? `${shortcut(KEYS.enter)} restart exited`
         : ""
       : `${shortcut(KEYS.enter)} focus selected${pid}\n${shortcut(
           KEYS.unselect
         )} unselect`;
+
+  const autoExitText =
+    autoExit.tag === "AutoExit"
+      ? [
+          enter === "" ? undefined : "",
+          `At most ${autoExit.maxParallel} ${
+            autoExit.maxParallel === 1 ? "command runs" : "commands run"
+          } at a time.`,
+          `The session ends automatically once all commands are ${bold(
+            "exit 0"
+          )}${
+            autoExit.failFast
+              ? `,\nor when a command fails (${bold("exit non-0")}).`
+              : "."
+          }`,
+        ]
+          .filter((x) => x !== undefined)
+          .join("\n")
+      : "";
 
   return `
 ${finalLines}
@@ -378,25 +462,71 @@ ${shortcut(label)} focus command${click}
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.navigate)} move selection
 ${enter}
+${autoExitText}
 `.trim();
 };
+
+/**
+ * @param {Array<Command>} commands
+ * @returns {string}
+ */
+const drawSummary = (commands) => {
+  const summary = commands.every(
+    (command) =>
+      command.status.tag === "Exit" &&
+      command.status.exitCode === 0 &&
+      !command.status.wasKilled
+  )
+    ? "success"
+    : commands.some(
+        (command) =>
+          command.status.tag === "Exit" &&
+          command.status.exitCode !== 0 &&
+          !command.status.wasKilled
+      )
+    ? "failure"
+    : "aborted";
+  const lines = commands.map((command) => {
+    const [indicator, status] = statusText(command.status, {
+      useSeparateKilledIndicator: true,
+    });
+    return `${indicator}${EMOJI_WIDTH_FIX} ${
+      status === undefined ? "" : `${status} `
+    }${command.formattedCommandWithTitle}${RESET_COLOR}`;
+  });
+  return `${bold(`Summary – ${summary}:`)}\n${lines.join("\n")}\n`;
+};
+
+/**
+ * @param {{
+    commands: Array<Command>,
+    attemptedKillAll: boolean,
+    autoExit: AutoExit,
+   }} options
+ * @returns {boolean}
+ */
+const isDone = ({ commands, attemptedKillAll, autoExit }) =>
+  // All commands are killed:
+  (attemptedKillAll &&
+    commands.every((command) => !("terminal" in command.status))) ||
+  // --auto-exit and all commands are “exit 0”:
+  (autoExit.tag === "AutoExit" &&
+    commands.every(
+      (command) =>
+        command.status.tag === "Exit" && command.status.exitCode === 0
+    ));
 
 /**
  * @param {Command} command
  * @returns {string}
  */
-const getPid = (command) => {
-  switch (command.status.tag) {
-    case "Running":
-    case "Killing":
-      return ` ${dim(`(pid ${command.status.terminal.pid})`)}`;
-    case "Exit":
-      return "";
-  }
-};
+const getPid = (command) =>
+  "terminal" in command.status
+    ? ` ${dim(`(pid ${command.status.terminal.pid})`)}`
+    : "";
 
 /**
- * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "cwd">} CommandText
+ * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "cwd" | "history">} CommandText
  */
 
 /**
@@ -409,13 +539,32 @@ const cwdText = (command) =>
     : `${folder}${EMOJI_WIDTH_FIX} ${dim(command.cwd)}\n`;
 
 /**
+ * @param {string} indicator
  * @param {CommandText} command
  * @returns {string}
  */
-const historyStart = (command) =>
-  `${runningIndicator}${EMOJI_WIDTH_FIX} ${
-    command.formattedCommandWithTitle
-  }${RESET_COLOR}\n${cwdText(command)}`;
+const historyStart = (indicator, command) =>
+  `${commandTitleWithIndicator(indicator, command)}\n${cwdText(command)}`;
+
+/**
+ * @param {string} indicator
+ * @param {CommandText} command
+ * @returns {string}
+ */
+const commandTitleWithIndicator = (indicator, command) =>
+  `${indicator}${EMOJI_WIDTH_FIX} ${command.formattedCommandWithTitle}${RESET_COLOR}`;
+
+/**
+ * @param {Array<Command>} commands
+ * @returns {string}
+ */
+const waitingText = (commands) =>
+  `
+Waiting for other commands to finish before starting.
+
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
+${shortcut(KEYS.dashboard)} dashboard
+`.trim();
 
 /**
  * @param {number} pid
@@ -441,27 +590,57 @@ ${shortcut(KEYS.dashboard)} dashboard
  * @param {Array<Command>} commands
  * @param {CommandText} command
  * @param {number} exitCode
+ * @param {AutoExit} autoExit
  * @returns {string}
  */
-const exitText = (commands, command, exitCode) =>
-  `
-${exitIndicator(exitCode)}${EMOJI_WIDTH_FIX} ${
-    command.formattedCommandWithTitle
-  }${RESET_COLOR}
+const exitText = (commands, command, exitCode, autoExit) => {
+  const restart =
+    autoExit.tag === "AutoExit" && exitCode === 0
+      ? ""
+      : `${shortcut(KEYS.enter)} restart\n`;
+  return `
+${commandTitleWithIndicator(exitIndicator(exitCode), command)}
 ${cwdText(command)}exit ${exitCode}
 
-${shortcut(KEYS.restart)} restart
-${shortcut(KEYS.kill)} ${killAllLabel(commands)}
+${restart}${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
+};
+
+/**
+ * @param {{ command: CommandText, exitCode: number, numExited: number, numTotal: number }} options
+ * @returns {string}
+ */
+const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
+  const lastLine = removeGraphicRenditions(getLastLine(command.history));
+  const newline =
+    // If the last line is empty, no extra newline is needed.
+    lastLine.trim() === "" ? "" : "\n";
+  return `
+${commandTitleWithIndicator(exitIndicator(exitCode), command)}
+${cwdText(command)}${command.history}${newline}${bold(
+    `exit ${exitCode}`
+  )} ${dim(`(${numExited}/${numTotal} exited)`)}
+
+`.trimStart();
+};
 
 /**
  * @param {Status} status
- * @param {string | undefined} statusFromRules
+ * @param {{ statusFromRules?: string, useSeparateKilledIndicator?: boolean }} options
  * @returns {[string, string | undefined]}
  */
-const statusText = (status, statusFromRules = runningIndicator) => {
+const statusText = (
+  status,
+  {
+    statusFromRules = runningIndicator,
+    useSeparateKilledIndicator = false,
+  } = {}
+) => {
   switch (status.tag) {
+    case "Waiting":
+      return [waitingIndicator, undefined];
+
     case "Running":
       return [statusFromRules, undefined];
 
@@ -469,7 +648,12 @@ const statusText = (status, statusFromRules = runningIndicator) => {
       return [killingIndicator, undefined];
 
     case "Exit":
-      return [exitIndicator(status.exitCode), bold(`exit ${status.exitCode}`)];
+      return [
+        status.wasKilled && useSeparateKilledIndicator
+          ? abortedIndicator
+          : exitIndicator(status.exitCode),
+        bold(`exit ${status.exitCode}`),
+      ];
   }
 };
 
@@ -478,7 +662,7 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 //
 // - A, B: Cursor up/down. Moving down should be safe.
 // - C, D: Cursor left/right. Should be safe! Parcel does this.
-// - E, F: Cursor up/down, and to the start of the line.
+// - E, F: Cursor down/up, and to the start of the line. Moving down should be safe.
 // - G: Cursor absolute position within line. Should be safe! Again, Parcel.
 // - H, f: Cursor absolute position, both x and y. Exception: Moving to the
 //         top-left corner and clearing the screen (ctrl+l).
@@ -492,10 +676,10 @@ const statusText = (status, statusFromRules = runningIndicator) => {
 // - s: Save cursor position.
 // - u: Restore cursor position.
 const NOT_SIMPLE_LOG_ESCAPE =
-  /\x1B\[(?:\d*[AEFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
+  /\x1B\[(?:\d*[AFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
 
 // These escapes should be printed when they first occur, but not when
-// re-printing history.  They result in getting a response on stdin. The
+// re-printing history. They result in getting a response on stdin. The
 // commands might not be in a state where they expect such stdin at the time we
 // re-print history. For example, Vim asks for the terminal
 // background/foreground colors on startup.  But if it receives such a response
@@ -505,7 +689,15 @@ const NOT_SIMPLE_LOG_ESCAPE =
 // to get the cursor position, and then waits for the response before actually
 // starting the command. There used to be a problem where the commands
 // effectively wouldn’t start executing until focused. That’s solved by handling
-// requests and responses this way.
+// requests and responses this way. The pty then writes a cursor move like `5;1H`.
+// The line (5) varies depending on what we replied to that first 6n escape and
+// how many lines have been printed so far. The column seems to always be 1. So
+// on Windows, we always reply with `1;1` to the first 6n request, and then
+// translate the absolute `5;1H` cursor move to a relative cursor move, the
+// appropriate amount of lines down. Note: The `5;1H` stuff seems to only be
+// triggered when using `npm run`. `run-pty % npx prettier --check .` does not
+// trigger it, but `run-pty % npm run prettier` (with `"prettier": "prettier
+// --check ."` in package.json) does.
 //
 // https://xfree86.org/current/ctlseqs.html
 //
@@ -513,10 +705,26 @@ const NOT_SIMPLE_LOG_ESCAPE =
 // - t: Report window position, size, title etc.
 // - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
 const ESCAPES_REQUEST =
-  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1b\]1[01];\?\x07)/g;
+  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\]1[01];\?\x07)/g;
 const ESCAPES_RESPONSE =
-  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1b\]1[01];[^\x07]+\x07)/g;
+  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1B\]1[01];[^\x07]+\x07)/g;
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
+const CONPTY_CURSOR_MOVE = /\x1B\[(\d+);1H/;
+
+/**
+ * @param {string} request
+ * @returns {string}
+ */
+const respondToRequestFake = (request) =>
+  request.endsWith("6n")
+    ? "\x1B[1;1R"
+    : request.endsWith("t")
+    ? "\x1B[3;0;0t"
+    : request.startsWith("\x1B]10;")
+    ? "\x1B]10;rgb:ffff/ffff/ffff\x07"
+    : request.startsWith("\x1B]11;")
+    ? "\x1B]11;rgb:0000/0000/0000\x07"
+    : "";
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
@@ -593,12 +801,14 @@ const cmdEscapeArg = (arg) =>
     `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
   );
 
+const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto)(\.?))?$/;
+
 /**
  * @typedef {
     | { tag: "Help" }
     | { tag: "NoCommands" }
     | { tag: "Error", message: string }
-    | { tag: "Parsed", commands: Array<CommandDescription> }
+    | { tag: "Parsed", commands: Array<CommandDescription>, autoExit: AutoExit }
    } ParseResult
  *
  * @typedef {{
@@ -609,6 +819,11 @@ const cmdEscapeArg = (arg) =>
     defaultStatus?: [string, string],
     killAllSequence: string,
    }} CommandDescription
+ *
+ * @typedef {
+    | { tag: "NoAutoExit" }
+    | { tag: "AutoExit", maxParallel: number, failFast: boolean }
+   } AutoExit
  */
 
 /**
@@ -616,16 +831,52 @@ const cmdEscapeArg = (arg) =>
  * @returns {ParseResult}
  */
 const parseArgs = (args) => {
-  if (args.length === 0 || args[0] === "-h" || args[0] === "--help") {
+  if (args.length === 0) {
     return { tag: "Help" };
   }
 
-  if (args.length === 1) {
+  const [flags, restArgs] = partitionArgs(args);
+
+  /** @type {AutoExit} */
+  let autoExit = { tag: "NoAutoExit" };
+
+  for (const flag of flags) {
+    if (args[0] === "-h" || args[0] === "--help") {
+      return { tag: "Help" };
+    }
+    const match = AUTO_EXIT_REGEX.exec(flag);
+    if (match !== null) {
+      const maxParallel =
+        match[1] === undefined || match[1] === "auto"
+          ? os.cpus().length
+          : Number(match[1]);
+      if (maxParallel === 0) {
+        return { tag: "Error", message: "--auto-exit=0 will never finish." };
+      }
+      const failFast = match[2] === ".";
+      autoExit = {
+        tag: "AutoExit",
+        maxParallel,
+        failFast,
+      };
+    } else {
+      return {
+        tag: "Error",
+        message: [
+          `Bad flag: ${flag}`,
+          "Only these forms are accepted:",
+          autoExitHelp,
+        ].join("\n"),
+      };
+    }
+  }
+
+  if (restArgs.length === 1) {
     try {
-      const commands = parseInputFile(fs.readFileSync(args[0], "utf8"));
+      const commands = parseInputFile(fs.readFileSync(restArgs[0], "utf8"));
       return commands.length === 0
         ? { tag: "NoCommands" }
-        : { tag: "Parsed", commands };
+        : { tag: "Parsed", commands, autoExit };
     } catch (errorAny) {
       /** @type {Error & {code?: string} | undefined} */
       const error = errorAny instanceof Error ? errorAny : undefined;
@@ -650,12 +901,12 @@ const parseArgs = (args) => {
     }
   }
 
-  const delimiter = args[0];
+  const delimiter = restArgs[0];
 
   let command = [];
   const commands = [];
 
-  for (const arg of args) {
+  for (const arg of restArgs) {
     if (arg === delimiter) {
       if (command.length > 0) {
         commands.push(command);
@@ -684,7 +935,22 @@ const parseArgs = (args) => {
       defaultStatus: undefined,
       killAllSequence: KEY_CODES.kill,
     })),
+    autoExit,
   };
+};
+
+const LOOKS_LIKE_FLAG = /^--?\w/;
+
+/**
+ * @param {Array<string>} args
+ * @returns {[Array<string>, Array<string>]}
+ */
+const partitionArgs = (args) => {
+  let index = 0;
+  while (index < args.length && LOOKS_LIKE_FLAG.test(args[index])) {
+    index++;
+  }
+  return [args.slice(0, index), args.slice(index)];
 };
 
 /**
@@ -768,6 +1034,10 @@ const statusDecoder = Decode.nullable(
  * @returns {string}
  */
 const joinHistory = (command) =>
+  historyStart(
+    command.status.tag === "Waiting" ? waitingIndicator : runningIndicator,
+    command
+  ) +
   command.history +
   (command.historyAlternateScreen === ""
     ? command.isOnAlternateScreen
@@ -777,14 +1047,17 @@ const joinHistory = (command) =>
       command.historyAlternateScreen +
       (command.isOnAlternateScreen ? "" : DISABLE_ALTERNATE_SCREEN));
 
+/**
+ * @typedef {Command} CommandTypeForTest
+ */
 class Command {
   /**
    * @param {{
-      label: string,
+      label: string | undefined,
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onRequest: (data: string) => undefined,
-      onExit: () => undefined,
+      onExit: (exitCode: number) => undefined,
      }} commandInit
    */
   constructor({
@@ -823,27 +1096,28 @@ class Command {
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     /** @type {Status} */
-    this.status = { tag: "Exit", exitCode: 0 };
+    this.status = { tag: "Waiting" };
     /** @type {string | undefined} */
     this.statusFromRules = extractStatus(defaultStatus);
     /** @type {[string, string] | undefined} */
     this.defaultStatus = defaultStatus;
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
-    this.start();
+    // See the comment for `CONPTY_CURSOR_MOVE`.
+    this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
   }
 
   /**
    * @returns {void}
    */
   start() {
-    if (this.status.tag !== "Exit") {
+    if ("terminal" in this.status) {
       throw new Error(
-        `Cannot start pty with pid ${this.status.terminal.pid} because not exited for: ${this.title}`
+        `Cannot start pty with pid ${this.status.terminal.pid} because ${this.status.tag} for: ${this.title}`
       );
     }
 
-    this.history = historyStart(this);
+    this.history = "";
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
@@ -871,7 +1145,19 @@ class Command {
     });
 
     const disposeOnData = terminal.onData((data) => {
-      for (const [index, part] of data.split(ESCAPES_REQUEST).entries()) {
+      for (const [index, rawPart] of data.split(ESCAPES_REQUEST).entries()) {
+        let part = rawPart;
+        if (
+          this.windowsConptyCursorMoveWorkaround &&
+          CONPTY_CURSOR_MOVE.test(rawPart)
+        ) {
+          part = rawPart.replace(
+            CONPTY_CURSOR_MOVE,
+            (_, n) =>
+              `\x1B[${Number(n) - (this.history + rawPart).split("\n").length}E`
+          );
+          this.windowsConptyCursorMoveWorkaround = false;
+        }
         if (index % 2 === 0) {
           const statusFromRulesChanged = this.pushHistory(part);
           this.onData(part, statusFromRulesChanged);
@@ -884,8 +1170,12 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
-      this.status = { tag: "Exit", exitCode };
-      this.onExit();
+      this.status = {
+        tag: "Exit",
+        exitCode,
+        wasKilled: this.status.tag === "Killing",
+      };
+      this.onExit(exitCode);
     });
 
     this.status = { tag: "Running", terminal };
@@ -931,8 +1221,11 @@ class Command {
         return undefined;
       }
 
+      case "Waiting":
       case "Exit":
-        throw new Error(`Cannot kill already exited pty for: ${this.title}`);
+        throw new Error(
+          `Cannot kill ${this.status.tag} pty for: ${this.title}`
+        );
     }
   }
 
@@ -1019,7 +1312,7 @@ const extractStatus = (status) =>
     ? undefined
     : NO_COLOR
     ? removeGraphicRenditions(status[1])
-    : IS_WINDOWS
+    : !SUPPORTS_EMOJI
     ? status[1]
     : status[0];
 
@@ -1048,9 +1341,10 @@ const getLastLine = (string) => {
 
 /**
  * @param {Array<CommandDescription>} commandDescriptions
+ * @param {AutoExit} autoExit
  * @returns {void}
  */
-const runCommands = (commandDescriptions) => {
+const runInteractively = (commandDescriptions, autoExit) => {
   /** @type {Current} */
   let current = { tag: "Dashboard" };
   let attemptedKillAll = false;
@@ -1097,20 +1391,33 @@ const runCommands = (commandDescriptions) => {
      * @returns {void}
      */
     const helper = (extraText) => {
-      if (command.isSimpleLog) {
+      const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
+      if (
+        command.isSimpleLog &&
+        (!isBadWindows ||
+          removeGraphicRenditions(getLastLine(command.history)) === "")
+      ) {
         const numLines = extraText.split("\n").length;
-        // `\f` is like `\n` except the cursor column is preserved on the new
-        // line. We print the `\f`s so that if we’re at the bottom of the
+        // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
+        // the new line. We print the INDs so that if we’re at the bottom of the
         // terminal window, empty space is created for `extraText`. However, if
         // there’s currently a background color, the new lines will be colored.
         // We can’t solve that with doing `RESET_COLOR` and `SAVE_CURSOR`
-        // earlier, because the `\f`s might cause scrolling but `SAVE_CURSOR`
-        // and `RESTORE_CURSOR` are relative to the screen, not the content. As
-        // a workaround we let the lines be colored, and later clear that using
+        // earlier, because the INDs might cause scrolling but `SAVE_CURSOR` and
+        // `RESTORE_CURSOR` are relative to the screen, not the content. As a
+        // workaround we let the lines be colored, and later clear that using
         // `CLEAR_DOWN`. (There’s no text to clear at that point; only color.)
+        // Note: On Linux and macOS (at least in the terminals I’ve tested),
+        // `\f` works the same way as `\x1BD`. However, cmd.exe prints `\f` as
+        // “♀”, and Windows Terminal treats it as `\n`. Linux, macOS and Windows
+        // Terminal do support IND. I have not found any way to do this in cmd.exe
+        // and the old PowerShell app, so there we only print the extra text only if
+        // we’re at the start of a new line.
+        // https://github.com/microsoft/terminal/issues/3189
+        // https://github.com/microsoft/terminal/pull/3271/files#diff-6d7a2ad03ef14def98192607612a235f881368c3828b3b732abdf8f8ecf9b03bR4322
         process.stdout.write(
           data +
-            "\f".repeat(numLines) +
+            (isBadWindows ? "\n" : "\x1BD").repeat(numLines) +
             cursorUp(numLines) +
             SAVE_CURSOR +
             RESET_COLOR +
@@ -1138,6 +1445,7 @@ const runCommands = (commandDescriptions) => {
         );
         return undefined;
 
+      case "Waiting":
       case "Exit": {
         const lastLine = removeGraphicRenditions(getLastLine(command.history));
         const newlines =
@@ -1155,7 +1463,9 @@ const runCommands = (commandDescriptions) => {
             RESET_COLOR +
             disableAlternateScreen +
             newlines +
-            exitText(commands, command, command.status.exitCode)
+            (command.status.tag === "Waiting"
+              ? waitingText(commands)
+              : exitText(commands, command, command.status.exitCode, autoExit))
         );
 
         extraTextPrinted = false;
@@ -1176,12 +1486,13 @@ const runCommands = (commandDescriptions) => {
         ENABLE_MOUSE +
         RESET_COLOR +
         CLEAR +
-        drawDashboard(
+        drawDashboard({
           commands,
-          process.stdout.columns,
+          width: process.stdout.columns,
           attemptedKillAll,
-          selection
-        )
+          autoExit,
+          selection,
+        })
     );
   };
 
@@ -1226,11 +1537,11 @@ const runCommands = (commandDescriptions) => {
   const killAll = () => {
     attemptedKillAll = true;
     const notExited = commands.filter(
-      (command) => command.status.tag !== "Exit"
+      (command) => "terminal" in command.status
     );
     if (notExited.length === 0) {
       switchToDashboard();
-      process.exit(0);
+      process.exit(autoExit.tag === "AutoExit" ? 1 : 0);
     } else {
       for (const command of notExited) {
         command.kill();
@@ -1244,7 +1555,13 @@ const runCommands = (commandDescriptions) => {
    * @returns {void}
    */
   const restartExited = () => {
-    const exited = commands.filter((command) => command.status.tag === "Exit");
+    const exited =
+      autoExit.tag === "AutoExit"
+        ? commands.filter(
+            (command) =>
+              command.status.tag === "Exit" && command.status.exitCode !== 0
+          )
+        : commands.filter((command) => command.status.tag === "Exit");
     if (exited.length > 0) {
       for (const command of exited) {
         command.start();
@@ -1274,7 +1591,7 @@ const runCommands = (commandDescriptions) => {
   const commands = commandDescriptions.map(
     (commandDescription, index) =>
       new Command({
-        label: ALL_LABELS[index] || "",
+        label: ALL_LABELS[index],
         commandDescription,
         onData: (data, statusFromRulesChanged) => {
           switch (current.tag) {
@@ -1286,9 +1603,10 @@ const runCommands = (commandDescriptions) => {
                   case "Killing":
                     printDataWithExtraText(command, data);
                     return undefined;
+                  case "Waiting":
                   case "Exit":
                     throw new Error(
-                      `Received unexpected output from already exited pty for: ${command.title}\n${data}`
+                      `Received unexpected output from ${command.status.tag} pty for: ${command.title}\n${data}`
                     );
                 }
               }
@@ -1307,14 +1625,36 @@ const runCommands = (commandDescriptions) => {
           handleNextRequest();
           return undefined;
         },
-        onExit: () => {
-          // Exit the whole program if all commands are killed.
-          if (
-            attemptedKillAll &&
-            commands.every((command2) => command2.status.tag === "Exit")
-          ) {
+        onExit: (exitCode) => {
+          // Exit the whole program if all commands have exited.
+          if (isDone({ commands, attemptedKillAll, autoExit })) {
             switchToDashboard();
-            process.exit(0);
+            process.exit(
+              autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
+            );
+          }
+
+          if (
+            autoExit.tag === "AutoExit" &&
+            autoExit.failFast &&
+            exitCode !== 0 &&
+            !attemptedKillAll
+          ) {
+            killAll();
+          }
+
+          const nextWaitingIndex = commands.findIndex(
+            (command) => command.status.tag === "Waiting"
+          );
+          if (nextWaitingIndex !== -1 && !attemptedKillAll) {
+            commands[nextWaitingIndex].start();
+            // If starting the command we’re currently on, redraw to remove `waitingText`.
+            if (
+              current.tag === "Command" &&
+              current.index === nextWaitingIndex
+            ) {
+              switchToCommand(current.index);
+            }
           }
 
           switch (current.tag) {
@@ -1338,7 +1678,7 @@ const runCommands = (commandDescriptions) => {
 
   process.stdout.on("resize", () => {
     for (const command of commands) {
-      if (command.status.tag === "Running") {
+      if ("terminal" in command.status) {
         command.status.terminal.resize(
           process.stdout.columns,
           process.stdout.rows
@@ -1351,6 +1691,8 @@ const runCommands = (commandDescriptions) => {
       switchToDashboard();
     }
   });
+
+  setupSignalHandlers(commands, killAll);
 
   process.stdin.setRawMode(true);
 
@@ -1367,16 +1709,23 @@ const runCommands = (commandDescriptions) => {
           case "Killing":
             switch (current.tag) {
               case "Command":
-                command.status.terminal.write(part);
+                command.status.terminal.write(
+                  command.windowsConptyCursorMoveWorkaround
+                    ? // Always respond with line 1 in the workaround.
+                      part.replace(CURSOR_POSITION_RESPONSE, "$11;1R")
+                    : part
+                );
                 break;
               // In the dashboard, make an educated guess where the cursor would be in the command.
               case "Dashboard": {
                 const numLines = (
                   command.isOnAlternateScreen
                     ? command.historyAlternateScreen
-                    : command.history
+                    : historyStart(waitingIndicator, command) + command.history
                 ).split("\n").length;
-                const likelyRow = Math.min(numLines, process.stdout.rows);
+                const likelyRow = command.windowsConptyCursorMoveWorkaround
+                  ? 1 // Always respond with line 1 in the workaround.
+                  : Math.min(numLines, process.stdout.rows);
                 command.status.terminal.write(
                   part.replace(CURSOR_POSITION_RESPONSE, `$1${likelyRow};1R`)
                 );
@@ -1384,6 +1733,7 @@ const runCommands = (commandDescriptions) => {
               }
             }
             break;
+          case "Waiting":
           case "Exit":
             break;
         }
@@ -1396,6 +1746,7 @@ const runCommands = (commandDescriptions) => {
           current,
           commands,
           selection,
+          autoExit,
           switchToDashboard,
           switchToCommand,
           setSelection,
@@ -1406,33 +1757,17 @@ const runCommands = (commandDescriptions) => {
     }
   });
 
-  // Clean up all commands if someone tries to kill run-pty.
-  for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
-    process.on(signal, killAll);
-  }
-
-  // Don’t leave running processes behind in case of an unexpected error.
-  for (const event of ["uncaughtException", "unhandledRejection"]) {
-    process.on(event, (error) => {
-      console.error(error);
-      for (const command of commands) {
-        if (command.status.tag !== "Exit") {
-          if (IS_WINDOWS) {
-            command.status.terminal.kill();
-          } else {
-            command.status.terminal.kill("SIGKILL");
-          }
-        }
-      }
-      process.exit(1);
-    });
-  }
-
   process.on("exit", () => {
     process.stdout.write(
       SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + DISABLE_MOUSE + RESET_COLOR
     );
   });
+
+  const maxParallel =
+    autoExit.tag === "AutoExit" ? autoExit.maxParallel : Infinity;
+  for (const command of commands.slice(0, maxParallel)) {
+    command.start();
+  }
 
   if (commandDescriptions.length === 1) {
     switchToCommand(0);
@@ -1446,6 +1781,7 @@ const runCommands = (commandDescriptions) => {
  * @param {Current} current
  * @param {Array<Command>} commands
  * @param {Selection} selection
+ * @param {AutoExit} autoExit
  * @param {() => void} switchToDashboard
  * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
@@ -1458,6 +1794,7 @@ const onStdin = (
   current,
   commands,
   selection,
+  autoExit,
   switchToDashboard,
   switchToCommand,
   setSelection,
@@ -1468,6 +1805,20 @@ const onStdin = (
     case "Command": {
       const command = commands[current.index];
       switch (command.status.tag) {
+        case "Waiting":
+          switch (data) {
+            case KEY_CODES.kill:
+              killAll();
+              return undefined;
+
+            case KEY_CODES.dashboard:
+              switchToDashboard();
+              return undefined;
+
+            default:
+              return undefined;
+          }
+
         case "Running":
         case "Killing":
           switch (data) {
@@ -1499,8 +1850,12 @@ const onStdin = (
               return undefined;
 
             case KEY_CODES.restart:
-              command.start();
-              switchToCommand(current.index);
+              if (
+                !(autoExit.tag === "AutoExit" && command.status.exitCode === 0)
+              ) {
+                command.start();
+                switchToCommand(current.index);
+              }
               return undefined;
 
             default:
@@ -1615,10 +1970,17 @@ const parseMouse = (string) => {
  * @param {{ x: number, y: number }} mousePosition
  */
 const getCommandIndexFromMousePosition = (commands, { x, y }) => {
-  const lines = drawDashboardCommandLines(commands, process.stdout.columns, {
-    tag: "Invisible",
-    index: 0,
-  });
+  const lines = drawDashboardCommandLines(
+    commands,
+    {
+      tag: "Invisible",
+      index: 0,
+    },
+    {
+      width: process.stdout.columns,
+      useSeparateKilledIndicator: false,
+    }
+  );
 
   if (y >= 0 && y < lines.length) {
     const line = lines[y];
@@ -1631,14 +1993,180 @@ const getCommandIndexFromMousePosition = (commands, { x, y }) => {
 };
 
 /**
+ * @param {Array<CommandDescription>} commandDescriptions
+ * @param {number} maxParallel
+ * @param {boolean} failFast
+ * @returns {void}
+ */
+const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
+  let attemptedKillAll = false;
+
+  /**
+   * @returns {void}
+   */
+  const killAll = () => {
+    attemptedKillAll = true;
+    const notExited = commands.filter(
+      (command) => "terminal" in command.status
+    );
+
+    // Pressing ctrl+c prints `^C` to the terminal. Move the cursor back so we
+    // overwrite that. We also need to clear since ⭕️ is see-through. `^C` will
+    // be seen in each command history.
+    process.stdout.write(`\r${CLEAR_RIGHT}`);
+
+    if (notExited.length === 0) {
+      process.stdout.write(drawSummary(commands));
+      process.exit(1);
+    } else {
+      for (const command of notExited) {
+        command.kill();
+        process.stdout.write(
+          `${commandTitleWithIndicator(killingIndicator, command)}\n\n`
+        );
+      }
+    }
+  };
+
+  /** @type {Array<Command>} */
+  const commands = commandDescriptions.map((commandDescription, index) => {
+    const thisCommand = new Command({
+      label: ALL_LABELS[index],
+      commandDescription,
+      onData: () => undefined,
+      // `process.stdin.setRawMode(true)` is required to make real requests to
+      // the terminal, but that is not possible when `process.stdin.isTTY === false`.
+      // The best we can do is respond immediately with a fake response so
+      // programs don’t get stuck. This is important on Windows – see the
+      // comment for `ESCAPES_REQUEST`.
+      onRequest: (data) => {
+        if ("terminal" in thisCommand.status) {
+          thisCommand.status.terminal.write(respondToRequestFake(data));
+        }
+        return undefined;
+      },
+      onExit: (exitCode) => {
+        const numRunning = commands.filter(
+          (command) => "terminal" in command.status
+        ).length;
+        const numExit = commands.filter(
+          (command) => command.status.tag === "Exit"
+        ).length;
+        const numExit0 = commands.filter(
+          (command) =>
+            command.status.tag === "Exit" && command.status.exitCode === 0
+        ).length;
+
+        process.stdout.write(
+          exitTextAndHistory({
+            command: thisCommand,
+            exitCode,
+            numExited: numExit,
+            numTotal: commands.length,
+          })
+        );
+
+        // Exit the whole program if all commands have exited.
+        if (
+          (attemptedKillAll && numRunning === 0) ||
+          numExit === commands.length
+        ) {
+          process.stdout.write(drawSummary(commands));
+          process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
+        }
+
+        if (!attemptedKillAll) {
+          const nextWaitingIndex = commands.findIndex(
+            (command) => command.status.tag === "Waiting"
+          );
+          if (failFast && exitCode !== 0) {
+            killAll();
+          } else if (nextWaitingIndex !== -1) {
+            const command = commands[nextWaitingIndex];
+            command.start();
+            process.stdout.write(
+              `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+            );
+          }
+        }
+
+        return undefined;
+      },
+    });
+
+    return thisCommand;
+  });
+
+  process.stdout.on("resize", () => {
+    for (const command of commands) {
+      if ("terminal" in command.status) {
+        command.status.terminal.resize(
+          process.stdout.columns,
+          process.stdout.rows
+        );
+      }
+    }
+  });
+
+  setupSignalHandlers(commands, killAll);
+
+  for (const [index, command] of commands.entries()) {
+    if (index < maxParallel) {
+      command.start();
+      process.stdout.write(
+        `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+      );
+    } else {
+      process.stdout.write(
+        `${commandTitleWithIndicator(waitingIndicator, command)}\n\n`
+      );
+    }
+  }
+};
+
+/**
+ * @param {Array<Command>} commands
+ * @param {() => void} killAll
+ * @returns {void}
+ */
+const setupSignalHandlers = (commands, killAll) => {
+  let lastSignalTimestamp = 0;
+
+  // Clean up all commands if someone tries to kill run-pty.
+  for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+    process.on(signal, () => {
+      const now = Date.now();
+      // When running via `npm run` or `npx`, one often gets two SIGINTs in a row
+      // when pressing ctrl+c. https://stackoverflow.com/a/60273973
+      if (now - lastSignalTimestamp > 10) {
+        killAll();
+      }
+      lastSignalTimestamp = now;
+    });
+  }
+
+  // Don’t leave running processes behind in case of an unexpected error.
+  for (const event of ["uncaughtException", "unhandledRejection"]) {
+    process.on(event, (error) => {
+      console.error(error);
+      for (const command of commands) {
+        if ("terminal" in command.status) {
+          if (IS_WINDOWS) {
+            command.status.terminal.kill();
+          } else {
+            command.status.terminal.kill("SIGKILL");
+          }
+        }
+      }
+      process.exit(1);
+    });
+  }
+};
+
+/**
  * @returns {undefined}
  */
 const run = () => {
-  if (!process.stdin.isTTY) {
-    console.error("run-pty requires stdin to be a TTY to run properly.");
-    process.exit(1);
-  }
-
   const parseResult = parseArgs(process.argv.slice(2));
 
   switch (parseResult.tag) {
@@ -1650,7 +2178,20 @@ const run = () => {
       process.exit(0);
 
     case "Parsed":
-      runCommands(parseResult.commands);
+      if (process.stdin.isTTY) {
+        runInteractively(parseResult.commands, parseResult.autoExit);
+      } else if (parseResult.autoExit.tag === "AutoExit") {
+        runNonInteractively(
+          parseResult.commands,
+          parseResult.autoExit.maxParallel,
+          parseResult.autoExit.failFast
+        );
+      } else {
+        console.error(
+          "run-pty requires stdin to be a TTY to run properly (unless --auto-exit is used)."
+        );
+        process.exit(1);
+      }
       return undefined;
 
     case "Error":
@@ -1669,12 +2210,16 @@ module.exports = {
     ALL_LABELS,
     commandToPresentationName,
     drawDashboard,
+    drawSummary,
     exitText,
+    exitTextAndHistory,
     help,
     historyStart,
     killingText,
     parseArgs,
+    runningIndicator,
     runningText,
     summarizeLabels,
+    waitingText,
   },
 };

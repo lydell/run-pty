@@ -1,6 +1,6 @@
 # run-pty
 
-`run-pty` is a command line tool that lets you run several commands _concurrently_ and _interactively._ Show output for one command at a time. Kill all at once. Nothing more, nothing less.
+`run-pty` is a command line tool that lets you run several commands _concurrently_ and _interactively._ Show output for one command at a time. Kill all at once.
 
 It’s like [concurrently] but the command outputs aren’t mixed, and you can restart commands individually and interact with them. I bet you can do the same with [tmux] if you – and your team mates – feel like installing and learning it. In `bash` you can use `command1 & command2` together with `fg`, `bg`, `jobs` and <kbd>ctrl+z</kbd> to achieve a similar result, but run-pty tries to be easier to use, and cross-platform.
 
@@ -9,6 +9,8 @@ It’s like [concurrently] but the command outputs aren’t mixed, and you can r
 <kbd>ctrl+c</kbd> kills commands.
 
 A use case is running several watchers. Maybe one or two for frontend (webpack, Parcel, Vite), and one for backend (nodemon, or even some watcher for another programming language).
+
+Another use case is running a couple of commands in parallel, using [--auto-exit](#--auto-exit).
 
 ## Example
 
@@ -177,13 +179,31 @@ The JSON format lets you specify additional things apart from the command itself
 
   This is how the value (`[string, string] | null`) is used:
 
-  - The first string is used on all OS:es except Windows, unless the `NO_COLOR` environment variable is set. The string is drawn in 2 character slots in the terminal – if your string is longer, it will be cut off. Emojis usually need 2 character slots.
-  - The second string is used on Windows or if `NO_COLOR` is set. In `NO_COLOR` mode, [graphic renditions] are stripped as well. So you can use ANSI codes (in either string) to make your experience more colorful while still letting people have monochrome output if they prefer. Unlike the first string, the second string is drawn in **1** character slot in the terminal. (Windows does not support emojis in the terminal very well, and for `NO_COLOR` you might not want colored emojis, so a single character should do.)
+  - The first string is used primarily. The string is drawn in 2 character slots in the terminal – if your string is longer, it will be cut off. Emojis usually need 2 character slots.
+  - The second string is used on Windows (except if you use _Windows Terminal_ instead of for example cmd.exe) or if the `NO_COLOR` environment variable is set. In `NO_COLOR` mode, [graphic renditions] are stripped as well. So you can use ANSI codes (in either string) to make your experience more colorful while still letting people have monochrome output if they prefer. Unlike the first string, the second string is drawn in **1** character slot in the terminal. (Windows – except the newer _Windows Terminal_ – does not support emojis in the terminal very well, and for `NO_COLOR` you might not want colored emojis, so a single character should do.)
   - `null` resets the indicator to the standard 🟢 one (_not_ `defaultStatus`).
 
 - defaultStatus: This lets you replace 🟢 with a custom status indicator at startup (before your command has written anything). The value works like for `status`.
 
 - killAllSequence: When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to send to the command to make it exit.
+
+## --auto-exit
+
+If you want to run a couple of commands in parallel and once they’re done continue with something else, use `--auto-exit`:
+
+```
+$ run-pty --auto-exit % npm ci % dotnet restore && ./build.bash
+```
+
+- You can enter the different commands while they are running to see their progress.
+- Once all commands exit with code 0 (success), run-pty exits with code 0 as well.
+- If some command fails, run-pty does _not_ exit, so you can inspect the failure, and re-run that command if you want.
+- If you exit run-pty before all commands have exited with code 0, run-pty exits with code 1, so that if run-pty was part of a longer command chain, that chain is ended.
+- In CI – where there is no TTY – the `--auto-exit` mode degrades to a simpler, non-interactive UI.
+
+To limit how many commands run in parallel, use for example `--auto-exit=5`. Add a period (full stop) at the end to stop as soon as one command fails (fail fast). For example, `--auto-exit=1.` would run sequentially. Just `--auto-exit` is the same as `--auto-exit=auto`, which uses the number of logical CPU cores.
+
+Note: `--auto-exit` is for conveniently running a couple of commands in parallel and get to know once they are done. I don’t want the feature to grow to [GNU Parallel] levels of complexity.
 
 ## Credits
 
@@ -206,6 +226,7 @@ There might still be occasional flicker. Hopefully the iTerm2 developers will im
 
 [apiel/run-screen]: https://github.com/apiel/run-screen
 [concurrently]: https://github.com/kimmobrunfeldt/concurrently
+[gnu parallel]: https://www.gnu.org/software/parallel/
 [graphic renditions]: https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
 [iterm2]: https://www.iterm2.com/
 [microsoft/node-pty]: https://github.com/microsoft/node-pty

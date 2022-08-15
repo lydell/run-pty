@@ -38,6 +38,14 @@ module.exports = {
         ...require("@typescript-eslint/eslint-plugin").configs[
           "recommended-requiring-type-checking"
         ].rules,
+        "@typescript-eslint/strict-boolean-expressions": [
+          "error",
+          {
+            allowString: false,
+            allowNumber: false,
+            allowNullableObject: false,
+          },
+        ],
         "@typescript-eslint/switch-exhaustiveness-check": "error",
       },
     },
