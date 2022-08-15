@@ -201,7 +201,7 @@ $ run-pty --auto-exit % npm ci % dotnet restore && ./build.bash
 - If you exit run-pty before all commands have exited with code 0, run-pty exits with code 1, so that if run-pty was part of a longer command chain, that chain is ended.
 - In CI – where there is no TTY – the `--auto-exit` mode degrades to a simpler, non-interactive UI.
 
-To limit how many commands run in parallel, use for example `--auto-exit=5`. Add a period (full stop) at the end to stop as soon as one command fails (fail fast). For example, `--auto-exit=1.` would run sequentially. Just `--auto-exit` is the same as `--auto-exit=auto`, which uses the number of logical CPU cores.
+To limit how many commands run in parallel, use for example `--auto-exit=5`. Just `--auto-exit` is the same as `--auto-exit=auto`, which uses the number of logical CPU cores.
 
 Note: `--auto-exit` is for conveniently running a couple of commands in parallel and get to know once they are done. I don’t want the feature to grow to [GNU Parallel] levels of complexity.
 
