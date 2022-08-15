@@ -147,10 +147,7 @@ describe("help", () => {
           ⧙run-pty⧘ --auto-exit ⧙%⧘ npm ci ⧙%⧘ dotnet restore ⧙&&⧘ ./build.bash
 
           --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
-          --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
-          --auto-exit=1.         run sequentially
           --auto-exit=auto       uses the number of logical CPU cores
-          --auto-exit=auto.      same thing but fail fast
           --auto-exit            defaults to auto
 
       Keyboard shortcuts:
@@ -234,7 +231,7 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false } }
+        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -248,7 +245,7 @@ describe("dashboard", () => {
     `);
   });
 
-  test("auto exit, max 1, fail fast", () => {
+  test("auto exit, max 1", () => {
     expect(
       testDashboard(
         [
@@ -258,7 +255,7 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 1, failFast: true } }
+        { autoExit: { tag: "AutoExit", maxParallel: 1 } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -268,8 +265,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
       At most 1 command runs at a time.
-      The session ends automatically once all commands are ⧙exit 0⧘,
-      or when a command fails (⧙exit non-0⧘).
+      The session ends automatically once all commands are ⧙exit 0⧘.
     `);
   });
 
@@ -282,7 +278,7 @@ describe("dashboard", () => {
             status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
         ],
-        { autoExit: { tag: "AutoExit", maxParallel: 2, failFast: false } }
+        { autoExit: { tag: "AutoExit", maxParallel: 2 } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -311,7 +307,7 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false } }
+        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
       )
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
@@ -368,7 +364,7 @@ describe("dashboard", () => {
         ],
         {
           attemptedKillAll: true,
-          autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false },
+          autoExit: { tag: "AutoExit", maxParallel: 3 },
         }
       )
     ).toMatchInlineSnapshot(`
@@ -395,7 +391,7 @@ describe("dashboard", () => {
 
         {
           attemptedKillAll: true,
-          autoExit: { tag: "AutoExit", maxParallel: 3, failFast: false },
+          autoExit: { tag: "AutoExit", maxParallel: 3 },
         }
       )
     ).toMatchInlineSnapshot(`
@@ -781,7 +777,6 @@ describe("focused command", () => {
           exitText([], command, 0, {
             tag: "AutoExit",
             maxParallel: 3,
-            failFast: false,
           }),
         "frontend: npm start",
         "frontend",
@@ -964,10 +959,7 @@ describe("parse args", () => {
         message: Bad flag: --unknown
       Only these forms are accepted:
           --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
-          --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
-          --auto-exit=1.         run sequentially
           --auto-exit=auto       uses the number of logical CPU cores
-          --auto-exit=auto.      same thing but fail fast
           --auto-exit            defaults to auto,
         tag: Error,
       }
@@ -980,10 +972,7 @@ describe("parse args", () => {
         message: Bad flag: --auto-exit=nope
       Only these forms are accepted:
           --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
-          --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
-          --auto-exit=1.         run sequentially
           --auto-exit=auto       uses the number of logical CPU cores
-          --auto-exit=auto.      same thing but fail fast
           --auto-exit            defaults to auto,
         tag: Error,
       }
@@ -1077,16 +1066,7 @@ describe("parse args", () => {
         autoExit: {
           tag: "AutoExit",
           maxParallel: os.cpus().length,
-          failFast: false,
         },
-      })
-    );
-
-    expect(
-      parseArgs(["--auto-exit=1.", "%", "one", "%", "two", "--auto-exit"])
-    ).toStrictEqual(
-      parsedCommands([["one"], ["two", "--auto-exit"]], {
-        autoExit: { tag: "AutoExit", maxParallel: 1, failFast: true },
       })
     );
 
@@ -1094,7 +1074,7 @@ describe("parse args", () => {
       parseArgs(["--auto-exit=234", "%", "one", "%", "two", "--auto-exit"])
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
-        autoExit: { tag: "AutoExit", maxParallel: 234, failFast: false },
+        autoExit: { tag: "AutoExit", maxParallel: 234 },
       })
     );
 
@@ -1105,17 +1085,6 @@ describe("parse args", () => {
         autoExit: {
           tag: "AutoExit",
           maxParallel: os.cpus().length,
-          failFast: false,
-        },
-      })
-    );
-
-    expect(parseArgs(["--auto-exit=auto.", "%", "one"])).toStrictEqual(
-      parsedCommands([["one"]], {
-        autoExit: {
-          tag: "AutoExit",
-          maxParallel: os.cpus().length,
-          failFast: true,
         },
       })
     );
@@ -1352,45 +1321,6 @@ describe("--auto-exit runs", () => {
       ⚪ ⧙exit 0⧘ sleep 0.1⧘
       🔴 ⧙exit 1⧘ false⧘
       ⚪ ⧙exit 0⧘ echo hello⧘␊
-
-    `);
-
-    expect(status).toBe(1);
-  });
-
-  test("failure, fail fast", () => {
-    const { status, stdout } = run([
-      "--auto-exit=2.",
-      "%",
-      "sleep",
-      "10",
-      "%",
-      "false",
-      "%",
-      "echo",
-      "hello",
-    ]);
-
-    expect(stdout).toMatchInlineSnapshot(`
-      🟢 sleep 10⧘
-
-      🟢 false⧘
-
-      🥱 echo hello⧘
-
-      🔴 false⧘
-      ⧙exit 1⧘ ⧙(1/3 exited)⧘
-
-      ⭕ sleep 10⧘
-
-      ⚪ sleep 10⧘
-      ^C
-      ⧙exit 0⧘ ⧙(2/3 exited)⧘
-
-      ⧙Summary – failure:⧘
-      ⛔️ ⧙exit 0⧘ sleep 10⧘
-      🔴 ⧙exit 1⧘ false⧘
-      🥱 echo hello⧘␊
 
     `);
 

@@ -253,10 +253,7 @@ const summarizeLabels = (labels) => {
 
 const autoExitHelp = `
     --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
-    --auto-exit=<number>.  the period (full stop) means to stop early when a command fails
-    --auto-exit=1.         run sequentially
     --auto-exit=auto       uses the number of logical CPU cores
-    --auto-exit=auto.      same thing but fail fast
     --auto-exit            defaults to auto
 `
   .slice(1)
@@ -445,11 +442,7 @@ const drawDashboard = ({
           } at a time.`,
           `The session ends automatically once all commands are ${bold(
             "exit 0"
-          )}${
-            autoExit.failFast
-              ? `,\nor when a command fails (${bold("exit non-0")}).`
-              : "."
-          }`,
+          )}.`,
         ]
           .filter((x) => x !== undefined)
           .join("\n")
@@ -801,7 +794,7 @@ const cmdEscapeArg = (arg) =>
     `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`
   );
 
-const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto)(\.?))?$/;
+const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto))?$/;
 
 /**
  * @typedef {
@@ -822,7 +815,7 @@ const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto)(\.?))?$/;
  *
  * @typedef {
     | { tag: "NoAutoExit" }
-    | { tag: "AutoExit", maxParallel: number, failFast: boolean }
+    | { tag: "AutoExit", maxParallel: number }
    } AutoExit
  */
 
@@ -853,11 +846,9 @@ const parseArgs = (args) => {
       if (maxParallel === 0) {
         return { tag: "Error", message: "--auto-exit=0 will never finish." };
       }
-      const failFast = match[2] === ".";
       autoExit = {
         tag: "AutoExit",
         maxParallel,
-        failFast,
       };
     } else {
       return {
@@ -1625,22 +1616,13 @@ const runInteractively = (commandDescriptions, autoExit) => {
           handleNextRequest();
           return undefined;
         },
-        onExit: (exitCode) => {
+        onExit: () => {
           // Exit the whole program if all commands have exited.
           if (isDone({ commands, attemptedKillAll, autoExit })) {
             switchToDashboard();
             process.exit(
               autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
             );
-          }
-
-          if (
-            autoExit.tag === "AutoExit" &&
-            autoExit.failFast &&
-            exitCode !== 0 &&
-            !attemptedKillAll
-          ) {
-            killAll();
           }
 
           const nextWaitingIndex = commands.findIndex(
@@ -1995,10 +1977,9 @@ const getCommandIndexFromMousePosition = (commands, { x, y }) => {
 /**
  * @param {Array<CommandDescription>} commandDescriptions
  * @param {number} maxParallel
- * @param {boolean} failFast
  * @returns {void}
  */
-const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
+const runNonInteractively = (commandDescriptions, maxParallel) => {
   let attemptedKillAll = false;
 
   /**
@@ -2075,19 +2056,15 @@ const runNonInteractively = (commandDescriptions, maxParallel, failFast) => {
           process.exit(attemptedKillAll || numExit0 !== numExit ? 1 : 0);
         }
 
-        if (!attemptedKillAll) {
-          const nextWaitingIndex = commands.findIndex(
-            (command) => command.status.tag === "Waiting"
+        const nextWaitingIndex = commands.findIndex(
+          (command) => command.status.tag === "Waiting"
+        );
+        if (nextWaitingIndex !== -1 && !attemptedKillAll) {
+          const command = commands[nextWaitingIndex];
+          command.start();
+          process.stdout.write(
+            `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
           );
-          if (failFast && exitCode !== 0) {
-            killAll();
-          } else if (nextWaitingIndex !== -1) {
-            const command = commands[nextWaitingIndex];
-            command.start();
-            process.stdout.write(
-              `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
-            );
-          }
         }
 
         return undefined;
@@ -2183,8 +2160,7 @@ const run = () => {
       } else if (parseResult.autoExit.tag === "AutoExit") {
         runNonInteractively(
           parseResult.commands,
-          parseResult.autoExit.maxParallel,
-          parseResult.autoExit.failFast
+          parseResult.autoExit.maxParallel
         );
       } else {
         console.error(
