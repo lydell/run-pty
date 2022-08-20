@@ -102,7 +102,7 @@ function replaceAnsi(string) {
   return string
     .replace(/\x1B\[0?m/g, "⧘")
     .replace(/\x1B\[\d+m/g, "⧙")
-    .replace(/\x1B\[\d*[GK]/g, "");
+    .replace(/\x1B\[\d*[GJK]/g, "");
 }
 
 /**
