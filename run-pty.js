@@ -333,7 +333,7 @@ const drawDashboardCommandLines = (
       label: shortcut(label, { pad: false }),
       icon,
       status,
-      title: command.titleWithGraphicRenditions,
+      title: command.titlePossiblyWithGraphicRenditions,
     };
   });
 
@@ -485,7 +485,7 @@ const drawSummary = (commands) => {
     });
     return `${indicator}${EMOJI_WIDTH_FIX} ${
       status === undefined ? "" : `${status} `
-    }${command.formattedCommandWithTitle}${RESET_COLOR}`;
+    }${command.titlePossiblyWithGraphicRenditions}${RESET_COLOR}`;
   });
   return `${bold(`Summary – ${summary}:`)}\n${lines.join("\n")}\n`;
 };
@@ -519,7 +519,7 @@ const getPid = (command) =>
     : "";
 
 /**
- * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "cwd" | "history">} CommandText
+ * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "titlePossiblyWithGraphicRenditions" | "cwd" | "history">} CommandText
  */
 
 /**
@@ -527,7 +527,7 @@ const getPid = (command) =>
  * @returns {string}
  */
 const cwdText = (command) =>
-  path.resolve(command.cwd) === process.cwd() || command.cwd === command.title
+  path.resolve(command.cwd) === process.cwd()
     ? ""
     : `${folder}${EMOJI_WIDTH_FIX} ${dim(command.cwd)}\n`;
 
@@ -540,12 +540,30 @@ const historyStart = (indicator, command) =>
   `${commandTitleWithIndicator(indicator, command)}\n${cwdText(command)}`;
 
 /**
+ * Used in interactive mode.
+ *
  * @param {string} indicator
  * @param {CommandText} command
  * @returns {string}
  */
 const commandTitleWithIndicator = (indicator, command) =>
   `${indicator}${EMOJI_WIDTH_FIX} ${command.formattedCommandWithTitle}${RESET_COLOR}`;
+
+/**
+ * Similar to `commandTitleWithIndicator`. Used in non-interactive mode. This
+ * does not print the full command, only the title. In interactive mode, the
+ * dashboard only prints the title too – if you want the full thing, you need to
+ * enter that command, because the command can be very long. In non-interactive
+ * mode, it can be very spammy if a long command is printed once when started,
+ * once when exited and once in the summary – interesting output (such as
+ * errors) gets lost in a sea of command stuff.
+ *
+ * @param {string} indicator
+ * @param {CommandText} command
+ * @returns {string}
+ */
+const commandTitleOnlyWithIndicator = (indicator, command) =>
+  `${indicator}${EMOJI_WIDTH_FIX} ${command.titlePossiblyWithGraphicRenditions}${RESET_COLOR}`;
 
 /**
  * @param {Array<Command>} commands
@@ -610,7 +628,7 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
     // If the last line is empty, no extra newline is needed.
     lastLine.trim() === "" ? "" : "\n";
   return `
-${commandTitleWithIndicator(exitIndicator(exitCode), command)}
+${commandTitleOnlyWithIndicator(exitIndicator(exitCode), command)}
 ${cwdText(command)}${command.history}${newline}${bold(
     `exit ${exitCode}`
   )} ${dim(`(${numExited}/${numTotal} exited)`)}
@@ -1070,13 +1088,15 @@ class Command {
     this.cwd = cwd;
     this.killAllSequence = killAllSequence;
     this.title = removeGraphicRenditions(title);
-    this.titleWithGraphicRenditions = title;
+    this.titlePossiblyWithGraphicRenditions = NO_COLOR
+      ? removeGraphicRenditions(title)
+      : title;
     this.formattedCommandWithTitle =
       title === formattedCommand
         ? formattedCommand
         : NO_COLOR
         ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
-        : `${bold(`${title}${RESET_COLOR}:`)} ${formattedCommand}`;
+        : `${bold(`${title}`)}: ${formattedCommand}`;
     this.onData = onData;
     this.onRequest = onRequest;
     this.onExit = onExit;
@@ -2012,7 +2032,7 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
       for (const command of notExited) {
         command.kill();
         process.stdout.write(
-          `${commandTitleWithIndicator(killingIndicator, command)}\n\n`
+          `${commandTitleOnlyWithIndicator(killingIndicator, command)}\n\n`
         );
       }
     }
@@ -2073,7 +2093,7 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
           const command = commands[nextWaitingIndex];
           command.start();
           process.stdout.write(
-            `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+            `${commandTitleOnlyWithIndicator(runningIndicator, command)}\n\n`
           );
         }
 
@@ -2101,11 +2121,11 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
     if (index < maxParallel) {
       command.start();
       process.stdout.write(
-        `${commandTitleWithIndicator(runningIndicator, command)}\n\n`
+        `${commandTitleOnlyWithIndicator(runningIndicator, command)}\n\n`
       );
     } else {
       process.stdout.write(
-        `${commandTitleWithIndicator(waitingIndicator, command)}\n\n`
+        `${commandTitleOnlyWithIndicator(waitingIndicator, command)}\n\n`
       );
     }
   }

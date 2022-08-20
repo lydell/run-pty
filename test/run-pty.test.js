@@ -67,7 +67,7 @@ function fakeCommand(item, index = 0) {
   return {
     label: ALL_LABELS[index],
     title,
-    titleWithGraphicRenditions: title,
+    titlePossiblyWithGraphicRenditions: title,
     formattedCommandWithTitle: commandToPresentationName(item.command),
     status: item.status,
     // Unused in this case:
@@ -646,13 +646,19 @@ describe("focused command", () => {
   /**
    * @param {(command: import("../run-pty").CommandText) => string} f
    * @param {string} formattedCommandWithTitle
-   * @param {string} title
    * @param {string} cwd
    * @returns {string}
    */
-  function render(f, formattedCommandWithTitle, title, cwd) {
+  function render(f, formattedCommandWithTitle, cwd) {
     return replaceAnsi(
-      f({ formattedCommandWithTitle, title, cwd, history: "" })
+      f({
+        formattedCommandWithTitle,
+        title: "Expected `title` not to be used",
+        titlePossiblyWithGraphicRenditions:
+          "Expected `titlePossiblyWithGraphicRenditions` not to be used",
+        cwd,
+        history: "",
+      })
     );
   }
 
@@ -660,7 +666,6 @@ describe("focused command", () => {
     expect(
       render(
         (command) => historyStart(runningIndicator, command),
-        "npm start",
         "npm start",
         "./"
       )
@@ -675,26 +680,11 @@ describe("focused command", () => {
       render(
         (command) => historyStart(runningIndicator, command),
         "frontend: npm start",
-        "frontend",
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
       🟢 frontend: npm start⧘
       📂 ⧙web/frontend⧘␊
-
-    `);
-  });
-
-  test("cwd not shown if same as title", () => {
-    expect(
-      render(
-        (command) => historyStart(runningIndicator, command),
-        "frontend: npm start",
-        "frontend",
-        "frontend"
-      )
-    ).toMatchInlineSnapshot(`
-      🟢 frontend: npm start⧘␊
 
     `);
   });
@@ -707,14 +697,8 @@ describe("focused command", () => {
   });
 
   test("killing without cwd", () => {
-    expect(
-      render(
-        () => killingText(12345),
-        "frontend: npm start",
-        "frontend",
-        "./x/.."
-      )
-    ).toMatchInlineSnapshot(`
+    expect(render(() => killingText(12345), "frontend: npm start", "./x/.."))
+      .toMatchInlineSnapshot(`
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
     `);
@@ -722,12 +706,7 @@ describe("focused command", () => {
 
   test("killing with cwd", () => {
     expect(
-      render(
-        () => killingText(12345),
-        "frontend: npm start",
-        "frontend",
-        "web/frontend"
-      )
+      render(() => killingText(12345), "frontend: npm start", "web/frontend")
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
@@ -739,7 +718,6 @@ describe("focused command", () => {
       render(
         (command) => exitText([], command, 0, { tag: "NoAutoExit" }),
         "frontend: npm start",
-        "frontend",
         "web/frontend"
       )
     ).toMatchInlineSnapshot(`
@@ -758,8 +736,7 @@ describe("focused command", () => {
       render(
         (command) => exitText([], command, 0, { tag: "NoAutoExit" }),
         "frontend: npm start",
-        "frontend",
-        "frontend"
+        "."
       )
     ).toMatchInlineSnapshot(`
       ⚪ frontend: npm start⧘
@@ -780,8 +757,7 @@ describe("focused command", () => {
             maxParallel: 3,
           }),
         "frontend: npm start",
-        "frontend",
-        "frontend"
+        "."
       )
     ).toMatchInlineSnapshot(`
       ⚪ frontend: npm start⧘
@@ -797,8 +773,7 @@ describe("focused command", () => {
       render(
         (command) => exitText([], command, 1, { tag: "NoAutoExit" }),
         "frontend: npm start",
-        "frontend",
-        "frontend"
+        "."
       )
     ).toMatchInlineSnapshot(`
       🔴 frontend: npm start⧘
@@ -811,14 +786,8 @@ describe("focused command", () => {
   });
 
   test("waiting text", () => {
-    expect(
-      render(
-        () => waitingText([]),
-        "frontend: npm start",
-        "frontend",
-        "frontend"
-      )
-    ).toMatchInlineSnapshot(`
+    expect(render(() => waitingText([]), "frontend: npm start", "."))
+      .toMatchInlineSnapshot(`
       Waiting for other commands to finish before starting.
 
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
@@ -828,15 +797,24 @@ describe("focused command", () => {
 });
 
 describe("exit text and history", () => {
+  /** @type {import("../run-pty").CommandText} */
+  const command = {
+    cwd: ".",
+    formattedCommandWithTitle:
+      "Expected `formattedCommandWithTitle` not to be used.",
+    title: "Expected `title` not to be used.",
+    titlePossiblyWithGraphicRenditions:
+      "Expected `titlePossiblyWithGraphicRenditions` not to be used.",
+    history: "",
+  };
+
   test("one command, no history", () => {
     expect(
       replaceAnsi(
         exitTextAndHistory({
           command: {
-            cwd: ".",
-            formattedCommandWithTitle: "npm test",
-            title: "npm test",
-            history: "",
+            ...command,
+            titlePossiblyWithGraphicRenditions: "npm test",
           },
           exitCode: 0,
           numExited: 1,
@@ -856,9 +834,8 @@ describe("exit text and history", () => {
       replaceAnsi(
         exitTextAndHistory({
           command: {
-            cwd: ".",
-            formattedCommandWithTitle: "npm test",
-            title: "npm test",
+            ...command,
+            titlePossiblyWithGraphicRenditions: "npm test",
             history: ["First line", "Second line", ""].join("\n"),
           },
           exitCode: 1,
@@ -881,9 +858,9 @@ describe("exit text and history", () => {
       replaceAnsi(
         exitTextAndHistory({
           command: {
+            ...command,
             cwd: "web/frontend",
-            formattedCommandWithTitle: "npm test",
-            title: "npm test",
+            titlePossiblyWithGraphicRenditions: "npm test",
             history: ["First line", "Second line"].join("\n"),
           },
 
