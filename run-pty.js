@@ -629,7 +629,7 @@ const exitTextAndHistory = ({ command, exitCode, numExited, numTotal }) => {
     lastLine.trim() === "" ? "" : "\n";
   return `
 ${commandTitleOnlyWithIndicator(exitIndicator(exitCode), command)}
-${cwdText(command)}${command.history}${newline}${bold(
+${cwdText(command)}${command.history}${CLEAR_DOWN}${newline}${bold(
     `exit ${exitCode}`
   )} ${dim(`(${numExited}/${numTotal} exited)`)}
 
@@ -1481,6 +1481,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
             HIDE_CURSOR +
             RESET_COLOR +
             disableAlternateScreen +
+            CLEAR_DOWN +
             newlines +
             (command.status.tag === "Waiting"
               ? waitingText(commands)
