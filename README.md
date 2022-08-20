@@ -51,13 +51,10 @@ $ npm start
 > vite --no-clearScreen
 
 
-  vite v2.8.4 dev server running at:
+  VITE v3.0.9  ready in 137 ms
 
-  > Local: http://localhost:3000/
-  > Network: use `--host` to expose
-
-  ready in 136ms.
-
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
 ▊
 [ctrl+c] kill (pid 63096)
 [ctrl+z] dashboard

@@ -7,8 +7,8 @@
     "backend": "nodemon server.js"
   },
   "devDependencies": {
-    "nodemon": "2.0.18",
+    "nodemon": "2.0.19",
     "run-pty": "file:..",
-    "vite": "2.9.13"
+    "vite": "3.0.9"
   }
 }
