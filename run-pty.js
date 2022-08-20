@@ -700,15 +700,15 @@ const NOT_SIMPLE_LOG_ESCAPE =
 // to get the cursor position, and then waits for the response before actually
 // starting the command. There used to be a problem where the commands
 // effectively wouldn’t start executing until focused. That’s solved by handling
-// requests and responses this way. The pty then writes a cursor move like `5;1H`.
-// The line (5) varies depending on what we replied to that first 6n escape and
-// how many lines have been printed so far. The column seems to always be 1. So
-// on Windows, we always reply with `1;1` to the first 6n request, and then
-// translate the absolute `5;1H` cursor move to a relative cursor move, the
-// appropriate amount of lines down. Note: The `5;1H` stuff seems to only be
-// triggered when using `npm run`. `run-pty % npx prettier --check .` does not
-// trigger it, but `run-pty % npm run prettier` (with `"prettier": "prettier
-// --check ."` in package.json) does.
+// requests and responses this way. The pty then writes a cursor move like
+// `5;1H`. The line (5) varies depending on how many lines have been printed so
+// far. The column seems to always be 1. For some reason, replacing this cursor
+// move with two newlines seems to always make the cursor end up where we want,
+// in my testing. Note: The `5;1H` stuff seems to only be triggered when using
+// `npm run`. `run-pty % npx prettier --check .` does not trigger it, but
+// `run-pty % npm run prettier` (with `"prettier": "prettier --check ."` in
+// package.json) does. `run-pty % timeout 3` also uses 6n and cursor moves, and
+// should not be affected by this workaround.
 //
 // https://xfree86.org/current/ctlseqs.html
 //
@@ -720,7 +720,8 @@ const ESCAPES_REQUEST =
 const ESCAPES_RESPONSE =
   /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1B\]1[01];[^\x07]+\x07)/g;
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
-const CONPTY_CURSOR_MOVE = /\x1B\[(\d+);1H/;
+const CONPTY_CURSOR_MOVE = /\x1B\[\d+;1H/;
+const CONPTY_CURSOR_MOVE_REPLACEMENT = "\n\n";
 
 /**
  * @param {string} request
@@ -1172,8 +1173,7 @@ class Command {
         ) {
           part = rawPart.replace(
             CONPTY_CURSOR_MOVE,
-            (_, n) =>
-              `\x1B[${Number(n) - (this.history + rawPart).split("\n").length}E`
+            CONPTY_CURSOR_MOVE_REPLACEMENT
           );
           this.windowsConptyCursorMoveWorkaround = false;
         }
@@ -1721,12 +1721,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
           case "Killing":
             switch (current.tag) {
               case "Command":
-                command.status.terminal.write(
-                  command.windowsConptyCursorMoveWorkaround
-                    ? // Always respond with line 1 in the workaround.
-                      part.replace(CURSOR_POSITION_RESPONSE, "$11;1R")
-                    : part
-                );
+                command.status.terminal.write(part);
                 break;
               // In the dashboard, make an educated guess where the cursor would be in the command.
               case "Dashboard": {
@@ -1735,9 +1730,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
                     ? command.historyAlternateScreen
                     : command.history
                 ).split("\n").length;
-                const likelyRow = command.windowsConptyCursorMoveWorkaround
-                  ? 1 // Always respond with line 1 in the workaround.
-                  : Math.min(numLines, process.stdout.rows);
+                const likelyRow = Math.min(numLines, process.stdout.rows);
                 command.status.terminal.write(
                   part.replace(CURSOR_POSITION_RESPONSE, `$1${likelyRow};1R`)
                 );
