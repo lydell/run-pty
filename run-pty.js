@@ -1112,8 +1112,7 @@ class Command {
     this.defaultStatus = defaultStatus;
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
-    // See the comment for `CONPTY_CURSOR_MOVE`.
-    this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
+    this.windowsConptyCursorMoveWorkaround = false;
 
     // When adding --auto-exit, I first tried to always set `this.history = ""`
     // and add `historyStart()` in `joinHistory`. However, that doesn’t work
@@ -1142,6 +1141,8 @@ class Command {
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
+    // See the comment for `CONPTY_CURSOR_MOVE`.
+    this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
 
     const [file, args] = IS_WINDOWS
       ? [
