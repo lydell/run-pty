@@ -279,7 +279,7 @@ Alternatively, specify the commands in a JSON file:
 
 You can tell run-pty to exit once all commands have exited with status 0:
 
-    ${runPty} --auto-exit ${pc} npm ci ${pc} dotnet restore ${et} ./build.bash
+    ${runPty} --auto-exit ${pc} npm ci ${pc} dotnet restore ${et} node build.js
 
 ${autoExitHelp}
 

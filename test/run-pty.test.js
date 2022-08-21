@@ -145,7 +145,7 @@ describe("help", () => {
 
       You can tell run-pty to exit once all commands have exited with status 0:
 
-          ⧙run-pty⧘ --auto-exit ⧙%⧘ npm ci ⧙%⧘ dotnet restore ⧙&&⧘ ./build.bash
+          ⧙run-pty⧘ --auto-exit ⧙%⧘ npm ci ⧙%⧘ dotnet restore ⧙&&⧘ node build.js
 
           --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
           --auto-exit=auto       uses the number of logical CPU cores
