@@ -915,6 +915,7 @@ describe("parse args", () => {
     expect(parseArgs([])).toStrictEqual({ tag: "Help" });
     expect(parseArgs(["-h"])).toStrictEqual({ tag: "Help" });
     expect(parseArgs(["--help"])).toStrictEqual({ tag: "Help" });
+    expect(parseArgs(["--auto-exit", "--help"])).toStrictEqual({ tag: "Help" });
   });
 
   test("no commands", () => {

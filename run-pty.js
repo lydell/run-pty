@@ -853,7 +853,7 @@ const parseArgs = (args) => {
   let autoExit = { tag: "NoAutoExit" };
 
   for (const flag of flags) {
-    if (args[0] === "-h" || args[0] === "--help") {
+    if (flag === "-h" || flag === "--help") {
       return { tag: "Help" };
     }
     const match = AUTO_EXIT_REGEX.exec(flag);
