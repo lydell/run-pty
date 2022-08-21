@@ -1097,7 +1097,7 @@ class Command {
         ? formattedCommand
         : NO_COLOR
         ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
-        : `${bold(`${title}`)}: ${formattedCommand}`;
+        : `${bold(title)}: ${formattedCommand}`;
     this.onData = onData;
     this.onRequest = onRequest;
     this.onExit = onExit;
