@@ -422,7 +422,8 @@ const drawDashboard = ({
       ? autoExit.tag === "AutoExit"
         ? commands.some(
             (command) =>
-              command.status.tag === "Exit" && command.status.exitCode !== 0
+              command.status.tag === "Exit" &&
+              (command.status.exitCode !== 0 || command.status.wasKilled)
           )
           ? `${shortcut(KEYS.enter)} restart failed`
           : ""
@@ -433,6 +434,7 @@ const drawDashboard = ({
           KEYS.unselect
         )} unselect`;
 
+  const sessionEnds = "The session ends automatically once all commands are ";
   const autoExitText =
     autoExit.tag === "AutoExit"
       ? [
@@ -440,9 +442,9 @@ const drawDashboard = ({
           `At most ${autoExit.maxParallel} ${
             autoExit.maxParallel === 1 ? "command runs" : "commands run"
           } at a time.`,
-          `The session ends automatically once all commands are ${bold(
-            "exit 0"
-          )}.`,
+          `${sessionEnds}${exitIndicator(0)}${cursorHorizontalAbsolute(
+            sessionEnds.length + ICON_WIDTH + 1
+          )} ${bold("exit 0")}.`,
         ]
           .filter((x) => x !== undefined)
           .join("\n")
@@ -506,7 +508,9 @@ const isDone = ({ commands, attemptedKillAll, autoExit }) =>
   (autoExit.tag === "AutoExit" &&
     commands.every(
       (command) =>
-        command.status.tag === "Exit" && command.status.exitCode === 0
+        command.status.tag === "Exit" &&
+        command.status.exitCode === 0 &&
+        !command.status.wasKilled
     ));
 
 /**
@@ -1586,7 +1590,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
       autoExit.tag === "AutoExit"
         ? commands.filter(
             (command) =>
-              command.status.tag === "Exit" && command.status.exitCode !== 0
+              command.status.tag === "Exit" &&
+              (command.status.exitCode !== 0 || command.status.wasKilled)
           )
         : commands.filter((command) => command.status.tag === "Exit");
     if (exited.length > 0) {
@@ -1658,14 +1663,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
           if (isDone({ commands, attemptedKillAll, autoExit })) {
             switchToDashboard();
             process.exit(
-              autoExit.tag === "AutoExit" &&
-                (attemptedKillAll ||
-                  commands.some(
-                    (command) =>
-                      command.status.tag === "Exit" && command.status.wasKilled
-                  ))
-                ? 1
-                : 0
+              autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
             );
           }
 

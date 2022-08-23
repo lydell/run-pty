@@ -242,7 +242,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
       At most 3 commands run at a time.
-      The session ends automatically once all commands are ⧙exit 0⧘.
+      The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
     `);
   });
 
@@ -266,7 +266,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
       At most 1 command runs at a time.
-      The session ends automatically once all commands are ⧙exit 0⧘.
+      The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
     `);
   });
 
@@ -279,6 +279,7 @@ describe("dashboard", () => {
             status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
           },
         ],
+
         { autoExit: { tag: "AutoExit", maxParallel: 2 } }
       )
     ).toMatchInlineSnapshot(`
@@ -289,7 +290,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
       At most 2 commands run at a time.
-      The session ends automatically once all commands are ⧙exit 0⧘.
+      The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
     `);
   });
 
@@ -320,7 +321,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙enter⧘⧙]⧘  restart failed
 
       At most 3 commands run at a time.
-      The session ends automatically once all commands are ⧙exit 0⧘.
+      The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
     `);
   });
 
@@ -363,6 +364,7 @@ describe("dashboard", () => {
             },
           },
         ],
+
         {
           attemptedKillAll: true,
           autoExit: { tag: "AutoExit", maxParallel: 3 },
@@ -376,7 +378,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
 
       At most 3 commands run at a time.
-      The session ends automatically once all commands are ⧙exit 0⧘.
+      The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
     `);
   });
 
