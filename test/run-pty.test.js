@@ -716,7 +716,13 @@ describe("focused command", () => {
   test("exit 0 with cwd", () => {
     expect(
       render(
-        (command) => exitText([], command, 0, { tag: "NoAutoExit" }),
+        (command) =>
+          exitText(
+            [],
+            command,
+            { tag: "Exit", exitCode: 0, wasKilled: false },
+            { tag: "NoAutoExit" }
+          ),
         "frontend: npm start",
         "web/frontend"
       )
@@ -734,7 +740,13 @@ describe("focused command", () => {
   test("exit 0 without cwd", () => {
     expect(
       render(
-        (command) => exitText([], command, 0, { tag: "NoAutoExit" }),
+        (command) =>
+          exitText(
+            [],
+            command,
+            { tag: "Exit", exitCode: 0, wasKilled: false },
+            { tag: "NoAutoExit" }
+          ),
         "frontend: npm start",
         "."
       )
@@ -752,10 +764,15 @@ describe("focused command", () => {
     expect(
       render(
         (command) =>
-          exitText([], command, 0, {
-            tag: "AutoExit",
-            maxParallel: 3,
-          }),
+          exitText(
+            [],
+            command,
+            { tag: "Exit", exitCode: 0, wasKilled: false },
+            {
+              tag: "AutoExit",
+              maxParallel: 3,
+            }
+          ),
         "frontend: npm start",
         "."
       )
@@ -768,10 +785,43 @@ describe("focused command", () => {
     `);
   });
 
+  test("exit 0 via killed with auto exit (CAN be restarted)", () => {
+    expect(
+      render(
+        (command) =>
+          exitText(
+            [],
+            command,
+            { tag: "Exit", exitCode: 0, wasKilled: true },
+            {
+              tag: "AutoExit",
+              maxParallel: 3,
+            }
+          ),
+
+        "frontend: npm start",
+        "."
+      )
+    ).toMatchInlineSnapshot(`
+      ⛔️ frontend: npm start⧘
+      exit 0
+
+      ⧙[⧘⧙enter⧘⧙]⧘  restart
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
+      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
+    `);
+  });
+
   test("exit 1 with auto exit (can be restarted)", () => {
     expect(
       render(
-        (command) => exitText([], command, 1, { tag: "NoAutoExit" }),
+        (command) =>
+          exitText(
+            [],
+            command,
+            { tag: "Exit", exitCode: 1, wasKilled: false },
+            { tag: "NoAutoExit" }
+          ),
         "frontend: npm start",
         "."
       )

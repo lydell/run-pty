@@ -600,18 +600,24 @@ ${shortcut(KEYS.dashboard)} dashboard
 /**
  * @param {Array<Command>} commands
  * @param {CommandText} command
- * @param {number} exitCode
+ * @param {Extract<Status, {tag: "Exit"}>} status
  * @param {AutoExit} autoExit
  * @returns {string}
  */
-const exitText = (commands, command, exitCode, autoExit) => {
+const exitText = (commands, command, status, autoExit) => {
+  const titleWithIndicator = commandTitleWithIndicator(
+    status.wasKilled && autoExit.tag === "AutoExit"
+      ? abortedIndicator
+      : exitIndicator(status.exitCode),
+    command
+  );
   const restart =
-    autoExit.tag === "AutoExit" && exitCode === 0
+    autoExit.tag === "AutoExit" && status.exitCode === 0 && !status.wasKilled
       ? ""
       : `${shortcut(KEYS.enter)} restart\n`;
   return `
-${commandTitleWithIndicator(exitIndicator(exitCode), command)}
-${cwdText(command)}exit ${exitCode}
+${titleWithIndicator}
+${cwdText(command)}exit ${status.exitCode}
 
 ${restart}${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
@@ -1486,7 +1492,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
             newlines +
             (command.status.tag === "Waiting"
               ? waitingText(commands)
-              : exitText(commands, command, command.status.exitCode, autoExit))
+              : exitText(commands, command, command.status, autoExit))
         );
 
         extraTextPrinted = false;
@@ -1652,7 +1658,14 @@ const runInteractively = (commandDescriptions, autoExit) => {
           if (isDone({ commands, attemptedKillAll, autoExit })) {
             switchToDashboard();
             process.exit(
-              autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
+              autoExit.tag === "AutoExit" &&
+                (attemptedKillAll ||
+                  commands.some(
+                    (command) =>
+                      command.status.tag === "Exit" && command.status.wasKilled
+                  ))
+                ? 1
+                : 0
             );
           }
 
@@ -1857,7 +1870,11 @@ const onStdin = (
 
             case KEY_CODES.restart:
               if (
-                !(autoExit.tag === "AutoExit" && command.status.exitCode === 0)
+                !(
+                  autoExit.tag === "AutoExit" &&
+                  command.status.exitCode === 0 &&
+                  !command.status.wasKilled
+                )
               ) {
                 command.start();
                 switchToCommand(current.index);
@@ -2060,7 +2077,9 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
         ).length;
         const numExit0 = commands.filter(
           (command) =>
-            command.status.tag === "Exit" && command.status.exitCode === 0
+            command.status.tag === "Exit" &&
+            command.status.exitCode === 0 &&
+            !command.status.wasKilled
         ).length;
 
         process.stdout.write(
