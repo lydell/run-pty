@@ -972,7 +972,7 @@ describe("parse args", () => {
 
   test("no commands", () => {
     expect(parseArgs(["%"])).toMatchInlineSnapshot(`
-      Object {
+      {
         message: The first argument is either the delimiter to use between commands,
       or the path to a JSON file that describes the commands.
       If you meant to use a file, make sure it exists.
@@ -986,7 +986,7 @@ describe("parse args", () => {
 
   test("unknown flag", () => {
     expect(parseArgs(["--unknown"])).toMatchInlineSnapshot(`
-      Object {
+      {
         message: Bad flag: --unknown
       Only these forms are accepted:
           --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
@@ -999,7 +999,7 @@ describe("parse args", () => {
 
   test("bad auto exit value", () => {
     expect(parseArgs(["--auto-exit=nope"])).toMatchInlineSnapshot(`
-      Object {
+      {
         message: Bad flag: --auto-exit=nope
       Only these forms are accepted:
           --auto-exit=<number>   auto exit when done, with at most <number> parallel processes
