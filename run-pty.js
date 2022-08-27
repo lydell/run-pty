@@ -1600,39 +1600,33 @@ const runInteractively = (commandDescriptions, autoExit) => {
    * @returns {void}
    */
   const restartExited = () => {
-    switch (autoExit.tag) {
-      case "AutoExit": {
-        const exited = commands.filter(
-          (command) =>
-            command.status.tag === "Exit" &&
-            (command.status.exitCode !== 0 || command.status.wasKilled)
-        );
-        if (exited.length > 0) {
-          for (const [index, command] of exited.entries()) {
-            if (index < autoExit.maxParallel) {
-              command.start();
-            } else {
-              command.restartWaiting();
-            }
-          }
-          // Redraw dashboard.
-          switchToDashboard();
-        }
-        break;
-      }
-
-      case "NoAutoExit": {
-        const exited = commands.filter(
-          (command) => command.status.tag === "Exit"
-        );
-        if (exited.length > 0) {
-          for (const command of exited) {
+    if (autoExit.tag === "AutoExit") {
+      const exited = commands.filter(
+        (command) =>
+          command.status.tag === "Exit" &&
+          (command.status.exitCode !== 0 || command.status.wasKilled)
+      );
+      if (exited.length > 0) {
+        for (const [index, command] of exited.entries()) {
+          if (index < autoExit.maxParallel) {
             command.start();
+          } else {
+            command.restartWaiting();
           }
-          // Redraw dashboard.
-          switchToDashboard();
         }
-        break;
+        // Redraw dashboard.
+        switchToDashboard();
+      }
+    } else {
+      const exited = commands.filter(
+        (command) => command.status.tag === "Exit"
+      );
+      if (exited.length > 0) {
+        for (const command of exited) {
+          command.start();
+        }
+        // Redraw dashboard.
+        switchToDashboard();
       }
     }
   };
@@ -1901,13 +1895,23 @@ const onStdin = (
               return undefined;
 
             case KEY_CODES.restart:
-              if (
-                !(
-                  autoExit.tag === "AutoExit" &&
+              if (autoExit.tag === "AutoExit") {
+                if (
                   command.status.exitCode === 0 &&
                   !command.status.wasKilled
-                )
-              ) {
+                ) {
+                  // Do nothing.
+                } else if (
+                  commands.filter((command2) => "terminal" in command2.status)
+                    .length < autoExit.maxParallel
+                ) {
+                  command.start();
+                  switchToCommand(current.index);
+                } else {
+                  command.restartWaiting();
+                  switchToCommand(current.index);
+                }
+              } else {
                 command.start();
                 switchToCommand(current.index);
               }
