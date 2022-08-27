@@ -188,8 +188,8 @@ The JSON format lets you specify additional things apart from the command itself
 
 If you want to run a couple of commands in parallel and once they’re done continue with something else, use `--auto-exit`:
 
-```
-$ run-pty --auto-exit % npm ci % dotnet restore && node build.js
+```bash
+run-pty --auto-exit % npm ci % dotnet restore && node build.js
 ```
 
 - You can enter the different commands while they are running to see their progress.
