@@ -1135,38 +1135,30 @@ class Command {
   }
 
   /**
-   * @param {string} indicator
+   * @param {{ needsToWait: boolean }} options
    * @returns {void}
    */
-  reset(indicator) {
+  start({ needsToWait }) {
     if ("terminal" in this.status) {
       throw new Error(
-        `Cannot reset command because the command is ${this.status.tag} with pid ${this.status.terminal.pid} for: ${this.title}`
+        `Cannot start command because the command is ${this.status.tag} with pid ${this.status.terminal.pid} for: ${this.title}`
       );
     }
 
-    this.history = this.addHistoryStart ? historyStart(indicator, this) : "";
+    this.history = this.addHistoryStart
+      ? historyStart(needsToWait ? waitingIndicator : runningIndicator, this)
+      : "";
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
     // See the comment for `CONPTY_CURSOR_MOVE`.
     this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
-  }
 
-  /**
-   * @returns {void}
-   */
-  restartWaiting() {
-    this.reset(waitingIndicator);
-    this.status = { tag: "Waiting" };
-  }
-
-  /**
-   * @returns {void}
-   */
-  start() {
-    this.reset(runningIndicator);
+    if (needsToWait) {
+      this.status = { tag: "Waiting" };
+      return;
+    }
 
     const [file, args] = IS_WINDOWS
       ? [
@@ -1607,15 +1599,14 @@ const runInteractively = (commandDescriptions, autoExit) => {
           (command.status.exitCode !== 0 || command.status.wasKilled)
       );
       if (exited.length > 0) {
+        const numRunning = commands.filter(
+          (command2) => "terminal" in command2.status
+        ).length;
         for (const [index, command] of exited.entries()) {
-          if (index < autoExit.maxParallel) {
-            command.start();
-          } else {
-            command.restartWaiting();
-          }
+          command.start({
+            needsToWait: numRunning + index >= autoExit.maxParallel,
+          });
         }
-        // Redraw dashboard.
-        switchToDashboard();
       }
     } else {
       const exited = commands.filter(
@@ -1623,12 +1614,13 @@ const runInteractively = (commandDescriptions, autoExit) => {
       );
       if (exited.length > 0) {
         for (const command of exited) {
-          command.start();
+          command.start({ needsToWait: false });
         }
-        // Redraw dashboard.
-        switchToDashboard();
       }
     }
+
+    // Redraw dashboard.
+    switchToDashboard();
   };
 
   /** @type {Array<{ commandIndex: number, data: string }>} */
@@ -1699,7 +1691,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
             (command) => command.status.tag === "Waiting"
           );
           if (nextWaitingIndex !== -1 && !attemptedKillAll) {
-            commands[nextWaitingIndex].start();
+            commands[nextWaitingIndex].start({ needsToWait: false });
             // If starting the command we’re currently on, redraw to remove `waitingText`.
             if (
               current.tag === "Command" &&
@@ -1810,8 +1802,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   const maxParallel =
     autoExit.tag === "AutoExit" ? autoExit.maxParallel : Infinity;
-  for (const command of commands.slice(0, maxParallel)) {
-    command.start();
+  for (const [index, command] of commands.entries()) {
+    command.start({ needsToWait: index >= maxParallel });
   }
 
   if (commandDescriptions.length === 1) {
@@ -1897,22 +1889,18 @@ const onStdin = (
             case KEY_CODES.restart:
               if (autoExit.tag === "AutoExit") {
                 if (
-                  command.status.exitCode === 0 &&
-                  !command.status.wasKilled
+                  !(command.status.exitCode === 0 && !command.status.wasKilled)
                 ) {
-                  // Do nothing.
-                } else if (
-                  commands.filter((command2) => "terminal" in command2.status)
-                    .length < autoExit.maxParallel
-                ) {
-                  command.start();
-                  switchToCommand(current.index);
-                } else {
-                  command.restartWaiting();
+                  const numRunning = commands.filter(
+                    (command2) => "terminal" in command2.status
+                  ).length;
+                  command.start({
+                    needsToWait: numRunning >= autoExit.maxParallel,
+                  });
                   switchToCommand(current.index);
                 }
               } else {
-                command.start();
+                command.start({ needsToWait: false });
                 switchToCommand(current.index);
               }
               return undefined;
@@ -2141,7 +2129,7 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
         );
         if (nextWaitingIndex !== -1 && !attemptedKillAll) {
           const command = commands[nextWaitingIndex];
-          command.start();
+          command.start({ needsToWait: false });
           process.stdout.write(
             `${commandTitleOnlyWithIndicator(runningIndicator, command)}\n\n`
           );
@@ -2168,16 +2156,14 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
   setupSignalHandlers(commands, killAll);
 
   for (const [index, command] of commands.entries()) {
-    if (index < maxParallel) {
-      command.start();
-      process.stdout.write(
-        `${commandTitleOnlyWithIndicator(runningIndicator, command)}\n\n`
-      );
-    } else {
-      process.stdout.write(
-        `${commandTitleOnlyWithIndicator(waitingIndicator, command)}\n\n`
-      );
-    }
+    const needsToWait = index >= maxParallel;
+    command.start({ needsToWait });
+    process.stdout.write(
+      `${commandTitleOnlyWithIndicator(
+        needsToWait ? waitingIndicator : runningIndicator,
+        command
+      )}\n\n`
+    );
   }
 };
 
