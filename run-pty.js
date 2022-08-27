@@ -1135,24 +1135,38 @@ class Command {
   }
 
   /**
+   * @param {string} indicator
    * @returns {void}
    */
-  start() {
+  reset(indicator) {
     if ("terminal" in this.status) {
       throw new Error(
-        `Cannot start pty with pid ${this.status.terminal.pid} because ${this.status.tag} for: ${this.title}`
+        `Cannot reset command because the command is ${this.status.tag} with pid ${this.status.terminal.pid} for: ${this.title}`
       );
     }
 
-    this.history = this.addHistoryStart
-      ? historyStart(runningIndicator, this)
-      : "";
+    this.history = this.addHistoryStart ? historyStart(indicator, this) : "";
     this.historyAlternateScreen = "";
     this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
     // See the comment for `CONPTY_CURSOR_MOVE`.
     this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
+  }
+
+  /**
+   * @returns {void}
+   */
+  restartWaiting() {
+    this.reset(waitingIndicator);
+    this.status = { tag: "Waiting" };
+  }
+
+  /**
+   * @returns {void}
+   */
+  start() {
+    this.reset(runningIndicator);
 
     const [file, args] = IS_WINDOWS
       ? [
@@ -1586,20 +1600,40 @@ const runInteractively = (commandDescriptions, autoExit) => {
    * @returns {void}
    */
   const restartExited = () => {
-    const exited =
-      autoExit.tag === "AutoExit"
-        ? commands.filter(
-            (command) =>
-              command.status.tag === "Exit" &&
-              (command.status.exitCode !== 0 || command.status.wasKilled)
-          )
-        : commands.filter((command) => command.status.tag === "Exit");
-    if (exited.length > 0) {
-      for (const command of exited) {
-        command.start();
+    switch (autoExit.tag) {
+      case "AutoExit": {
+        const exited = commands.filter(
+          (command) =>
+            command.status.tag === "Exit" &&
+            (command.status.exitCode !== 0 || command.status.wasKilled)
+        );
+        if (exited.length > 0) {
+          for (const [index, command] of exited.entries()) {
+            if (index < autoExit.maxParallel) {
+              command.start();
+            } else {
+              command.restartWaiting();
+            }
+          }
+          // Redraw dashboard.
+          switchToDashboard();
+        }
+        break;
       }
-      // Redraw dashboard.
-      switchToDashboard();
+
+      case "NoAutoExit": {
+        const exited = commands.filter(
+          (command) => command.status.tag === "Exit"
+        );
+        if (exited.length > 0) {
+          for (const command of exited) {
+            command.start();
+          }
+          // Redraw dashboard.
+          switchToDashboard();
+        }
+        break;
+      }
     }
   };
 
