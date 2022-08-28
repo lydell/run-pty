@@ -1,3 +1,31 @@
+### Version 4.0.0 (2022-08-28)
+
+- Removed: [NDJSON](https://github.com/ndjson/ndjson-spec) support. I used to have a `bash` script that generated JSON for run-pty in a hacky way, one line at a time. I’ve since re-written that script (using Node.js) and it became so much better! So I don’t need this feature myself anymore, and also realized that it is kind of an anti-feature: It’s better to write good scripts that generate JSON in a nice way! This change also allows for configuring more than the commands in the future.
+
+- Fixed: `j`, `k` and `o` now work properly. run-pty used to have secret Vim key bindings, that I had forgotten about. Recently I added so many commands to run in a project that I got all the way down to `o` for the command labels. I then noticed that pressing for example `j` didn’t focus that command as expected – instead it moved the selection down, as if I had pressed the down arrow key. That’s because `j` means down in Vim, while `k` means up, and `o` was used as an alternative to `Enter`. Adding those back in the day I didn’t think about that they would conflict with the command labels. Anyway, with this release those secret Vim key bindings are gone, solving the problem.
+
+- Added: The `--auto-exit` flag. This new flag is for conveniently running a couple of commands in parallel and get to know once they are done.
+
+  ```bash
+  run-pty --auto-exit % npm ci % dotnet restore && node build.js
+  ```
+
+  See the readme for more information!
+
+- Improved: Output on Windows.
+
+  - [Windows Terminal](https://aka.ms/terminal) is now detected, because it supports emojis and a few more ANSI escape codes than the old cmd.exe. So Windows Terminal users now get nicer-looking output!
+
+  - Fixed an issue where output could be cut off. For example, `run-pty % ping localhost` many times printed “eply” instead of “Reply”.
+
+  - The keyboard shortcuts are now visible at the bottom of the command output in more cases. Well, at least in Windows Terminal. In cmd.exe, the keyboard shortcuts now only show up if the last line of output is empty. Either way, in both cases I managed to find a workaround for a “conpty” behavior that previously caused the keyboard shortcuts not to show up where they would have on macOS or Linux.
+
+    (The reason the keyboard shortcuts are only shown when the command output ends with an empty line is because cmd.exe simply does not seem to support the ANSI escape code needed for a non-empty line. I did not know that before – that’s why some output was cut off sometimes as mentioned before. Oh, and which ANSI escape code is that you wonder? Well, one can use `\f` or `\x1BD`. The former – which run-pty used to use – is supported on most macOS and Linux Terminals, the latter is supported in Windows Terminal as well as on macOS and Linux, while neither is supported in cmd.exe.)
+
+- Changed: If using a JSON file where `cwd` and `title` are equal, run-pty used to not print the cwd. Now it does. I think that makes more sense.
+
+- Fixed: If you put color escape codes in `title`, and then use `NO_COLOR`, the color escape codes are now removed in the dashboard. Previously, they were only removed when focusing the command.
+
 ### Version 3.0.0 (2022-03-06)
 
 - Added: The `killAllSequence` JSON field for commands. When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to the command to make it exit. This lets you cleanly exit commands, rather than double pressing <kbd>ctrl+c</kbd> which force kills them.
