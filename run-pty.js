@@ -1589,6 +1589,29 @@ const runInteractively = (commandDescriptions, autoExit) => {
   };
 
   /**
+   * @param {number} index
+   * @param {Extract<Status, {tag: "Exit"}>} status
+   * @returns {void}
+   */
+  const restart = (index, status) => {
+    const command = commands[index];
+    if (autoExit.tag === "AutoExit") {
+      if (!(status.exitCode === 0 && !status.wasKilled)) {
+        const numRunning = commands.filter(
+          (command2) => "terminal" in command2.status
+        ).length;
+        command.start({
+          needsToWait: numRunning >= autoExit.maxParallel,
+        });
+        switchToCommand(index);
+      }
+    } else {
+      command.start({ needsToWait: false });
+      switchToCommand(index);
+    }
+  };
+
+  /**
    * @returns {void}
    */
   const restartExited = () => {
@@ -1783,11 +1806,11 @@ const runInteractively = (commandDescriptions, autoExit) => {
           current,
           commands,
           selection,
-          autoExit,
           switchToDashboard,
           switchToCommand,
           setSelection,
           killAll,
+          restart,
           restartExited
         );
       }
@@ -1818,11 +1841,11 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @param {Current} current
  * @param {Array<Command>} commands
  * @param {Selection} selection
- * @param {AutoExit} autoExit
  * @param {() => void} switchToDashboard
  * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
+ * @param {(index: number, status: Extract<Status, {tag: "Exit"}>) => void} restart
  * @param {() => void} restartExited
  * @returns {undefined}
  */
@@ -1831,11 +1854,11 @@ const onStdin = (
   current,
   commands,
   selection,
-  autoExit,
   switchToDashboard,
   switchToCommand,
   setSelection,
   killAll,
+  restart,
   restartExited
 ) => {
   switch (current.tag) {
@@ -1887,22 +1910,7 @@ const onStdin = (
               return undefined;
 
             case KEY_CODES.restart:
-              if (autoExit.tag === "AutoExit") {
-                if (
-                  !(command.status.exitCode === 0 && !command.status.wasKilled)
-                ) {
-                  const numRunning = commands.filter(
-                    (command2) => "terminal" in command2.status
-                  ).length;
-                  command.start({
-                    needsToWait: numRunning >= autoExit.maxParallel,
-                  });
-                  switchToCommand(current.index);
-                }
-              } else {
-                command.start({ needsToWait: false });
-                switchToCommand(current.index);
-              }
+              restart(current.index, command.status);
               return undefined;
 
             default:
