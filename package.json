@@ -28,15 +28,15 @@
     "tiny-decoders": "^7.0.1"
   },
   "devDependencies": {
-    "@types/jest": "28.1.8",
-    "@typescript-eslint/eslint-plugin": "5.35.1",
-    "@typescript-eslint/parser": "5.35.1",
-    "eslint": "8.23.0",
-    "eslint-plugin-jest": "26.8.7",
-    "jest": "29.0.1",
-    "jest-environment-node-single-context": "28.1.0",
+    "@types/jest": "29.0.2",
+    "@typescript-eslint/eslint-plugin": "5.37.0",
+    "@typescript-eslint/parser": "5.37.0",
+    "eslint": "8.23.1",
+    "eslint-plugin-jest": "27.0.4",
+    "jest": "29.0.3",
+    "jest-environment-node-single-context": "29.0.0",
     "prettier": "2.7.1",
-    "typescript": "4.7.4"
+    "typescript": "4.8.3"
   },
   "scripts": {
     "start": "node run-pty.js % cat % false % echo hello world % ping localhost % node get-cursor-position.js % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\" % make watch % make signals % node test-clear-down.js % node colored-log.js % node test-exit-in-middle.js",
