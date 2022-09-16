@@ -681,7 +681,9 @@ const statusText = (
 // If a command moves the cursor to another line it’s not considered a “simple
 // log”. Then it’s not safe to print the keyboard shortcuts.
 //
-// - A, B: Cursor up/down. Moving down should be safe.
+// - A, B: Cursor up/down. Moving down should be safe. So is `\n1A` (move to
+//         start of new line, then up one line) – docker-compose does that
+//         to update the previous line. We always print on the next line so it’s safe.
 // - C, D: Cursor left/right. Should be safe! Parcel does this.
 // - E, F: Cursor down/up, and to the start of the line. Moving down should be safe.
 // - G: Cursor absolute position within line. Should be safe! Again, Parcel.
@@ -697,7 +699,7 @@ const statusText = (
 // - s: Save cursor position.
 // - u: Restore cursor position.
 const NOT_SIMPLE_LOG_ESCAPE =
-  /\x1B\[(?:\d*[AFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
+  /\x1B\[(?:\d*[FLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])|(?!\n\x1B\[1?A)(?:^|[^])\x1B\[\d*A/;
 
 // These escapes should be printed when they first occur, but not when
 // re-printing history. They result in getting a response on stdin. The
@@ -1330,7 +1332,12 @@ class Command {
               if (this.history.length > MAX_HISTORY) {
                 this.history = this.history.slice(-MAX_HISTORY);
               }
-              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(part)) {
+              if (
+                this.isSimpleLog &&
+                // Include the last character before `part` to be able to detect
+                // `\n${CURSOR_UP}` in `NOT_SIMPLE_LOG_ESCAPE`.
+                NOT_SIMPLE_LOG_ESCAPE.test(this.history.slice(-part.length - 1))
+              ) {
                 this.isSimpleLog = false;
               }
             }
