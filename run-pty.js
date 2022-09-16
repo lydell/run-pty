@@ -82,7 +82,6 @@ const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_LEFT = "\x1B[1K";
 const CLEAR_RIGHT = "\x1B[K";
 const CLEAR_DOWN = "\x1B[J";
-const CLEAR_DOWN_REGEX = /\x1B\[0?J$/;
 // These save/restore cursor position _and graphic renditions._
 const SAVE_CURSOR = IS_TERMINAL_APP ? "\u001B7" : "\x1B[s";
 const RESTORE_CURSOR = IS_TERMINAL_APP ? "\u001B8" : "\x1B[u";
@@ -115,7 +114,7 @@ const CLEAR_REGEX = (() => {
     [goToTopLeft, clearScrollback, clearDown],
   ].map((parts) => parts.map((part) => `\\x1B\\[${part.source}`).join(""));
 
-  return RegExp(`(?:${variants.join("|")})$`);
+  return RegExp(`(?:${variants.join("|")})`);
 })();
 
 const waitingIndicator = NO_COLOR
@@ -698,8 +697,15 @@ const statusText = (
 // - T: Scroll down.
 // - s: Save cursor position.
 // - u: Restore cursor position.
-const NOT_SIMPLE_LOG_ESCAPE =
-  /\x1B\[(?:\d*[FLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])|(?!\n\x1B\[1?A)(?:^|[^])\x1B\[\d*A/;
+//
+// This includes the regexes for clearing the screen, since they also affect “is
+// simple log”: They reset it to `true` sometimes.
+const NOT_SIMPLE_LOG_ESCAPE_RAW =
+  /(\x1B\[0?J)|\x1B\[(?:\d*[FLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])|(?!\n\x1B\[1?A)(?:^|[^])\x1B\[\d*A/;
+const NOT_SIMPLE_LOG_ESCAPE = RegExp(
+  `(${CLEAR_REGEX.source})|${NOT_SIMPLE_LOG_ESCAPE_RAW.source}`,
+  "g"
+);
 
 // These escapes should be printed when they first occur, but not when
 // re-printing history. They result in getting a response on stdin. The
@@ -1322,24 +1328,23 @@ class Command {
             }
           } else {
             this.history += part;
-            if (CLEAR_REGEX.test(this.history)) {
-              this.history = "";
-              this.isSimpleLog = true;
-            } else {
-              if (CLEAR_DOWN_REGEX.test(this.history)) {
+            // Take one extra character so `NOT_SIMPLE_LOG_ESCAPE` can match the
+            // `\n${CURSOR_UP}` pattern.
+            const matches = this.history
+              .slice(-part.length - 1)
+              .matchAll(NOT_SIMPLE_LOG_ESCAPE);
+            for (const match of matches) {
+              const clearAll = match[1] !== undefined;
+              const clearDown = match[2] !== undefined;
+              if (clearAll) {
+                this.history = "";
                 this.isSimpleLog = true;
+              } else {
+                this.isSimpleLog = clearDown;
               }
-              if (this.history.length > MAX_HISTORY) {
-                this.history = this.history.slice(-MAX_HISTORY);
-              }
-              if (
-                this.isSimpleLog &&
-                // Include the last character before `part` to be able to detect
-                // `\n${CURSOR_UP}` in `NOT_SIMPLE_LOG_ESCAPE`.
-                NOT_SIMPLE_LOG_ESCAPE.test(this.history.slice(-part.length - 1))
-              ) {
-                this.isSimpleLog = false;
-              }
+            }
+            if (this.history.length > MAX_HISTORY) {
+              this.history = this.history.slice(-MAX_HISTORY);
             }
           }
       }

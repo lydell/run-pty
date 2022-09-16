@@ -25,7 +25,7 @@ async function run() {
   process.stdout.write(`${CLEAR_LINE}Apple: done\n`);
   await delay(1000);
   process.stdout.write(`${CLEAR_LINE}Banana: done\n`);
-  process.stdout.write(CLEAR_DOWN);
+  process.stdout.write(`${CLEAR_DOWN}Success!`);
 
   await delay(2000);
   process.stdout.write(CLEAR);
