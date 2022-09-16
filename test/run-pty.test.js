@@ -83,6 +83,8 @@ function fakeCommand(item, index = 0) {
     statusFromRules: item.statusFromRules,
     defaultStatus: undefined,
     statusRules: [],
+    windowsConptyCursorMoveWorkaround: false,
+    unfinishedEscapeBuffer: "",
     onData: () => notCalled("onData"),
     onRequest: () => notCalled("onRequest"),
     onExit: () => notCalled("onExit"),
@@ -90,7 +92,6 @@ function fakeCommand(item, index = 0) {
     start: () => notCalled("start"),
     kill: () => notCalled("kill"),
     updateStatusFromRules: () => notCalled("updateStatusFromRules"),
-    windowsConptyCursorMoveWorkaround: false,
   };
 }
 

@@ -777,6 +777,10 @@ const respondToRequestFake = (request) =>
 // error, and most of the time you’ll get color codes split in half. It prints
 // the next half the same millisecond.
 //
+// It’s also needed because it is valid to print half an escape code for moving
+// the cursor up, and then the other half. By buffering the escape code, we can
+// pretend that escape codes always come in full in the rest of the code.
+//
 // Note: The terminals I’ve tested with seem to wait forever for the end of
 // escape sequences – they don’t have a timeout or anything.
 const UNFINISHED_ESCAPE = /\x1B(?:\[[0-?]*[ -/]*)?$/;
@@ -1156,6 +1160,7 @@ class Command {
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
     this.windowsConptyCursorMoveWorkaround = false;
+    this.unfinishedEscapeBuffer = "";
 
     // When adding --auto-exit, I first tried to always set `this.history = ""`
     // and add `historyStart()` in `joinHistory`. However, that doesn’t work
@@ -1214,7 +1219,14 @@ class Command {
       conptyInheritCursor: true,
     });
 
-    const disposeOnData = terminal.onData((data) => {
+    const disposeOnData = terminal.onData((rawData) => {
+      const rawDataWithBuffer = this.unfinishedEscapeBuffer + rawData;
+      const match = UNFINISHED_ESCAPE.exec(rawDataWithBuffer);
+      const [data, unfinishedEscapeBuffer] =
+        match === null
+          ? [rawDataWithBuffer, ""]
+          : [rawDataWithBuffer.slice(0, match.index), match[0]];
+      this.unfinishedEscapeBuffer = unfinishedEscapeBuffer;
       for (const [index, rawPart] of data.split(ESCAPES_REQUEST).entries()) {
         let part = rawPart;
         if (
@@ -1465,11 +1477,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
      */
     const helper = (extraText) => {
       const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
-      const lastLine = getLastLine(command.history);
       if (
         command.isSimpleLog &&
-        !UNFINISHED_ESCAPE.test(lastLine) &&
-        (!isBadWindows || removeGraphicRenditions(lastLine) === "")
+        (!isBadWindows ||
+          removeGraphicRenditions(getLastLine(command.history)) === "")
       ) {
         const numLines = extraText.split("\n").length;
         // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
