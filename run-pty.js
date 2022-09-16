@@ -748,6 +748,31 @@ const respondToRequestFake = (request) =>
     ? "\x1B]11;rgb:0000/0000/0000\x07"
     : "";
 
+// Inspired by this well researched Stack Overflow answer:
+// https://stackoverflow.com/a/14693789
+//
+// First, let’s talk about ANSI escapes. They start with `\x1B`.
+//
+// - Some escapes are followed by just one more character.
+// - CSI escapes have a `[` and then 0 or more parameter characters, followed by
+//   a final character. There is no overlap between the parameter characters and
+//   the final character.
+//
+// So a `\x1B` followed by zero or more parameter characters at the very end
+// indicates an unfinished escape. But if that’s followed by anything else
+// (valid or invalid final character), it’s finished.
+//
+// This is needed because we can’t print any extra things in the middle of an
+// unfinished escape: That breaks the escape and causes things like “6m” to be
+// printed – parts of the escape ends up as text. The Elm compiler does this:
+// Run `elm make --output=/dev/null MyFile.elm` where MyFile.elm has a syntax
+// error, and most of the time you’ll get color codes split in half. It prints
+// the next half the same millisecond.
+//
+// Note: The terminals I’ve tested with seem to wait forever for the end of
+// escape sequences – they don’t have a timeout or anything.
+const UNFINISHED_ESCAPE = /\x1B(?:\[[0-?]*[ -/]*)?$/;
+
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
 /**
@@ -1428,10 +1453,11 @@ const runInteractively = (commandDescriptions, autoExit) => {
      */
     const helper = (extraText) => {
       const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
+      const lastLine = getLastLine(command.history);
       if (
         command.isSimpleLog &&
-        (!isBadWindows ||
-          removeGraphicRenditions(getLastLine(command.history)) === "")
+        !UNFINISHED_ESCAPE.test(lastLine) &&
+        (!isBadWindows || removeGraphicRenditions(lastLine) === "")
       ) {
         const numLines = extraText.split("\n").length;
         // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
