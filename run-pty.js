@@ -82,7 +82,6 @@ const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_LEFT = "\x1B[1K";
 const CLEAR_RIGHT = "\x1B[K";
 const CLEAR_DOWN = "\x1B[J";
-const CLEAR_DOWN_REGEX = /\x1B\[0?J$/;
 // These save/restore cursor position _and graphic renditions._
 const SAVE_CURSOR = IS_TERMINAL_APP ? "\u001B7" : "\x1B[s";
 const RESTORE_CURSOR = IS_TERMINAL_APP ? "\u001B8" : "\x1B[u";
@@ -115,7 +114,7 @@ const CLEAR_REGEX = (() => {
     [goToTopLeft, clearScrollback, clearDown],
   ].map((parts) => parts.map((part) => `\\x1B\\[${part.source}`).join(""));
 
-  return RegExp(`(?:${variants.join("|")})$`);
+  return RegExp(`(?:${variants.join("|")})`);
 })();
 
 const waitingIndicator = NO_COLOR
@@ -681,7 +680,9 @@ const statusText = (
 // If a command moves the cursor to another line it’s not considered a “simple
 // log”. Then it’s not safe to print the keyboard shortcuts.
 //
-// - A, B: Cursor up/down. Moving down should be safe.
+// - A, B: Cursor up/down. Moving down should be safe. So is `\n1A` (move to
+//         start of new line, then up one line) – docker-compose does that
+//         to update the previous line. We always print on the next line so it’s safe.
 // - C, D: Cursor left/right. Should be safe! Parcel does this.
 // - E, F: Cursor down/up, and to the start of the line. Moving down should be safe.
 // - G: Cursor absolute position within line. Should be safe! Again, Parcel.
@@ -696,8 +697,15 @@ const statusText = (
 // - T: Scroll down.
 // - s: Save cursor position.
 // - u: Restore cursor position.
-const NOT_SIMPLE_LOG_ESCAPE =
-  /\x1B\[(?:\d*[AFLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])/;
+//
+// This includes the regexes for clearing the screen, since they also affect “is
+// simple log”: They reset it to `true` sometimes.
+const NOT_SIMPLE_LOG_ESCAPE_RAW =
+  /(\x1B\[0?J)|\x1B\[(?:\d*[FLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])|(?!\n\x1B\[1?A)(?:^|[^])\x1B\[\d*A/;
+const NOT_SIMPLE_LOG_ESCAPE = RegExp(
+  `(${CLEAR_REGEX.source})|${NOT_SIMPLE_LOG_ESCAPE_RAW.source}`,
+  "g"
+);
 
 // These escapes should be printed when they first occur, but not when
 // re-printing history. They result in getting a response on stdin. The
@@ -768,6 +776,10 @@ const respondToRequestFake = (request) =>
 // Run `elm make --output=/dev/null MyFile.elm` where MyFile.elm has a syntax
 // error, and most of the time you’ll get color codes split in half. It prints
 // the next half the same millisecond.
+//
+// It’s also needed because it is valid to print half an escape code for moving
+// the cursor up, and then the other half. By buffering the escape code, we can
+// pretend that escape codes always come in full in the rest of the code.
 //
 // Note: The terminals I’ve tested with seem to wait forever for the end of
 // escape sequences – they don’t have a timeout or anything.
@@ -1148,6 +1160,7 @@ class Command {
     /** @type {Array<[RegExp, [string, string] | undefined]>} */
     this.statusRules = statusRules;
     this.windowsConptyCursorMoveWorkaround = false;
+    this.unfinishedEscapeBuffer = "";
 
     // When adding --auto-exit, I first tried to always set `this.history = ""`
     // and add `historyStart()` in `joinHistory`. However, that doesn’t work
@@ -1206,7 +1219,14 @@ class Command {
       conptyInheritCursor: true,
     });
 
-    const disposeOnData = terminal.onData((data) => {
+    const disposeOnData = terminal.onData((rawData) => {
+      const rawDataWithBuffer = this.unfinishedEscapeBuffer + rawData;
+      const match = UNFINISHED_ESCAPE.exec(rawDataWithBuffer);
+      const [data, unfinishedEscapeBuffer] =
+        match === null
+          ? [rawDataWithBuffer, ""]
+          : [rawDataWithBuffer.slice(0, match.index), match[0]];
+      this.unfinishedEscapeBuffer = unfinishedEscapeBuffer;
       for (const [index, rawPart] of data.split(ESCAPES_REQUEST).entries()) {
         let part = rawPart;
         if (
@@ -1320,19 +1340,23 @@ class Command {
             }
           } else {
             this.history += part;
-            if (CLEAR_REGEX.test(this.history)) {
-              this.history = "";
-              this.isSimpleLog = true;
-            } else {
-              if (CLEAR_DOWN_REGEX.test(this.history)) {
+            // Take one extra character so `NOT_SIMPLE_LOG_ESCAPE` can match the
+            // `\n${CURSOR_UP}` pattern.
+            const matches = this.history
+              .slice(-part.length - 1)
+              .matchAll(NOT_SIMPLE_LOG_ESCAPE);
+            for (const match of matches) {
+              const clearAll = match[1] !== undefined;
+              const clearDown = match[2] !== undefined;
+              if (clearAll) {
+                this.history = "";
                 this.isSimpleLog = true;
+              } else {
+                this.isSimpleLog = clearDown;
               }
-              if (this.history.length > MAX_HISTORY) {
-                this.history = this.history.slice(-MAX_HISTORY);
-              }
-              if (this.isSimpleLog && NOT_SIMPLE_LOG_ESCAPE.test(part)) {
-                this.isSimpleLog = false;
-              }
+            }
+            if (this.history.length > MAX_HISTORY) {
+              this.history = this.history.slice(-MAX_HISTORY);
             }
           }
       }
@@ -1453,11 +1477,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
      */
     const helper = (extraText) => {
       const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
-      const lastLine = getLastLine(command.history);
       if (
         command.isSimpleLog &&
-        !UNFINISHED_ESCAPE.test(lastLine) &&
-        (!isBadWindows || removeGraphicRenditions(lastLine) === "")
+        (!isBadWindows ||
+          removeGraphicRenditions(getLastLine(command.history)) === "")
       ) {
         const numLines = extraText.split("\n").length;
         // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
