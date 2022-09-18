@@ -1,3 +1,9 @@
+### Version 4.0.1 (2022-09-18)
+
+- Fixed: run-pty no longer breaks certain ANSI color codes and prints parts of them as text rather than changing the color. This happened if the command you’re running for some reason didn’t print whole color codes in one go. It’s actually valid to print the first half, potentially wait for a little while, and then print the rest! Terminals still change the color when the rest comes in. This is also true for other escape codes, like cursor movements, which run-pty also need to detect and previously could miss out on if they came split up in different chunks. run-pty now handles this by buffering unfinished escape codes until they are complete.
+- Improved: run-pty looks for escape codes that clear the screen, for example to determine if the command is a “simple log” or not (which allows for printing the keyboard shortcuts at the bottom). This now works even if the clear escape codes aren’t at the very end of a written chunk.
+- Improved: Writing a newline and then moving the cursor up one line now still counts as a “simple log” (so the keyboard shortcuts at the bottom still show). `docker-compose` does this sometimes to update the previous line, but it’s still a “simple log”. The keyboard shortcuts are always printed on the next line, so there’s nothing downwards that could be overwritten.
+
 ### Version 4.0.0 (2022-08-28)
 
 - Removed: [NDJSON](https://github.com/ndjson/ndjson-spec) support. I used to have a `bash` script that generated JSON for run-pty in a hacky way, one line at a time. I’ve since re-written that script (using Node.js) and it became so much better! So I don’t need this feature myself anymore, and also realized that it is kind of an anti-feature: It’s better to write good scripts that generate JSON in a nice way! This change also allows for configuring more than the commands in the future.
