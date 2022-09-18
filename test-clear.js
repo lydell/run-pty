@@ -1,7 +1,5 @@
 "use strict";
 
-const CURSOR_DOWN = "\x1B[B";
-
 /**
  * @template T
  * @param {Array<T>} items
@@ -38,8 +36,10 @@ const variants = [
 
 const index = Number(process.argv[2]) || 0;
 
-process.stdout.write(CURSOR_DOWN);
+console.log("Number of variants:", variants.length);
+console.log("Chosen variant (CLI arg 1):", index);
 console.log("Not a simple log");
+process.stdout.write("\x1B[2A");
 
 setTimeout(() => {
   const f = variants[index];
