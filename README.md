@@ -215,7 +215,7 @@ GPU rendering seems to be enabled by default, as long as your computer is connec
 
 You can enable GPU rendering always by toggling “Preferences > General > Magic > GPU Rendering + Advanced GPU Settings… > Disable GPU rendering when disconnected from power.”
 
-There might still be occasional flicker. Hopefully the iTerm2 developers will improve this some time. It does not happen in the standard Terminal app.
+run-pty tries to avoid clearing the screen and only redraw lines that have changed, but there might still be occasional flicker. Hopefully the iTerm2 developers will improve this some time. It does not happen in the standard Terminal app.
 
 ## License
 
