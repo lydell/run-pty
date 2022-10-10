@@ -740,10 +740,11 @@ const NOT_SIMPLE_LOG_ESCAPE = RegExp(
 // - 6n and ?6n: Report Cursor Position. Reply uses `R` instead of `n`.
 // - t: Report window position, size, title etc.
 // - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
+// - ]4;NUM;?: Report color NUM in the palette.
 const ESCAPES_REQUEST =
-  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\]1[01];\?\x07)/g;
+  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);\?(?:\x07|\x1B\\))/g;
 const ESCAPES_RESPONSE =
-  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1B\]1[01];[^\x07]+\x07)/g;
+  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);[^\x07\x1B]+(?:\x07|\x1B\\))/g;
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
 const CONPTY_CURSOR_MOVE = /\x1B\[\d+;1H/;
 const CONPTY_CURSOR_MOVE_REPLACEMENT = "\n\n";
@@ -757,10 +758,10 @@ const respondToRequestFake = (request) =>
     ? "\x1B[1;1R"
     : request.endsWith("t")
     ? "\x1B[3;0;0t"
-    : request.startsWith("\x1B]10;")
-    ? "\x1B]10;rgb:ffff/ffff/ffff\x07"
+    : request.startsWith("\x1B]10;") || request.startsWith("\x1B]4;")
+    ? request.replace("?", "rgb:ffff/ffff/ffff")
     : request.startsWith("\x1B]11;")
-    ? "\x1B]11;rgb:0000/0000/0000\x07"
+    ? request.replace("?", "rgb:0000/0000/0000")
     : "";
 
 // Inspired by this well researched Stack Overflow answer:
@@ -772,6 +773,8 @@ const respondToRequestFake = (request) =>
 // - CSI escapes have a `[` and then 0 or more parameter characters, followed by
 //   a final character. There is no overlap between the parameter characters and
 //   the final character.
+// - OSC escapes have a `]` and then 1 or more characters, followed by either
+//   `\x07` or `\x1B\\`.
 //
 // So a `\x1B` followed by zero or more parameter characters at the very end
 // indicates an unfinished escape. But if that’s followed by anything else
@@ -790,7 +793,7 @@ const respondToRequestFake = (request) =>
 //
 // Note: The terminals I’ve tested with seem to wait forever for the end of
 // escape sequences – they don’t have a timeout or anything.
-const UNFINISHED_ESCAPE = /\x1B(?:\[[0-?]*[ -/]*)?$/;
+const UNFINISHED_ESCAPE = /\x1B(?:\[[0-?]*[ -/]*|\][^\x1B\x07]*)?$/;
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
@@ -1247,8 +1250,10 @@ class Command {
           this.windowsConptyCursorMoveWorkaround = false;
         }
         if (index % 2 === 0) {
-          const statusFromRulesChanged = this.pushHistory(part);
-          this.onData(part, statusFromRulesChanged);
+          if (part !== "") {
+            const statusFromRulesChanged = this.pushHistory(part);
+            this.onData(part, statusFromRulesChanged);
+          }
         } else {
           this.onRequest(part);
         }
@@ -1884,7 +1889,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
         requests.shift();
         requestInFlight = false;
         handleNextRequest();
-      } else {
+      } else if (part !== "") {
         onStdin(
           part,
           current,
