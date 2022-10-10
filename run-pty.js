@@ -1575,6 +1575,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
     const previousRender =
       current.tag === "Dashboard" &&
       current.previousRender.length <= process.stdout.rows &&
+      Math.max(...current.previousRender.map((line) => line.length)) <=
+        process.stdout.columns &&
       !forceClearScrollback
         ? current.previousRender
         : [];
