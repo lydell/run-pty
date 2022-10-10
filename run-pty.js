@@ -18,7 +18,7 @@ const Decode = require("tiny-decoders");
  *
  * @typedef {
     | { tag: "Command", index: number }
-    | { tag: "Dashboard" }
+    | { tag: "Dashboard", previousRender: Array<string> }
    } Current
  */
 
@@ -182,6 +182,13 @@ const cursorDown = (n) => `\x1B[${n}B`;
  * @returns {string}
  */
 const cursorHorizontalAbsolute = (n) => `\x1B[${n}G`;
+
+/**
+ * @param {number} y
+ * @param {number} x
+ * @returns {string}
+ */
+const cursorAbsolute = (y, x) => `\x1B[${y};${x}H`;
 
 /**
  * @param {string} string
@@ -1431,7 +1438,7 @@ const getLastLine = (string) => {
  */
 const runInteractively = (commandDescriptions, autoExit) => {
   /** @type {Current} */
-  let current = { tag: "Dashboard" };
+  let current = { tag: "Dashboard", previousRender: [] };
   let attemptedKillAll = false;
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
@@ -1561,24 +1568,52 @@ const runInteractively = (commandDescriptions, autoExit) => {
   };
 
   /**
+   * @param {{ forceClearScrollback?: boolean }} options
    * @returns {void}
    */
-  const switchToDashboard = () => {
-    current = { tag: "Dashboard" };
+  const switchToDashboard = ({ forceClearScrollback = false } = {}) => {
+    const previousRender =
+      current.tag === "Dashboard" &&
+      current.previousRender.length <= process.stdout.rows &&
+      Math.max(...current.previousRender.map((line) => line.length)) <=
+        process.stdout.columns &&
+      !forceClearScrollback
+        ? current.previousRender
+        : [];
+
+    const currentRender = drawDashboard({
+      commands,
+      width: process.stdout.columns,
+      attemptedKillAll,
+      autoExit,
+      selection,
+    })
+      .split("\n")
+      .slice(0, process.stdout.rows);
+
+    const clear = previousRender.length === 0 ? CLEAR : "";
+    const numLinesToClear = previousRender.length - currentRender.length;
+
+    current = { tag: "Dashboard", previousRender: currentRender };
     process.stdout.write(
       HIDE_CURSOR +
         DISABLE_ALTERNATE_SCREEN +
         DISABLE_APPLICATION_CURSOR_KEYS +
         ENABLE_MOUSE +
         RESET_COLOR +
-        CLEAR +
-        drawDashboard({
-          commands,
-          width: process.stdout.columns,
-          attemptedKillAll,
-          autoExit,
-          selection,
-        })
+        clear +
+        currentRender
+          .map((line, index) =>
+            line === previousRender[index]
+              ? ""
+              : cursorAbsolute(index + 1, 1) + CLEAR_RIGHT + line
+          )
+          .join("") +
+        Array.from(
+          { length: numLinesToClear },
+          (_, index) =>
+            cursorAbsolute(currentRender.length + index + 1, 1) + CLEAR_RIGHT
+        ).join("")
     );
   };
 
@@ -1626,7 +1661,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
       (command) => "terminal" in command.status
     );
     if (notExited.length === 0) {
-      switchToDashboard();
+      switchToDashboard({ forceClearScrollback: true });
       process.exit(autoExit.tag === "AutoExit" ? 1 : 0);
     } else {
       for (const command of notExited) {
@@ -1753,7 +1788,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
         onExit: () => {
           // Exit the whole program if all commands have exited.
           if (isDone({ commands, attemptedKillAll, autoExit })) {
-            switchToDashboard();
+            switchToDashboard({ forceClearScrollback: true });
             process.exit(
               autoExit.tag === "AutoExit" && attemptedKillAll ? 1 : 0
             );
