@@ -1,3 +1,8 @@
+### Version 4.0.2 (2022-10-11)
+
+- Improved: Optimized dashboard rendering. run-pty now avoids re-drawing lines that are identical to the previous render. This reduces flicker, for example in iTerm2 (without GPU rendering) and Windows Terminal, and it makes re-drawing noticeably faster in cmd.exe.
+- Improved: Support for the ANSI escape codes programs can use to ask the terminal for which colors it uses. run-pty needs to be aware of such “request” escape codes so programs work correctly when in the background.
+
 ### Version 4.0.1 (2022-09-18)
 
 - Fixed: run-pty no longer breaks certain ANSI color codes and prints parts of them as text rather than changing the color. This happened if the command you’re running for some reason didn’t print whole color codes in one go. It’s actually valid to print the first half, potentially wait for a little while, and then print the rest! Terminals still change the color when the rest comes in. This is also true for other escape codes, like cursor movements, which run-pty also need to detect and previously could miss out on if they came split up in different chunks. run-pty now handles this by buffering unfinished escape codes until they are complete.
