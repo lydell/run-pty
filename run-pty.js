@@ -1689,12 +1689,14 @@ const runInteractively = (commandDescriptions, autoExit) => {
         const numRunning = commands.filter(
           (command2) => "terminal" in command2.status
         ).length;
+        attemptedKillAll = false;
         command.start({
           needsToWait: numRunning >= autoExit.maxParallel,
         });
         switchToCommand(index);
       }
     } else {
+      attemptedKillAll = false;
       command.start({ needsToWait: false });
       switchToCommand(index);
     }
@@ -1714,6 +1716,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
         const numRunning = commands.filter(
           (command2) => "terminal" in command2.status
         ).length;
+        attemptedKillAll = false;
         for (const [index, command] of exited.entries()) {
           command.start({
             needsToWait: numRunning + index >= autoExit.maxParallel,
@@ -1725,6 +1728,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
         (command) => command.status.tag === "Exit"
       );
       if (exited.length > 0) {
+        attemptedKillAll = false;
         for (const command of exited) {
           command.start({ needsToWait: false });
         }
