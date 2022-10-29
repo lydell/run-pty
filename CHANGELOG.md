@@ -1,3 +1,15 @@
+### Version 4.0.3 (2022-10-29)
+
+- Fixed: An edge case with “kill all”.
+
+  First, a re-cap on how run-pty works. run-pty runs commands. Commands can exit. If all commands exit (by themselves, or because you killed them each separately with <kbd>ctrl+c</kbd>), run-pty keeps running, letting you restart the commands.
+
+  When you press <kbd>ctrl+c</kbd> to kill _all_ commands, run-pty tells every command that they should exit and sets a flag that run-pty should exit itself once all commands have exited, called `attemptedKillAll`. If you restart one or more commands before all commands have exited – what does that mean? Well, it probably means that you changed your mind and want to keep running run-pty.
+
+  Previously, the `attemptedKillAll` flag would still be set in that situation. Which means that if all commands then exit, run-pty would exit too – which is inconsistent. It should keep running and let you restart the commands.
+
+  This version resets the flag `attemptedKillAll` if you restart any command. In other words, it no longer counts as having attempted to kill all commands if you restart something.
+
 ### Version 4.0.2 (2022-10-11)
 
 - Improved: Optimized dashboard rendering. run-pty now avoids re-drawing lines that are identical to the previous render. This reduces flicker, for example in iTerm2 (without GPU rendering) and Windows Terminal, and it makes re-drawing noticeably faster in cmd.exe.
