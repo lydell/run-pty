@@ -276,9 +276,6 @@ Separate the commands with a character of choice:
 
     ${runPty} ${at} ./report_progress.bash --root / --unit % ${at} ping localhost
 
-Note: All arguments are strings and passed as-is – no shell script execution.
-Use ${bold("sh -c '...'")} or similar if you need that.
-
 Alternatively, specify the commands in a JSON file:
 
     ${runPty} run-pty.json

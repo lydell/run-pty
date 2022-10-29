@@ -155,7 +155,7 @@ The JSON format lets you specify additional things apart from the command itself
 | defaultStatus | <code>[string,&nbsp;string] &vert; null</code> | `null` | Customize the default status of the command in the dashboard. |
 | killAllSequence | `string` | `"\u0003"` | Sequence to send to the command when using “kill all”. The default is the escape code for <kbd>ctrl+c</kbd>. |
 
-- command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % npm run frontend` on the command line, the JSON version of it is `["npm", "run", "frontend"]`. And `run-pty % echo 'hello world'` would be `["echo", "hello world"]`.
+- command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % npm run frontend` on the command line, the JSON version of it is `["npm", "run", "frontend"]`. And `run-pty % echo 'hello world'` would be `["echo", "hello world"]`. See also: [Shell scripting](#shell-scripting).
 
 - title: If you have complicated commands, it might be hard to find what you’re looking for in the dashboard. This lets you use more human readable titles instead. The titles are also shown when you focus a command (before the command itself).
 
@@ -201,6 +201,18 @@ run-pty --auto-exit % npm ci % dotnet restore && node build.js
 To limit how many commands run in parallel, use for example `--auto-exit=5`. Just `--auto-exit` is the same as `--auto-exit=auto`, which uses the number of logical CPU cores.
 
 Note: `--auto-exit` is for conveniently running a couple of commands in parallel and get to know once they are done. I don’t want the feature to grow to [GNU Parallel] levels of complexity.
+
+## Shell scripting
+
+Let’s say you run `run-pty % npm run $command` on the command line. If the `command` variable is set to `frontend`, the command actually executed is `run-pty % npm run frontend` – run-pty receives `["%", "npm", "run", "frontend"]` as arguments (and has no idea that `frontend` came from a variable initially). This is all thanks to your shell – which is assumed to be a bash-like shell here; the syntax for Windows’ `cmd.exe` would be different, for example.
+
+If you try to put that in a [JSON file](#advanced-mode) as `"command": ["npm", "run", "$command"]`, run-pty is going to try to execute `npm` with the literal strings `run` and `$command`, so `npm` receives `["run", "$command"]` as arguments. There’s no shell in play here.
+
+Another example: Let’s say you wanted a command to first run `npm install` and then run `npm start` to start a server or something. If you run `run-pty % npm install && npm start` from the command line, it actually means “first run `run-pty % npm install` and once that’s done (and succeeded), run `npm start`”, which is not what you wanted. You might try to fix that by using escapes: `run-pty % npm install \&\& npm start`. However, run-pty is then going to execute `npm` with `["install", "&&", "npm", "start"]` as arguments. There’s no shell in play here either.
+
+run-pty only executes programs with an array of literal strings as arguments.
+
+If you want a shell, you could do something like this: `run-pty % bash -c 'npm install && npm start'` or `"command": ["bash", "-c", "npm run \"$command\""]`. You can also but that in a file, like `my-script.bash`, and use `run-pty % ./my-script.bash` or `"command": ["./my-script.bash"]`. If you need cross-platform support (or get tired of bash), you could instead use `run-pty % node my-script.js` or `"command": ["node", "my-script.js"]`.
 
 ## Credits
 

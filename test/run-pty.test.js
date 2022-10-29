@@ -137,9 +137,6 @@ describe("help", () => {
 
           ⧙run-pty⧘ ⧙@⧘ ./report_progress.bash --root / --unit % ⧙@⧘ ping localhost
 
-      Note: All arguments are strings and passed as-is – no shell script execution.
-      Use ⧙sh -c '...'⧘ or similar if you need that.
-
       Alternatively, specify the commands in a JSON file:
 
           ⧙run-pty⧘ run-pty.json
