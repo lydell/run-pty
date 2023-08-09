@@ -1,3 +1,7 @@
+### Version 4.0.4 (2023-08-09)
+
+- run-pty now works on Node.js 20, by upgrading the node-pty dependency to 1.0.0. I haven’t found any breaking changes in that major version bump that results in breakage for run-pty users.
+
 ### Version 4.0.3 (2022-10-29)
 
 - Fixed: An edge case with “kill all”.
