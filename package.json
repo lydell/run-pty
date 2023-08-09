@@ -24,7 +24,7 @@
     "xterm"
   ],
   "dependencies": {
-    "node-pty": "^0.10.1",
+    "node-pty": "^1.0.0",
     "tiny-decoders": "^7.0.1"
   },
   "devDependencies": {

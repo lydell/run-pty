@@ -37,7 +37,7 @@ function fakeTerminal({ pid }) {
     handleFlowControl: false,
     onData: () => notCalled("onData") || { dispose: () => undefined },
     onExit: () => notCalled("onExit") || { dispose: () => undefined },
-    on: () => notCalled("on"),
+    clear: () => notCalled("clear"),
     pause: () => notCalled("pause"),
     resume: () => notCalled("resume"),
     resize: () => notCalled("resize"),
@@ -1152,7 +1152,9 @@ describe("parse json", () => {
   test("invalid json syntax", () => {
     expect(testJsonError("invalid-json-syntax.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Unexpected token ] in JSON at position 91
+      Unexpected token ']', ..."kend"] },
+      ]
+      " is not valid JSON
     `);
   });
 
@@ -1200,7 +1202,7 @@ describe("parse json", () => {
     expect(testJsonError("invalid-regex.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
       At root[0]["status"]["{}"]:
-      Invalid regular expression: /{}/: Lone quantifier brackets
+      Invalid regular expression: /{}/u: Lone quantifier brackets
     `);
   });
 
