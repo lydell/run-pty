@@ -2340,7 +2340,6 @@ const run = () => {
   }
 };
 
-// @ts-ignore
 if (require.main === module) {
   run();
 }
