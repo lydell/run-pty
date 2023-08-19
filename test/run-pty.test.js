@@ -1,9 +1,11 @@
 "use strict";
 
-const childProcess = require("child_process");
-const path = require("path");
-const os = require("os");
+import * as childProcess from "child_process";
+import * as path from "path";
+import * as os from "os";
+import { expect, test, describe } from "vitest";
 
+import runPty from "../run-pty";
 const {
   __forTests: {
     ALL_LABELS,
@@ -21,7 +23,7 @@ const {
     summarizeLabels,
     waitingText,
   },
-} = require("../run-pty");
+} = runPty;
 
 /**
  * @param {{ pid: number }} init

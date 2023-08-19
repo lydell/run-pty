@@ -58,10 +58,7 @@ module.exports = {
     },
     {
       files: "*.test.js",
-      extends: ["plugin:jest/recommended"],
-      env: {
-        "jest/globals": true,
-      },
+      extends: ["plugin:vitest/recommended"],
     },
   ],
 };
