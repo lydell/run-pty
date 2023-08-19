@@ -1,9 +1,11 @@
 "use strict";
 
-const childProcess = require("child_process");
-const path = require("path");
-const os = require("os");
+import * as childProcess from "child_process";
+import * as path from "path";
+import * as os from "os";
+import { expect, test, describe } from "vitest";
 
+import runPty from "../run-pty";
 const {
   __forTests: {
     ALL_LABELS,
@@ -21,7 +23,7 @@ const {
     summarizeLabels,
     waitingText,
   },
-} = require("../run-pty");
+} = runPty;
 
 /**
  * @param {{ pid: number }} init
@@ -181,7 +183,7 @@ describe("dashboard", () => {
       width = 80,
       attemptedKillAll = false,
       autoExit = { tag: "NoAutoExit" },
-    } = {}
+    } = {},
   ) {
     return replaceAnsi(
       drawDashboard({
@@ -190,7 +192,7 @@ describe("dashboard", () => {
         attemptedKillAll,
         autoExit,
         selection: { tag: "Invisible", index: 0 },
-      })
+      }),
     );
   }
 
@@ -209,7 +211,7 @@ describe("dashboard", () => {
           command: ["npm", "start"],
           status: { tag: "Exit", exitCode: 0, wasKilled: false },
         },
-      ])
+      ]),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘  npm start⧘
 
@@ -230,8 +232,8 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
-      )
+        { autoExit: { tag: "AutoExit", maxParallel: 3 } },
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
 
@@ -254,8 +256,8 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 1 } }
-      )
+        { autoExit: { tag: "AutoExit", maxParallel: 1 } },
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
 
@@ -278,8 +280,8 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 2 } }
-      )
+        { autoExit: { tag: "AutoExit", maxParallel: 2 } },
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
 
@@ -307,8 +309,8 @@ describe("dashboard", () => {
           },
         ],
 
-        { autoExit: { tag: "AutoExit", maxParallel: 3 } }
-      )
+        { autoExit: { tag: "AutoExit", maxParallel: 3 } },
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  npm start⧘
       ⧙[⧘⧙2⧘⧙]⧘  ⛔️⧘  ⧙exit 1⧘  npm run build⧘
@@ -337,8 +339,8 @@ describe("dashboard", () => {
             },
           },
         ],
-        { attemptedKillAll: true }
-      )
+        { attemptedKillAll: true },
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⭕⧘  npm start⧘
 
@@ -366,8 +368,8 @@ describe("dashboard", () => {
         {
           attemptedKillAll: true,
           autoExit: { tag: "AutoExit", maxParallel: 3 },
-        }
-      )
+        },
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⭕⧘  npm start⧘
 
@@ -393,8 +395,8 @@ describe("dashboard", () => {
         {
           attemptedKillAll: true,
           autoExit: { tag: "AutoExit", maxParallel: 3 },
-        }
-      )
+        },
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⛔️⧘  ⧙exit 0⧘  npm start⧘␊
 
@@ -454,7 +456,7 @@ describe("dashboard", () => {
           title:
             "very long title for some reason that needs to be cut off at some point",
         },
-      ])
+      ]),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  ⚪⧘  ⧙exit 0⧘    echo ./Some_script2.js -v '$end' '' \\'quoted\\''th|ng'\\' 'hel…⧘
       ⧙[⧘⧙2⧘⧙]⧘  ⚪⧘  ⧙exit 130⧘  npm run server⧘
@@ -479,8 +481,8 @@ describe("dashboard", () => {
             tag: "Running",
             terminal: fakeTerminal({ pid: 9980 + i }),
           },
-        }))
-      )
+        })),
+      ),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  echo 0⧘
       ⧙[⧘⧙2⧘⧙]⧘  🟢⧘  echo 1⧘
@@ -572,7 +574,7 @@ describe("summary", () => {
           command: ["npm", "start"],
           status: { tag: "Exit", exitCode: 0, wasKilled: false },
         },
-      ])
+      ]),
     ).toMatchInlineSnapshot(`
       ⧙Summary – success:⧘
       ⚪ ⧙exit 0⧘ npm start⧘
@@ -590,7 +592,7 @@ describe("summary", () => {
           command: ["npm", "test"],
           status: { tag: "Exit", exitCode: 1, wasKilled: false },
         },
-      ])
+      ]),
     ).toMatchInlineSnapshot(`
       ⧙Summary – failure:⧘
       ⚪ ⧙exit 0⧘ npm start⧘
@@ -609,7 +611,7 @@ describe("summary", () => {
           command: ["npm", "test"],
           status: { tag: "Exit", exitCode: 0, wasKilled: true },
         },
-      ])
+      ]),
     ).toMatchInlineSnapshot(`
       ⧙Summary – aborted:⧘
       ⚪ ⧙exit 0⧘ npm start⧘
@@ -632,7 +634,7 @@ describe("summary", () => {
           command: ["npm", "test"],
           status: { tag: "Exit", exitCode: 0, wasKilled: false },
         },
-      ])
+      ]),
     ).toMatchInlineSnapshot(`
       ⧙Summary – failure:⧘
       🔴 ⧙exit 126⧘ npm start⧘
@@ -658,7 +660,7 @@ describe("focused command", () => {
           "Expected `titlePossiblyWithGraphicRenditions` not to be used",
         cwd,
         history: "",
-      })
+      }),
     );
   }
 
@@ -667,8 +669,8 @@ describe("focused command", () => {
       render(
         (command) => historyStart(runningIndicator, command),
         "npm start",
-        "./"
-      )
+        "./",
+      ),
     ).toMatchInlineSnapshot(`
       🟢 npm start⧘␊
 
@@ -680,8 +682,8 @@ describe("focused command", () => {
       render(
         (command) => historyStart(runningIndicator, command),
         "frontend: npm start",
-        "web/frontend"
-      )
+        "web/frontend",
+      ),
     ).toMatchInlineSnapshot(`
       🟢 frontend: npm start⧘
       📂 ⧙web/frontend⧘␊
@@ -706,7 +708,7 @@ describe("focused command", () => {
 
   test("killing with cwd", () => {
     expect(
-      render(() => killingText(12345), "frontend: npm start", "web/frontend")
+      render(() => killingText(12345), "frontend: npm start", "web/frontend"),
     ).toMatchInlineSnapshot(`
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
       ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
@@ -721,11 +723,11 @@ describe("focused command", () => {
             [],
             command,
             { tag: "Exit", exitCode: 0, wasKilled: false },
-            { tag: "NoAutoExit" }
+            { tag: "NoAutoExit" },
           ),
         "frontend: npm start",
-        "web/frontend"
-      )
+        "web/frontend",
+      ),
     ).toMatchInlineSnapshot(`
       ⚪ frontend: npm start⧘
       📂 ⧙web/frontend⧘
@@ -745,11 +747,11 @@ describe("focused command", () => {
             [],
             command,
             { tag: "Exit", exitCode: 0, wasKilled: false },
-            { tag: "NoAutoExit" }
+            { tag: "NoAutoExit" },
           ),
         "frontend: npm start",
-        "."
-      )
+        ".",
+      ),
     ).toMatchInlineSnapshot(`
       ⚪ frontend: npm start⧘
       exit 0
@@ -771,11 +773,11 @@ describe("focused command", () => {
             {
               tag: "AutoExit",
               maxParallel: 3,
-            }
+            },
           ),
         "frontend: npm start",
-        "."
-      )
+        ".",
+      ),
     ).toMatchInlineSnapshot(`
       ⚪ frontend: npm start⧘
       exit 0
@@ -796,12 +798,12 @@ describe("focused command", () => {
             {
               tag: "AutoExit",
               maxParallel: 3,
-            }
+            },
           ),
 
         "frontend: npm start",
-        "."
-      )
+        ".",
+      ),
     ).toMatchInlineSnapshot(`
       ⛔️ frontend: npm start⧘
       exit 0
@@ -820,11 +822,11 @@ describe("focused command", () => {
             [],
             command,
             { tag: "Exit", exitCode: 1, wasKilled: false },
-            { tag: "NoAutoExit" }
+            { tag: "NoAutoExit" },
           ),
         "frontend: npm start",
-        "."
-      )
+        ".",
+      ),
     ).toMatchInlineSnapshot(`
       🔴 frontend: npm start⧘
       exit 1
@@ -869,8 +871,8 @@ describe("exit text and history", () => {
           exitCode: 0,
           numExited: 1,
           numTotal: 1,
-        })
-      )
+        }),
+      ),
     ).toMatchInlineSnapshot(`
       ⚪ npm test⧘
       ⧙exit 0⧘ ⧙(1/1 exited)⧘␊
@@ -891,8 +893,8 @@ describe("exit text and history", () => {
           exitCode: 1,
           numExited: 2,
           numTotal: 11,
-        })
-      )
+        }),
+      ),
     ).toMatchInlineSnapshot(`
       🔴 npm test⧘
       First line
@@ -917,8 +919,8 @@ describe("exit text and history", () => {
           exitCode: 2,
           numExited: 11,
           numTotal: 11,
-        })
-      )
+        }),
+      ),
     ).toMatchInlineSnapshot(`
       🔴 npm test⧘
       📂 ⧙web/frontend⧘
@@ -1016,7 +1018,7 @@ describe("parse args", () => {
      */
     function parsedCommands(
       commands,
-      { autoExit = { tag: "NoAutoExit" } } = {}
+      { autoExit = { tag: "NoAutoExit" } } = {},
     ) {
       return {
         tag: "Parsed",
@@ -1033,7 +1035,7 @@ describe("parse args", () => {
     }
 
     expect(parseArgs(["%", "npm", "start"])).toStrictEqual(
-      parsedCommands([["npm", "start"]])
+      parsedCommands([["npm", "start"]]),
     );
 
     expect(
@@ -1045,12 +1047,12 @@ describe("parse args", () => {
         "webpack-dev-server",
         "--entry",
         "/entry/file",
-      ])
+      ]),
     ).toStrictEqual(
       parsedCommands([
         ["npm", "start"],
         ["webpack-dev-server", "--entry", "/entry/file"],
-      ])
+      ]),
     );
 
     expect(
@@ -1064,58 +1066,58 @@ describe("parse args", () => {
         "@",
         "ping",
         "localhost",
-      ])
+      ]),
     ).toStrictEqual(
       parsedCommands([
         ["./report_progress.bash", "--root", "/", "--unit", "%"],
         ["ping", "localhost"],
-      ])
+      ]),
     );
 
     expect(parseArgs(["+", "one", "+", "+", "+two", "+"])).toStrictEqual(
-      parsedCommands([["one"], ["+two"]])
+      parsedCommands([["one"], ["+two"]]),
     );
 
     expect(parseArgs(["-", "one", "-", "-two", "-"])).toStrictEqual(
-      parsedCommands([["one"], ["-two"]])
+      parsedCommands([["one"], ["-two"]]),
     );
 
     expect(parseArgs(["--", "one", "--", "--two", "--"])).toStrictEqual(
-      parsedCommands([["one"], ["--two"]])
+      parsedCommands([["one"], ["--two"]]),
     );
 
     expect(parseArgs(["---", "one", "---", "---two", "---"])).toStrictEqual(
-      parsedCommands([["one"], ["---two"]])
+      parsedCommands([["one"], ["---two"]]),
     );
 
     expect(
-      parseArgs(["--auto-exit", "%", "one", "%", "two", "--auto-exit"])
+      parseArgs(["--auto-exit", "%", "one", "%", "two", "--auto-exit"]),
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
         autoExit: {
           tag: "AutoExit",
           maxParallel: os.cpus().length,
         },
-      })
+      }),
     );
 
     expect(
-      parseArgs(["--auto-exit=234", "%", "one", "%", "two", "--auto-exit"])
+      parseArgs(["--auto-exit=234", "%", "one", "%", "two", "--auto-exit"]),
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
         autoExit: { tag: "AutoExit", maxParallel: 234 },
-      })
+      }),
     );
 
     expect(
-      parseArgs(["--auto-exit=auto", "%", "one", "%", "two", "--auto-exit"])
+      parseArgs(["--auto-exit=auto", "%", "one", "%", "two", "--auto-exit"]),
     ).toStrictEqual(
       parsedCommands([["one"], ["two", "--auto-exit"]], {
         autoExit: {
           tag: "AutoExit",
           maxParallel: os.cpus().length,
         },
-      })
+      }),
     );
   });
 });
@@ -1261,7 +1263,7 @@ describe("--auto-exit runs", () => {
     const child = childProcess.spawnSync(
       "node",
       [path.join(__dirname, "..", "run-pty.js"), ...args],
-      { encoding: "utf8" }
+      { encoding: "utf8" },
     );
 
     expect(child.error).toBeUndefined();

@@ -12,8 +12,7 @@ module.exports = {
   rules: {
     ...require("@typescript-eslint/eslint-plugin").configs["eslint-recommended"]
       .overrides[0].rules,
-    ...require("@typescript-eslint/eslint-plugin").configs.recommended.rules,
-    "@typescript-eslint/ban-ts-comment": "off",
+    ...require("@typescript-eslint/eslint-plugin").configs.strict.rules,
     "@typescript-eslint/no-var-requires": "off",
     "arrow-body-style": "error",
     curly: "error",
@@ -36,8 +35,10 @@ module.exports = {
       },
       rules: {
         ...require("@typescript-eslint/eslint-plugin").configs[
-          "recommended-requiring-type-checking"
+          "strict-type-checked"
         ].rules,
+        "@typescript-eslint/no-unnecessary-condition": "off",
+        "@typescript-eslint/no-var-requires": "off",
         "@typescript-eslint/strict-boolean-expressions": [
           "error",
           {
@@ -57,10 +58,7 @@ module.exports = {
     },
     {
       files: "*.test.js",
-      extends: ["plugin:jest/recommended"],
-      env: {
-        "jest/globals": true,
-      },
+      extends: ["plugin:vitest/recommended"],
     },
   ],
 };

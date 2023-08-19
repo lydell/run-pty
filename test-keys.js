@@ -27,5 +27,5 @@ process.stdin.on(
     if (keypress.ctrl && keypress.name === "c") {
       process.exit();
     }
-  }
+  },
 );

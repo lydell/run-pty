@@ -26,6 +26,6 @@ setTimeout(() => {
       WINDOW_POSITION,
       FOREGROUND_COLOR,
       BACKGROUND_COLOR,
-    ].join("")
+    ].join(""),
   );
 }, 200);

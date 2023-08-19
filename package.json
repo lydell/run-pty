@@ -28,24 +28,19 @@
     "tiny-decoders": "^7.0.1"
   },
   "devDependencies": {
-    "@types/jest": "29.2.0",
-    "@typescript-eslint/eslint-plugin": "5.41.0",
-    "@typescript-eslint/parser": "5.41.0",
-    "eslint": "8.26.0",
-    "eslint-plugin-jest": "27.1.3",
-    "jest": "29.2.2",
-    "jest-environment-node-single-context": "29.0.0",
-    "prettier": "2.7.1",
-    "typescript": "4.8.4"
+    "@typescript-eslint/eslint-plugin": "6.4.0",
+    "@typescript-eslint/parser": "6.4.0",
+    "eslint": "8.47.0",
+    "eslint-plugin-vitest": "0.2.8",
+    "prettier": "3.0.2",
+    "typescript": "5.1.6",
+    "vitest": "0.34.2"
   },
   "scripts": {
     "start": "node run-pty.js % cat % false % echo hello 🇬🇧 🙈 world % echo hello wide 古古古古古古古古古古古 % ping localhost % node get-cursor-position.js % node test-keys.js % node signals.js % node slow-kill.js % node slow-kill.js 2000 \"Shutting down…\" % make watch % make signals % node test-clear-down.js % node colored-log.js % node test-exit-in-middle.js % node test-split-color-codes.js % node test-request-colors.js",
     "example": "node run-pty.js example.json",
     "auto-exit": "node run-pty.js --auto-exit=2 % sleep 3 % sleep 1 % sleep 2 % sleep 1 % sleep 1 && echo success",
-    "test": "node run-pty.js --auto-exit % prettier --check . % eslint . --report-unused-disable-directives % tsc % jest",
+    "test": "node run-pty.js --auto-exit % prettier --check . % eslint . --report-unused-disable-directives % tsc % vitest run",
     "prepublishOnly": "npm test"
-  },
-  "jest": {
-    "testEnvironment": "jest-environment-node-single-context"
   }
 }

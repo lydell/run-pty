@@ -36,7 +36,7 @@ async function run() {
       await waitMs(1);
     }
     process.stdout.write(
-      `Line ${index + 1} (${variation.length} variations)\x1B[0m\n`
+      `Line ${index + 1} (${variation.length} variations)\x1B[0m\n`,
     );
     await waitMs(100);
   }
