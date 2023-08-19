@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const pty = require("node-pty");
-const Decode = require("tiny-decoders");
+const Codec = require("tiny-decoders");
 
 /**
  * @typedef {
@@ -1077,76 +1077,91 @@ const partitionArgs = (args) => {
  * @returns {Array<CommandDescription>}
  */
 const parseInputFile = (string) => {
-  try {
-    return Decode.array(commandDescriptionDecoder)(JSON.parse(string));
-  } catch (error) {
-    throw error instanceof Decode.DecoderError
-      ? new Error(error.format())
-      : error;
+  const result = Codec.parse(Codec.array(commandDescriptionCodec), string);
+  if (result instanceof Codec.DecoderError) {
+    throw new Error(result.format());
   }
+  return result;
 };
 
-/**
- * @type {Decode.Decoder<CommandDescription>}
- */
-const commandDescriptionDecoder = Decode.fields(
-  /** @returns {CommandDescription} */
-  (field) => {
-    const command = field("command", nonEmptyArray(Decode.string));
+const statusCodec = Codec.chain(
+  Codec.nullable(Codec.tuple([Codec.string, Codec.string])),
+  {
+    decoder: (value) => value ?? undefined,
+    encoder: (value) => value ?? null,
+  },
+);
 
-    return {
-      title: field(
-        "title",
-        Decode.optional(Decode.string, commandToPresentationName(command)),
-      ),
-      cwd: field("cwd", Decode.optional(Decode.string, ".")),
-      command,
-      status: field(
-        "status",
-        Decode.optional(
-          Decode.chain(Decode.record(statusDecoder), (record) =>
+/**
+ * @type {Codec.Codec<CommandDescription>}
+ */
+const commandDescriptionCodec = Codec.chain(
+  Codec.fields(
+    {
+      command: nonEmptyArray(Codec.string),
+      title: Codec.optional(Codec.string),
+      cwd: Codec.optional(Codec.string),
+      status: Codec.optional(
+        Codec.chain(Codec.record(statusCodec), {
+          /**
+           * @param {Record<string, Codec.Infer<typeof statusCodec>>} record
+           * @returns {Array<[RegExp, Codec.Infer<typeof statusCodec>]>}
+           */
+          decoder: (record) =>
             Object.entries(record).map(([key, value]) => {
               try {
                 return [RegExp(key, "u"), value];
               } catch (error) {
-                throw Decode.DecoderError.at(error, key);
+                throw Codec.DecoderError.at(error, key);
               }
             }),
-          ),
-          [],
-        ),
+          /**
+           * @param {Array<[RegExp, Codec.Infer<typeof statusCodec>]>} items
+           * @returns {Record<string, Codec.Infer<typeof statusCodec>>}
+           */
+          encoder: (items) =>
+            Object.fromEntries(
+              items.map(([key, value]) => [key.source, value]),
+            ),
+        }),
       ),
-      defaultStatus: field("defaultStatus", Decode.optional(statusDecoder)),
-      killAllSequence: field(
-        "killAllSequence",
-        Decode.optional(Decode.string, KEY_CODES.kill),
-      ),
-    };
+      defaultStatus: Codec.optional(statusCodec),
+      killAllSequence: Codec.optional(Codec.string),
+    },
+    { exact: "throw" },
+  ),
+  {
+    decoder: ({
+      command,
+      title = commandToPresentationName(command),
+      cwd = ".",
+      status = [],
+      killAllSequence = KEY_CODES.kill,
+      ...rest
+    }) => ({ ...rest, command, title, cwd, status, killAllSequence }),
+    encoder: (value) => value,
   },
-  { exact: "throw" },
 );
 
 /**
- * @template T
- * @param {Decode.Decoder<T>} decoder
- * @returns {Decode.Decoder<Array<T>>}
+ * @template Decoded
+ * @param {Codec.Codec<Decoded>} decoder
+ * @returns {Codec.Codec<Array<Decoded>>}
  */
 function nonEmptyArray(decoder) {
-  return Decode.chain(Decode.array(decoder), (arr) => {
-    if (arr.length === 0) {
-      throw new Decode.DecoderError({
-        message: "Expected a non-empty array",
-        value: arr,
-      });
-    }
-    return arr;
+  return Codec.chain(Codec.array(decoder), {
+    decoder(arr) {
+      if (arr.length === 0) {
+        throw new Codec.DecoderError({
+          message: "Expected a non-empty array",
+          value: arr,
+        });
+      }
+      return arr;
+    },
+    encoder: (value) => value,
   });
 }
-
-const statusDecoder = Decode.nullable(
-  Decode.tuple([Decode.string, Decode.string]),
-  undefined,
-);
 
 /**
  * @param {Command} command

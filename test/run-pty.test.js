@@ -1188,16 +1188,20 @@ describe("parse json", () => {
   test("empty file", () => {
     expect(testJsonError("empty.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
+      At root:
       Unexpected end of JSON input
+      Got: ""
     `);
   });
 
   test("invalid json syntax", () => {
     expect(testJsonError("invalid-json-syntax.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
+      At root:
       Unexpected token ']', ..."kend"] },
       ]
       " is not valid JSON
+      Got: "[\\n  { \\"command\\": [\\"npm\\", \\"run\\", \\"frontend…ommand\\": [\\"npm\\", \\"run\\", \\"backend\\"] },\\n]\\n"
     `);
   });
 
@@ -1226,9 +1230,11 @@ describe("parse json", () => {
   test("missing command", () => {
     expect(testJsonError("missing-command.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      At root[0]["command"]:
-      Expected an array
-      Got: undefined
+      At root[0]:
+      Expected an object with a field called: "command"
+      Got: {
+        "title": "Something"
+      }
     `);
   });
 
@@ -1254,7 +1260,8 @@ describe("parse json", () => {
       Failed to read command descriptions file as JSON:
       At root[0]:
       Expected only these fields: "command", "title", "cwd", "status", "defaultStatus", "killAllSequence"
-      Found extra fields: "titel"
+      Found extra fields: 
+        "titel"␊
     `);
   });
 
@@ -1266,7 +1273,6 @@ describe("parse json", () => {
           command: ["node"],
           title: "node",
           cwd: ".",
-          defaultStatus: undefined,
           status: [],
           killAllSequence: "\x03\x03",
         },
