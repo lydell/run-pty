@@ -328,7 +328,7 @@ const drawDashboardCommandLines = (
 ) => {
   const lines = commands.map((command) => {
     const [icon, status] = statusText(command.status, {
-      statusFromRules: command.statusFromRules,
+      statusFromRules: command.statusFromRules ?? runningIndicator,
       useSeparateKilledIndicator,
     });
     const { label = " " } = command;
@@ -486,6 +486,7 @@ const drawSummary = (commands) => {
     : "aborted";
   const lines = commands.map((command) => {
     const [indicator, status] = statusText(command.status, {
+      statusFromRules: runningIndicator,
       useSeparateKilledIndicator: true,
     });
     return `${indicator}${EMOJI_WIDTH_FIX} ${
@@ -651,15 +652,12 @@ ${cwdText(command)}${command.history}${CLEAR_DOWN}${newline}${bold(
 
 /**
  * @param {Status} status
- * @param {{ statusFromRules?: string, useSeparateKilledIndicator?: boolean }} options
+ * @param {{ statusFromRules: string, useSeparateKilledIndicator: boolean }} options
  * @returns {[string, string | undefined]}
  */
 const statusText = (
   status,
-  {
-    statusFromRules = runningIndicator,
-    useSeparateKilledIndicator = false,
-  } = {}
+  { statusFromRules, useSeparateKilledIndicator }
 ) => {
   switch (status.tag) {
     case "Waiting":
@@ -882,7 +880,7 @@ const AUTO_EXIT_REGEX = /^--auto-exit(?:=(\d+|auto))?$/;
     cwd: string,
     command: Array<string>,
     status: Array<[RegExp, [string, string] | undefined]>,
-    defaultStatus?: [string, string],
+    defaultStatus?: [string, string] | undefined,
     killAllSequence: string,
    }} CommandDescription
  *
