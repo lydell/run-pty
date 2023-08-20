@@ -1078,14 +1078,16 @@ const partitionArgs = (args) => {
  */
 const parseInputFile = (string) => {
   const result = Codec.parse(Codec.array(commandDescriptionCodec), string);
-  if (result instanceof Codec.DecoderError) {
-    throw new Error(result.format());
+  switch (result.tag) {
+    case "Valid":
+      return result.value;
+    case "DecoderError":
+      throw new Error(Codec.formatAll(result.errors));
   }
-  return result;
 };
 
-const statusCodec = Codec.chain(
-  Codec.nullable(Codec.tuple([Codec.string, Codec.string])),
+const statusCodec = Codec.map(
+  Codec.orNull(Codec.tuple([Codec.string, Codec.string])),
   {
     decoder: (value) => value ?? undefined,
     encoder: (value) => value ?? null,
@@ -1095,26 +1097,40 @@ const statusCodec = Codec.chain(
 /**
  * @type {Codec.Codec<CommandDescription>}
  */
-const commandDescriptionCodec = Codec.chain(
+const commandDescriptionCodec = Codec.map(
   Codec.fields(
     {
       command: nonEmptyArray(Codec.string),
       title: Codec.optional(Codec.string),
       cwd: Codec.optional(Codec.string),
       status: Codec.optional(
-        Codec.chain(Codec.record(statusCodec), {
-          /**
-           * @param {Record<string, Codec.Infer<typeof statusCodec>>} record
-           * @returns {Array<[RegExp, Codec.Infer<typeof statusCodec>]>}
-           */
-          decoder: (record) =>
-            Object.entries(record).map(([key, value]) => {
+        Codec.andThen(Codec.record(statusCodec), {
+          decoder: (record) => {
+            /** @type {Array<[RegExp, Codec.Infer<typeof statusCodec>]>} */
+            const result = [];
+            /** @type {Array<Codec.DecoderError>} */
+            const errors = [];
+            for (const [key, value] of Object.entries(record)) {
               try {
-                return [RegExp(key, "u"), value];
+                result.push([RegExp(key, "u"), value]);
               } catch (error) {
-                throw Codec.DecoderError.at(error, key);
+                errors.push({
+                  tag: "custom",
+                  message:
+                    error instanceof Error ? error.message : String(error),
+                  got: key,
+                  path: [key],
+                });
               }
-            }),
+            }
+            const [firstError, ...restErrors] = errors;
+            return firstError === undefined
+              ? { tag: "Valid", value: result }
+              : {
+                  tag: "DecoderError",
+                  errors: [firstError, ...restErrors],
+                };
+          },
           /**
            * @param {Array<[RegExp, Codec.Infer<typeof statusCodec>]>} items
            * @returns {Record<string, Codec.Infer<typeof statusCodec>>}
@@ -1128,7 +1144,7 @@ const commandDescriptionCodec = Codec.chain(
       defaultStatus: Codec.optional(statusCodec),
       killAllSequence: Codec.optional(Codec.string),
     },
-    { exact: "throw" },
+    { disallowExtraFields: true },
   ),
   {
     decoder: ({
@@ -1149,16 +1165,21 @@ const commandDescriptionCodec = Codec.chain(
  * @returns {Codec.Codec<Array<Decoded>>}
  */
 function nonEmptyArray(decoder) {
-  return Codec.chain(Codec.array(decoder), {
-    decoder(arr) {
-      if (arr.length === 0) {
-        throw new Codec.DecoderError({
-          message: "Expected a non-empty array",
-          value: arr,
-        });
-      }
-      return arr;
-    },
+  return Codec.andThen(Codec.array(decoder), {
+    decoder: (arr) =>
+      arr.length === 0
+        ? {
+            tag: "DecoderError",
+            errors: [
+              {
+                tag: "custom",
+                message: "Expected a non-empty array",
+                got: arr,
+                path: [],
+              },
+            ],
+          }
+        : { tag: "Valid", value: arr },
     encoder: (value) => value,
   });
 }

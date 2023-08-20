@@ -1252,6 +1252,7 @@ describe("parse json", () => {
       Failed to read command descriptions file as JSON:
       At root[0]["status"]["{}"]:
       Invalid regular expression: /{}/u: Lone quantifier brackets
+      Got: "{}"
     `);
   });
 
