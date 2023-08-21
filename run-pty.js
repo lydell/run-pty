@@ -1104,7 +1104,7 @@ const commandDescriptionCodec = Codec.map(
       title: Codec.optional(Codec.string),
       cwd: Codec.optional(Codec.string),
       status: Codec.optional(
-        Codec.andThen(Codec.record(statusCodec), {
+        Codec.flatMap(Codec.record(statusCodec), {
           decoder: (record) => {
             /** @type {Array<[RegExp, Codec.Infer<typeof statusCodec>]>} */
             const result = [];
@@ -1165,7 +1165,7 @@ const commandDescriptionCodec = Codec.map(
  * @returns {Codec.Codec<Array<Decoded>>}
  */
 function nonEmptyArray(decoder) {
-  return Codec.andThen(Codec.array(decoder), {
+  return Codec.flatMap(Codec.array(decoder), {
     decoder: (arr) =>
       arr.length === 0
         ? {
