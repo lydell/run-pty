@@ -12,7 +12,7 @@ const Decode = require("tiny-decoders");
  * @typedef {
     | { tag: "Waiting" }
     | { tag: "Running", terminal: import("node-pty").IPty }
-    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined }
+    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined, restartAfterKill: boolean }
     | { tag: "Exit", exitCode: number, wasKilled: boolean }
    } Status
  *
@@ -52,6 +52,7 @@ const KEYS = {
   navigate: "↑/↓",
   enter: "enter",
   unselect: "escape",
+  selectByIndicator: "tab",
 };
 
 const KEY_CODES = {
@@ -62,6 +63,8 @@ const KEY_CODES = {
   down: "\x1B[B",
   enter: "\r",
   esc: "\x1B",
+  tab: "\t",
+  shiftTab: "\x1B[Z",
 };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
@@ -347,8 +350,26 @@ const drawDashboardCommandLines = (
     ...lines.map(({ status }) => (status === undefined ? 0 : status.length)),
   );
 
+  const selectedIndicator =
+    selection.tag === "ByIndicator"
+      ? getIndicatorChoices(commands)[selection.indicatorIndex]
+      : "";
+
+  /**
+   * @param {string} string
+   * @param {boolean} isSelected
+   * @returns {string}
+   */
+  const highlightWithSeparator = (string, isSelected) =>
+    isSelected
+      ? NO_COLOR
+        ? `${separator.slice(0, -1)}→${string}`
+        : `${separator}${invert(string)}`
+      : `${separator}${string}`;
+
   return lines.map(({ label, icon, status, title }, index) => {
-    const start = truncate(`${label}${separator}${icon}`, width);
+    const finalIcon = highlightWithSeparator(icon, icon === selectedIndicator);
+    const start = truncate(`${label}${finalIcon}`, width);
     const startLength =
       removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
     const end =
@@ -360,12 +381,11 @@ const drawDashboardCommandLines = (
       startLength +
       separator.length +
       removeGraphicRenditions(truncatedEnd).length;
-    const finalEnd =
-      selection.tag !== "Invisible" && index === selection.index
-        ? NO_COLOR
-          ? `${separator.slice(0, -1)}→${truncatedEnd}`
-          : `${separator}${invert(truncatedEnd)}`
-        : `${separator}${truncatedEnd}`;
+    const finalEnd = highlightWithSeparator(
+      truncatedEnd,
+      (selection.tag === "Mousedown" || selection.tag === "Keyboard") &&
+        index === selection.index,
+    );
     return {
       line: `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1,
@@ -415,27 +435,31 @@ const drawDashboard = ({
   // https://github.com/microsoft/terminal/issues/376
   const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
 
-  const pid =
-    selection.tag === "Keyboard"
-      ? getPid(commands[selection.index])
-      : undefined;
+  const selectByIndicator =
+    autoExit.tag === "AutoExit"
+      ? ""
+      : `${shortcut(KEYS.selectByIndicator)} select by indicator\n`;
 
   const enter =
-    pid === undefined
-      ? autoExit.tag === "AutoExit"
-        ? commands.some(
-            (command) =>
-              command.status.tag === "Exit" &&
-              (command.status.exitCode !== 0 || command.status.wasKilled),
-          )
-          ? `${shortcut(KEYS.enter)} restart failed`
-          : ""
-        : commands.some((command) => command.status.tag === "Exit")
-        ? `${shortcut(KEYS.enter)} restart exited`
-        : ""
-      : `${shortcut(KEYS.enter)} focus selected${pid}\n${shortcut(
+    selection.tag === "Keyboard"
+      ? `${shortcut(KEYS.enter)} focus selected${getPid(
+          commands[selection.index],
+        )}\n${shortcut(KEYS.unselect)} unselect`
+      : selection.tag === "ByIndicator"
+      ? `${shortcut(KEYS.enter)} restart selected\n${shortcut(
           KEYS.unselect,
-        )} unselect`;
+        )} unselect`
+      : autoExit.tag === "AutoExit"
+      ? commands.some(
+          (command) =>
+            command.status.tag === "Exit" &&
+            (command.status.exitCode !== 0 || command.status.wasKilled),
+        )
+        ? `${shortcut(KEYS.enter)} restart failed`
+        : ""
+      : commands.some((command) => command.status.tag === "Exit")
+      ? `${shortcut(KEYS.enter)} restart exited`
+      : "";
 
   const sessionEnds = "The session ends automatically once all commands are ";
   const autoExitText =
@@ -459,7 +483,7 @@ ${finalLines}
 ${shortcut(label)} focus command${click}
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.navigate)} move selection
-${enter}
+${selectByIndicator}${enter}
 ${autoExitText}
 `.trim();
 };
@@ -525,6 +549,24 @@ const getPid = (command) =>
   "terminal" in command.status
     ? ` ${dim(`(pid ${command.status.terminal.pid})`)}`
     : "";
+
+/**
+ * @param {Command} command
+ * @returns {string}
+ */
+const getIndicatorChoice = (command) =>
+  statusText(command.status, {
+    statusFromRules: command.statusFromRules ?? runningIndicator,
+    useSeparateKilledIndicator: false,
+  })[0];
+
+/**
+ * @param {Array<Command>} commands
+ * @returns {Array<string>}
+ */
+const getIndicatorChoices = (commands) => [
+  ...new Set(commands.map(getIndicatorChoice)),
+];
 
 /**
  * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "titlePossiblyWithGraphicRenditions" | "cwd" | "history">} CommandText
@@ -1258,11 +1300,16 @@ class Command {
     const disposeOnExit = terminal.onExit(({ exitCode }) => {
       disposeOnData.dispose();
       disposeOnExit.dispose();
+
+      const previousStatus = this.status;
       this.status = {
         tag: "Exit",
         exitCode,
         wasKilled: this.status.tag === "Killing",
       };
+      if (previousStatus.tag === "Killing" && previousStatus.restartAfterKill) {
+        this.start({ needsToWait: false });
+      }
       this.onExit(exitCode);
     });
 
@@ -1270,9 +1317,10 @@ class Command {
   }
 
   /**
+   * @params {{ restartAfterKill?: boolean }} options
    * @returns {undefined}
    */
-  kill() {
+  kill({ restartAfterKill = false } = {}) {
     switch (this.status.tag) {
       case "Running":
         this.status = {
@@ -1280,6 +1328,7 @@ class Command {
           terminal: this.status.terminal,
           slow: false,
           lastKillPress: undefined,
+          restartAfterKill,
         };
         setTimeout(() => {
           if (this.status.tag === "Killing") {
@@ -1428,6 +1477,7 @@ const getLastLine = (string) => {
     | { tag: "Invisible", index: number }
     | { tag: "Mousedown", index: number }
     | { tag: "Keyboard", index: number }
+    | { tag: "ByIndicator", indicatorIndex: number }
    } Selection
  */
 
@@ -1657,6 +1707,11 @@ const runInteractively = (commandDescriptions, autoExit) => {
    */
   const killAll = () => {
     attemptedKillAll = true;
+    for (const command of commands) {
+      if (command.status.tag === "Killing") {
+        command.status.restartAfterKill = false;
+      }
+    }
     const notExited = commands.filter(
       (command) => "terminal" in command.status,
     );
@@ -1730,6 +1785,38 @@ const runInteractively = (commandDescriptions, autoExit) => {
       }
     }
 
+    // Redraw dashboard.
+    switchToDashboard();
+  };
+
+  // TODO: Kill by indicator can be useful too: To force-kill slow-kill processes
+  /**
+   * @param {number} indicatorIndex
+   * @returns {void}
+   */
+  const restartByIndicator = (indicatorIndex) => {
+    const indicator = getIndicatorChoices(commands)[indicatorIndex];
+    const matchingCommands = commands.filter(
+      (command) => getIndicatorChoice(command) === indicator,
+    );
+    for (const command of matchingCommands) {
+      switch (command.status.tag) {
+        case "Exit":
+          command.start({ needsToWait: false });
+          break;
+        case "Waiting":
+          break;
+        case "Running":
+          command.kill({ restartAfterKill: true });
+          break;
+        case "Killing":
+          command.status.restartAfterKill = true;
+          break;
+      }
+    }
+
+    attemptedKillAll = false;
+    selection = { tag: "Invisible", index: 0 };
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1891,6 +1978,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
       } else if (part !== "") {
         onStdin(
           part,
+          autoExit,
           current,
           commands,
           selection,
@@ -1900,6 +1988,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
           killAll,
           restart,
           restartExited,
+          restartByIndicator,
         );
       }
     }
@@ -1926,6 +2015,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
 /**
  * @param {string} data
+ * @param {AutoExit} autoExit
  * @param {Current} current
  * @param {Array<Command>} commands
  * @param {Selection} selection
@@ -1935,10 +2025,12 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @param {() => void} killAll
  * @param {(index: number, status: Extract<Status, {tag: "Exit"}>) => void} restart
  * @param {() => void} restartExited
+ * @param {(indicatorIndex: number) => void} restartByIndicator
  * @returns {undefined}
  */
 const onStdin = (
   data,
+  autoExit,
   current,
   commands,
   selection,
@@ -1948,6 +2040,7 @@ const onStdin = (
   killAll,
   restart,
   restartExited,
+  restartByIndicator,
 ) => {
   switch (current.tag) {
     case "Command": {
@@ -2014,12 +2107,18 @@ const onStdin = (
           return undefined;
 
         case KEY_CODES.enter:
-          if (selection.tag === "Invisible") {
-            restartExited();
-          } else {
-            switchToCommand(selection.index);
+          switch (selection.tag) {
+            case "Invisible":
+              restartExited();
+              return undefined;
+            case "Mousedown":
+            case "Keyboard":
+              switchToCommand(selection.index);
+              return undefined;
+            case "ByIndicator":
+              restartByIndicator(selection.indicatorIndex);
+              return undefined;
           }
-          return undefined;
 
         case KEY_CODES.up:
           setSelection({
@@ -2027,6 +2126,8 @@ const onStdin = (
             index:
               selection.tag === "Invisible"
                 ? selection.index
+                : selection.tag === "ByIndicator"
+                ? 0
                 : selection.index === 0
                 ? commands.length - 1
                 : selection.index - 1,
@@ -2039,14 +2140,51 @@ const onStdin = (
             index:
               selection.tag === "Invisible"
                 ? selection.index
+                : selection.tag === "ByIndicator"
+                ? 0
                 : selection.index === commands.length - 1
                 ? 0
                 : selection.index + 1,
           });
           return undefined;
 
+        case KEY_CODES.shiftTab: {
+          if (autoExit.tag === "NoAutoExit") {
+            const indicators = getIndicatorChoices(commands);
+            setSelection({
+              tag: "ByIndicator",
+              indicatorIndex:
+                selection.tag === "ByIndicator"
+                  ? selection.indicatorIndex === 0
+                    ? indicators.length - 1
+                    : selection.indicatorIndex - 1
+                  : 0,
+            });
+          }
+          return undefined;
+        }
+
+        case KEY_CODES.tab: {
+          if (autoExit.tag === "NoAutoExit") {
+            const indicators = getIndicatorChoices(commands);
+            setSelection({
+              tag: "ByIndicator",
+              indicatorIndex:
+                selection.tag === "ByIndicator"
+                  ? selection.indicatorIndex === indicators.length - 1
+                    ? 0
+                    : selection.indicatorIndex + 1
+                  : 0,
+            });
+          }
+          return undefined;
+        }
+
         case KEY_CODES.esc:
-          setSelection({ tag: "Invisible", index: selection.index });
+          setSelection({
+            tag: "Invisible",
+            index: selection.tag === "ByIndicator" ? 0 : selection.index,
+          });
           return undefined;
 
         default: {
@@ -2076,12 +2214,19 @@ const onStdin = (
               return undefined;
 
             case "mouseup": {
-              if (index !== undefined && index === selection.index) {
-                switchToCommand(index, { hideSelection: true });
-              } else if (selection.tag !== "Invisible") {
-                setSelection({ tag: "Invisible", index: selection.index });
+              switch (selection.tag) {
+                case "Invisible":
+                case "ByIndicator":
+                  return undefined;
+                case "Mousedown":
+                case "Keyboard":
+                  if (index !== undefined && index === selection.index) {
+                    switchToCommand(index, { hideSelection: true });
+                  } else {
+                    setSelection({ tag: "Invisible", index: selection.index });
+                  }
+                  return undefined;
               }
-              return undefined;
             }
           }
         }
