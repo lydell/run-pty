@@ -351,9 +351,7 @@ const drawDashboardCommandLines = (
   );
 
   const selectedIndicator =
-    selection.tag === "ByIndicator"
-      ? getIndicatorChoices(commands)[selection.indicatorIndex]
-      : "";
+    selection.tag === "ByIndicator" ? selection.indicator : "";
 
   /**
    * @param {string} string
@@ -1484,7 +1482,7 @@ const getLastLine = (string) => {
     | { tag: "Invisible", index: number }
     | { tag: "Mousedown", index: number }
     | { tag: "Keyboard", index: number }
-    | { tag: "ByIndicator", indicatorIndex: number }
+    | { tag: "ByIndicator", indicator: string }
    } Selection
  */
 
@@ -1735,11 +1733,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
   };
 
   /**
-   * @param {number} indicatorIndex
+   * @param {string} indicator
    * @returns {void}
    */
-  const killByIndicator = (indicatorIndex) => {
-    const indicator = getIndicatorChoices(commands)[indicatorIndex];
+  const killByIndicator = (indicator) => {
     const matchingCommands = commands.filter(
       (command) =>
         getIndicatorChoice(command) === indicator &&
@@ -1819,11 +1816,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
   };
 
   /**
-   * @param {number} indicatorIndex
+   * @param {string} indicator
    * @returns {void}
    */
-  const restartByIndicator = (indicatorIndex) => {
-    const indicator = getIndicatorChoices(commands)[indicatorIndex];
+  const restartByIndicator = (indicator) => {
     const matchingCommands = commands.filter(
       (command) => getIndicatorChoice(command) === indicator,
     );
@@ -1892,7 +1888,14 @@ const runInteractively = (commandDescriptions, autoExit) => {
               return undefined;
 
             case "Dashboard":
-              if (statusFromRulesChanged) {
+              if (
+                selection.tag === "ByIndicator" &&
+                !getIndicatorChoices(commands).includes(selection.indicator)
+              ) {
+                selection = { tag: "Invisible", index: 0 };
+                // Redraw dashboard.
+                switchToDashboard();
+              } else if (statusFromRulesChanged) {
                 // Redraw dashboard.
                 switchToDashboard();
               }
@@ -1938,6 +1941,12 @@ const runInteractively = (commandDescriptions, autoExit) => {
               return undefined;
 
             case "Dashboard":
+              if (
+                selection.tag === "ByIndicator" &&
+                !getIndicatorChoices(commands).includes(selection.indicator)
+              ) {
+                selection = { tag: "Invisible", index: 0 };
+              }
               // Redraw dashboard.
               switchToDashboard();
               return undefined;
@@ -2052,10 +2061,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
- * @param {(indicatorIndex: number) => void} killByIndicator
+ * @param {(indicator: string) => void} killByIndicator
  * @param {(index: number, status: Extract<Status, {tag: "Exit"}>) => void} restart
  * @param {() => void} restartExited
- * @param {(indicatorIndex: number) => void} restartByIndicator
+ * @param {(indicator: string) => void} restartByIndicator
  * @returns {undefined}
  */
 const onStdin = (
@@ -2151,7 +2160,7 @@ const onStdin = (
               return undefined;
             }
             case "ByIndicator":
-              killByIndicator(selection.indicatorIndex);
+              killByIndicator(selection.indicator);
               return undefined;
           }
 
@@ -2165,7 +2174,7 @@ const onStdin = (
               switchToCommand(selection.index);
               return undefined;
             case "ByIndicator":
-              restartByIndicator(selection.indicatorIndex);
+              restartByIndicator(selection.indicator);
               return undefined;
           }
 
@@ -2200,14 +2209,19 @@ const onStdin = (
         case KEY_CODES.shiftTab: {
           if (autoExit.tag === "NoAutoExit") {
             const indicators = getIndicatorChoices(commands);
+            const index =
+              selection.tag === "ByIndicator"
+                ? indicators.indexOf(selection.indicator)
+                : undefined;
+            const newIndex =
+              index === undefined
+                ? 0
+                : index === 0
+                ? indicators.length - 1
+                : index - 1;
             setSelection({
               tag: "ByIndicator",
-              indicatorIndex:
-                selection.tag === "ByIndicator"
-                  ? selection.indicatorIndex === 0
-                    ? indicators.length - 1
-                    : selection.indicatorIndex - 1
-                  : 0,
+              indicator: indicators[newIndex],
             });
           }
           return undefined;
@@ -2216,14 +2230,17 @@ const onStdin = (
         case KEY_CODES.tab: {
           if (autoExit.tag === "NoAutoExit") {
             const indicators = getIndicatorChoices(commands);
+            const index =
+              selection.tag === "ByIndicator"
+                ? indicators.indexOf(selection.indicator)
+                : undefined;
+            const newIndex =
+              index === undefined || index === indicators.length - 1
+                ? 0
+                : index + 1;
             setSelection({
               tag: "ByIndicator",
-              indicatorIndex:
-                selection.tag === "ByIndicator"
-                  ? selection.indicatorIndex === indicators.length - 1
-                    ? 0
-                    : selection.indicatorIndex + 1
-                  : 0,
+              indicator: indicators[newIndex],
             });
           }
           return undefined;
