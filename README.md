@@ -40,23 +40,24 @@ $ npm start
 [1-2]    focus command (or click)
 [ctrl+c] kill all
 [↑/↓]    move selection
+[tab]    select by indicator
 ```
 
 ➡️ <kbd>1</kbd> ️️➡️
 
 ```
-🟢 npm run frontend
+🟢  npm run frontend
 
 > frontend
 > vite --no-clearScreen
 
 
-  VITE v3.0.9  ready in 137 ms
+  VITE v3.2.1  ready in 91 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
 ▊
-[ctrl+c] kill (pid 63096)
+[ctrl+c] kill (pid 36842)
 [ctrl+z] dashboard
 ```
 
@@ -69,13 +70,10 @@ $ npm start
 > vite --no-clearScreen
 
 
-  vite v2.8.4 dev server running at:
+  VITE v3.2.1  ready in 91 ms
 
-  > Local: http://localhost:3000/
-  > Network: use `--host` to expose
-
-  ready in 136ms.
-
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
 ^C
 
 ⚪  npm run frontend
@@ -95,6 +93,7 @@ exit 0
 [1-2]    focus command (or click)
 [ctrl+c] kill all
 [↑/↓]    move selection
+[tab]    select by indicator
 [enter]  restart exited
 ```
 
