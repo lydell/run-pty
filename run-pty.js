@@ -607,25 +607,6 @@ const getIndicatorChoices = (commands) => [
 ];
 
 /**
- * @param {string} indicator
- * @param {Array<Command>} commands
- * @returns {number}
- */
-const indicatorToSelectionIndex = (indicator, commands) =>
-  commands.findIndex((command) => getIndicatorChoice(command) === indicator) ??
-  0;
-
-/**
- * @param {string} indicator
- * @param {Array<Command>} commands
- * @returns {Selection}
- */
-const clearIndicatorSelection = (indicator, commands) => ({
-  tag: "Invisible",
-  index: indicatorToSelectionIndex(indicator, commands),
-});
-
-/**
  * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "titlePossiblyWithGraphicRenditions" | "cwd" | "history">} CommandText
  */
 
@@ -1538,7 +1519,7 @@ const getLastLine = (string) => {
     | { tag: "Invisible", index: number }
     | { tag: "Mousedown", index: number }
     | { tag: "Keyboard", index: number }
-    | { tag: "ByIndicator", indicator: string }
+    | { tag: "ByIndicator", indicator: string, keyboardIndex: number }
    } Selection
  */
 
@@ -1790,16 +1771,17 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   /**
    * @param {string} indicator
+   * @param {number} keyboardIndex
    * @returns {void}
    */
-  const killByIndicator = (indicator) => {
+  const killByIndicator = (indicator, keyboardIndex) => {
     const matchingCommands = commands.filter(
       (command) =>
         getIndicatorChoice(command) === indicator &&
         "terminal" in command.status,
     );
     if (matchingCommands.length === 0) {
-      selection = clearIndicatorSelection(indicator, commands);
+      selection = { tag: "Invisible", index: keyboardIndex };
       // Redraw dashboard.
       switchToDashboard();
     } else {
@@ -1875,9 +1857,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   /**
    * @param {string} indicator
+   * @param {number} keyboardIndex
    * @returns {void}
    */
-  const restartByIndicator = (indicator) => {
+  const restartByIndicator = (indicator, keyboardIndex) => {
     const matchingCommands = commands.filter(
       (command) => getIndicatorChoice(command) === indicator,
     );
@@ -1899,7 +1882,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
     }
 
     attemptedKillAll = false;
-    selection = clearIndicatorSelection(indicator, commands);
+    selection = { tag: "Invisible", index: keyboardIndex };
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1951,10 +1934,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
                 selection.tag === "ByIndicator" &&
                 !getIndicatorChoices(commands).includes(selection.indicator)
               ) {
-                selection = clearIndicatorSelection(
-                  selection.indicator,
-                  commands,
-                );
+                selection = {
+                  tag: "Invisible",
+                  index: selection.keyboardIndex,
+                };
                 // Redraw dashboard.
                 switchToDashboard();
               } else if (statusFromRulesChanged) {
@@ -2007,10 +1990,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
                 selection.tag === "ByIndicator" &&
                 !getIndicatorChoices(commands).includes(selection.indicator)
               ) {
-                selection = clearIndicatorSelection(
-                  selection.indicator,
-                  commands,
-                );
+                selection = {
+                  tag: "Invisible",
+                  index: selection.keyboardIndex,
+                };
               }
               // Redraw dashboard.
               switchToDashboard();
@@ -2126,10 +2109,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
- * @param {(indicator: string) => void} killByIndicator
+ * @param {(indicator: string, keyboardIndex: number) => void} killByIndicator
  * @param {(index: number, status: Extract<Status, {tag: "Exit"}>) => void} restart
  * @param {() => void} restartExited
- * @param {(indicator: string) => void} restartByIndicator
+ * @param {(indicator: string, keyboardIndex: number) => void} restartByIndicator
  * @returns {undefined}
  */
 const onStdin = (
@@ -2227,7 +2210,7 @@ const onStdin = (
               return undefined;
             }
             case "ByIndicator":
-              killByIndicator(selection.indicator);
+              killByIndicator(selection.indicator, selection.keyboardIndex);
               return undefined;
           }
 
@@ -2241,7 +2224,7 @@ const onStdin = (
               switchToCommand(selection.index);
               return undefined;
             case "ByIndicator":
-              restartByIndicator(selection.indicator);
+              restartByIndicator(selection.indicator, selection.keyboardIndex);
               return undefined;
           }
 
@@ -2252,7 +2235,7 @@ const onStdin = (
               selection.tag === "Invisible"
                 ? selection.index
                 : selection.tag === "ByIndicator"
-                ? indicatorToSelectionIndex(selection.indicator, commands)
+                ? selection.keyboardIndex
                 : selection.index === 0
                 ? commands.length - 1
                 : selection.index - 1,
@@ -2266,7 +2249,7 @@ const onStdin = (
               selection.tag === "Invisible"
                 ? selection.index
                 : selection.tag === "ByIndicator"
-                ? indicatorToSelectionIndex(selection.indicator, commands)
+                ? selection.keyboardIndex
                 : selection.index === commands.length - 1
                 ? 0
                 : selection.index + 1,
@@ -2282,11 +2265,13 @@ const onStdin = (
               setSelection({
                 tag: "ByIndicator",
                 indicator: indicators[newIndex],
+                keyboardIndex: selection.keyboardIndex,
               });
             } else {
               setSelection({
                 tag: "ByIndicator",
                 indicator: getIndicatorChoice(commands[selection.index]),
+                keyboardIndex: selection.index,
               });
             }
           }
@@ -2305,11 +2290,13 @@ const onStdin = (
               setSelection({
                 tag: "ByIndicator",
                 indicator: indicators[newIndex],
+                keyboardIndex: selection.keyboardIndex,
               });
             } else {
               setSelection({
                 tag: "ByIndicator",
                 indicator: getIndicatorChoice(commands[selection.index]),
+                keyboardIndex: selection.index,
               });
             }
           }
@@ -2321,7 +2308,7 @@ const onStdin = (
             tag: "Invisible",
             index:
               selection.tag === "ByIndicator"
-                ? indicatorToSelectionIndex(selection.indicator, commands)
+                ? selection.keyboardIndex
                 : selection.index,
           });
           return undefined;
