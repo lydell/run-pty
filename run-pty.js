@@ -607,6 +607,25 @@ const getIndicatorChoices = (commands) => [
 ];
 
 /**
+ * @param {string} indicator
+ * @param {Array<Command>} commands
+ * @returns {number}
+ */
+const indicatorToSelectionIndex = (indicator, commands) =>
+  commands.findIndex((command) => getIndicatorChoice(command) === indicator) ??
+  0;
+
+/**
+ * @param {string} indicator
+ * @param {Array<Command>} commands
+ * @returns {Selection}
+ */
+const clearIndicatorSelection = (indicator, commands) => ({
+  tag: "Invisible",
+  index: indicatorToSelectionIndex(indicator, commands),
+});
+
+/**
  * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "titlePossiblyWithGraphicRenditions" | "cwd" | "history">} CommandText
  */
 
@@ -1780,7 +1799,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
         "terminal" in command.status,
     );
     if (matchingCommands.length === 0) {
-      selection = { tag: "Invisible", index: 0 };
+      selection = clearIndicatorSelection(indicator, commands);
       // Redraw dashboard.
       switchToDashboard();
     } else {
@@ -1880,7 +1899,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
     }
 
     attemptedKillAll = false;
-    selection = { tag: "Invisible", index: 0 };
+    selection = clearIndicatorSelection(indicator, commands);
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -1932,7 +1951,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
                 selection.tag === "ByIndicator" &&
                 !getIndicatorChoices(commands).includes(selection.indicator)
               ) {
-                selection = { tag: "Invisible", index: 0 };
+                selection = clearIndicatorSelection(
+                  selection.indicator,
+                  commands,
+                );
                 // Redraw dashboard.
                 switchToDashboard();
               } else if (statusFromRulesChanged) {
@@ -1985,7 +2007,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
                 selection.tag === "ByIndicator" &&
                 !getIndicatorChoices(commands).includes(selection.indicator)
               ) {
-                selection = { tag: "Invisible", index: 0 };
+                selection = clearIndicatorSelection(
+                  selection.indicator,
+                  commands,
+                );
               }
               // Redraw dashboard.
               switchToDashboard();
@@ -2227,7 +2252,7 @@ const onStdin = (
               selection.tag === "Invisible"
                 ? selection.index
                 : selection.tag === "ByIndicator"
-                ? 0
+                ? indicatorToSelectionIndex(selection.indicator, commands)
                 : selection.index === 0
                 ? commands.length - 1
                 : selection.index - 1,
@@ -2241,7 +2266,7 @@ const onStdin = (
               selection.tag === "Invisible"
                 ? selection.index
                 : selection.tag === "ByIndicator"
-                ? 0
+                ? indicatorToSelectionIndex(selection.indicator, commands)
                 : selection.index === commands.length - 1
                 ? 0
                 : selection.index + 1,
@@ -2250,40 +2275,43 @@ const onStdin = (
 
         case KEY_CODES.shiftTab: {
           if (autoExit.tag === "NoAutoExit") {
-            const indicators = getIndicatorChoices(commands);
-            const index =
-              selection.tag === "ByIndicator"
-                ? indicators.indexOf(selection.indicator)
-                : undefined;
-            const newIndex =
-              index === undefined
-                ? 0
-                : index === 0
-                ? indicators.length - 1
-                : index - 1;
-            setSelection({
-              tag: "ByIndicator",
-              indicator: indicators[newIndex],
-            });
+            if (selection.tag === "ByIndicator") {
+              const indicators = getIndicatorChoices(commands);
+              const index = indicators.indexOf(selection.indicator);
+              const newIndex = index === 0 ? indicators.length - 1 : index - 1;
+              setSelection({
+                tag: "ByIndicator",
+                indicator: indicators[newIndex],
+              });
+            } else {
+              setSelection({
+                tag: "ByIndicator",
+                indicator: getIndicatorChoice(commands[selection.index]),
+              });
+            }
           }
           return undefined;
         }
 
         case KEY_CODES.tab: {
           if (autoExit.tag === "NoAutoExit") {
-            const indicators = getIndicatorChoices(commands);
-            const index =
-              selection.tag === "ByIndicator"
-                ? indicators.indexOf(selection.indicator)
-                : undefined;
-            const newIndex =
-              index === undefined || index === indicators.length - 1
-                ? 0
-                : index + 1;
-            setSelection({
-              tag: "ByIndicator",
-              indicator: indicators[newIndex],
-            });
+            if (selection.tag === "ByIndicator") {
+              const indicators = getIndicatorChoices(commands);
+              const index = indicators.indexOf(selection.indicator);
+              const newIndex =
+                index === undefined || index === indicators.length - 1
+                  ? 0
+                  : index + 1;
+              setSelection({
+                tag: "ByIndicator",
+                indicator: indicators[newIndex],
+              });
+            } else {
+              setSelection({
+                tag: "ByIndicator",
+                indicator: getIndicatorChoice(commands[selection.index]),
+              });
+            }
           }
           return undefined;
         }
@@ -2291,7 +2319,10 @@ const onStdin = (
         case KEY_CODES.esc:
           setSelection({
             tag: "Invisible",
-            index: selection.tag === "ByIndicator" ? 0 : selection.index,
+            index:
+              selection.tag === "ByIndicator"
+                ? indicatorToSelectionIndex(selection.indicator, commands)
+                : selection.index,
           });
           return undefined;
 
