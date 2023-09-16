@@ -1874,6 +1874,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
    * @returns {void}
    */
   const restartByIndicator = (indicator) => {
+    attemptedKillAll = false;
+    hideSelection();
     const matchingCommands = commands.filter(
       (command) => getIndicatorChoice(command) === indicator,
     );
@@ -1894,8 +1896,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
       }
     }
 
-    attemptedKillAll = false;
-    hideSelection();
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -2206,8 +2206,6 @@ const onStdin = (
         case KEY_CODES.kill:
           switch (selection.tag) {
             case "Invisible":
-              killAll();
-              return undefined;
             case "Mousedown":
               killAll();
               return undefined;
