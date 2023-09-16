@@ -1750,6 +1750,13 @@ const runInteractively = (commandDescriptions, autoExit) => {
    */
   const killAll = () => {
     attemptedKillAll = true;
+    selection = {
+      tag: "Invisible",
+      index:
+        selection.tag === "ByIndicator"
+          ? selection.keyboardIndex
+          : selection.index,
+    };
     for (const command of commands) {
       if (command.status.tag === "Killing") {
         command.status.restartAfterKill = false;
