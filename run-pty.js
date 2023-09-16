@@ -379,25 +379,15 @@ const drawDashboardCommandLines = (
   const selectedIndicator =
     selection.tag === "ByIndicator" ? selection.indicator : undefined;
 
-  /**
-   * @param {string} string
-   * @param {boolean} isSelected
-   * @param {number} pad
-   * @returns {string}
-   */
-  const highlightWithSeparator = (string, isSelected, pad) =>
-    isSelected
-      ? NO_COLOR
-        ? `${separator.slice(0, -1)}→${string}`
-        : `${separator}${invert(string + " ".repeat(pad))}`
-      : `${separator}${string}`;
-
   return lines.map(({ label, icon, status, title }, index) => {
-    const finalIcon = highlightWithSeparator(
-      icon,
-      icon === selectedIndicator,
-      2, // Make sure that two terminal slots get inverted, no matter the width of the icon.
-    );
+    const finalIcon =
+      icon === selectedIndicator
+        ? NO_COLOR
+          ? `${separator.slice(0, -1)}→${icon}`
+          : // Add two spaces at the end to make sure that two terminal slots get
+            // inverted, no matter the width of the icon.
+            `${separator.slice(0, -1)}${invert(` ${icon}  `)}`
+        : `${separator}${icon}`;
     const start = truncate(`${label}${finalIcon}`, width);
     const startLength =
       removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
@@ -410,12 +400,17 @@ const drawDashboardCommandLines = (
       startLength +
       separator.length +
       removeGraphicRenditions(truncatedEnd).length;
-    const finalEnd = highlightWithSeparator(
-      truncatedEnd,
+    const highlightedSeparator =
+      icon === selectedIndicator && !NO_COLOR
+        ? invert(" ") + separator.slice(1)
+        : separator;
+    const finalEnd =
       (selection.tag === "Mousedown" || selection.tag === "Keyboard") &&
-        index === selection.index,
-      0,
-    );
+      index === selection.index
+        ? NO_COLOR
+          ? `${highlightedSeparator.slice(0, -1)}→${truncatedEnd}`
+          : `${highlightedSeparator}${invert(truncatedEnd)}`
+        : `${highlightedSeparator}${truncatedEnd}`;
     return {
       line: `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
         startLength + 1,
