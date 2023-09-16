@@ -1748,8 +1748,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
   /**
    * @returns {void}
    */
-  const killAll = () => {
-    attemptedKillAll = true;
+  const hideSelection = () => {
     selection = {
       tag: "Invisible",
       index:
@@ -1757,6 +1756,14 @@ const runInteractively = (commandDescriptions, autoExit) => {
           ? selection.keyboardIndex
           : selection.index,
     };
+  };
+
+  /**
+   * @returns {void}
+   */
+  const killAll = () => {
+    attemptedKillAll = true;
+    hideSelection();
     for (const command of commands) {
       if (command.status.tag === "Killing") {
         command.status.restartAfterKill = false;
@@ -1779,17 +1786,16 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   /**
    * @param {string} indicator
-   * @param {number} keyboardIndex
    * @returns {void}
    */
-  const killByIndicator = (indicator, keyboardIndex) => {
+  const killByIndicator = (indicator) => {
     const matchingCommands = commands.filter(
       (command) =>
         getIndicatorChoice(command) === indicator &&
         "terminal" in command.status,
     );
     if (matchingCommands.length === 0) {
-      selection = { tag: "Invisible", index: keyboardIndex };
+      hideSelection();
       // Redraw dashboard.
       switchToDashboard();
     } else {
@@ -1865,10 +1871,9 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   /**
    * @param {string} indicator
-   * @param {number} keyboardIndex
    * @returns {void}
    */
-  const restartByIndicator = (indicator, keyboardIndex) => {
+  const restartByIndicator = (indicator) => {
     const matchingCommands = commands.filter(
       (command) => getIndicatorChoice(command) === indicator,
     );
@@ -1890,7 +1895,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
     }
 
     attemptedKillAll = false;
-    selection = { tag: "Invisible", index: keyboardIndex };
+    hideSelection();
     // Redraw dashboard.
     switchToDashboard();
   };
@@ -2117,10 +2122,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
- * @param {(indicator: string, keyboardIndex: number) => void} killByIndicator
+ * @param {(indicator: string) => void} killByIndicator
  * @param {(index: number, status: Extract<Status, {tag: "Exit"}>) => void} restart
  * @param {() => void} restartExited
- * @param {(indicator: string, keyboardIndex: number) => void} restartByIndicator
+ * @param {(indicator: string) => void} restartByIndicator
  * @returns {undefined}
  */
 const onStdin = (
@@ -2218,7 +2223,7 @@ const onStdin = (
               return undefined;
             }
             case "ByIndicator":
-              killByIndicator(selection.indicator, selection.keyboardIndex);
+              killByIndicator(selection.indicator);
               return undefined;
           }
 
@@ -2232,7 +2237,7 @@ const onStdin = (
               switchToCommand(selection.index);
               return undefined;
             case "ByIndicator":
-              restartByIndicator(selection.indicator, selection.keyboardIndex);
+              restartByIndicator(selection.indicator);
               return undefined;
           }
 
