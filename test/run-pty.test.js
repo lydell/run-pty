@@ -201,6 +201,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙⧘⧙]⧘       focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
     `);
   });
 
@@ -218,6 +219,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
       ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
@@ -336,6 +338,7 @@ describe("dashboard", () => {
               terminal: fakeTerminal({ pid: 1 }),
               slow: false,
               lastKillPress: undefined,
+              restartAfterKill: false,
             },
           },
         ],
@@ -347,6 +350,34 @@ describe("dashboard", () => {
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
+    `);
+  });
+
+  test("attempted to restart", () => {
+    expect(
+      testDashboard(
+        [
+          {
+            command: ["npm", "start"],
+            status: {
+              tag: "Killing",
+              terminal: fakeTerminal({ pid: 1 }),
+              slow: false,
+              lastKillPress: undefined,
+              restartAfterKill: true,
+            },
+          },
+        ],
+        { attemptedKillAll: true },
+      ),
+    ).toMatchInlineSnapshot(`
+      ⧙[⧘⧙1⧘⧙]⧘  🔄⧘  npm start⧘
+
+      ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
+      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
+      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
     `);
   });
 
@@ -361,6 +392,7 @@ describe("dashboard", () => {
               terminal: fakeTerminal({ pid: 1 }),
               slow: false,
               lastKillPress: undefined,
+              restartAfterKill: false,
             },
           },
         ],
@@ -436,6 +468,18 @@ describe("dashboard", () => {
             terminal: fakeTerminal({ pid: 12345 }),
             slow: false,
             lastKillPress: undefined,
+            restartAfterKill: false,
+          },
+          statusFromRules: "!", // Should be ignored.
+        },
+        {
+          command: ["ping", "localhost"],
+          status: {
+            tag: "Killing",
+            terminal: fakeTerminal({ pid: 12345 }),
+            slow: false,
+            lastKillPress: undefined,
+            restartAfterKill: true,
           },
           statusFromRules: "!", // Should be ignored.
         },
@@ -462,12 +506,14 @@ describe("dashboard", () => {
       ⧙[⧘⧙2⧘⧙]⧘  ⚪⧘  ⧙exit 130⧘  npm run server⧘
       ⧙[⧘⧙3⧘⧙]⧘  🔴⧘  ⧙exit 68⧘   ping nope⧘
       ⧙[⧘⧙4⧘⧙]⧘  ⭕⧘  ping localhost⧘
-      ⧙[⧘⧙5⧘⧙]⧘  🟢⧘  yes⧘
-      ⧙[⧘⧙6⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
+      ⧙[⧘⧙5⧘⧙]⧘  🔄⧘  ping localhost⧘
+      ⧙[⧘⧙6⧘⧙]⧘  🟢⧘  yes⧘
+      ⧙[⧘⧙7⧘⧙]⧘  🚨⧘  very long title for some reason that needs to be cut off at some point⧘
 
-      ⧙[⧘⧙1-6⧘⧙]⧘    focus command ⧙(or click)⧘
+      ⧙[⧘⧙1-7⧘⧙]⧘    focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
       ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
@@ -550,6 +596,7 @@ describe("dashboard", () => {
       ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
       ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
     `);
   });
 });
