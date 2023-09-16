@@ -138,6 +138,13 @@ const killingIndicator = NO_COLOR
   ? `\x1B[91m○${RESET_COLOR}`
   : "⭕";
 
+const restartingIndicator = NO_COLOR
+  ? // TODO: Fallback icons
+    "○"
+  : !SUPPORTS_EMOJI
+  ? `\x1B[91m○${RESET_COLOR}`
+  : "🔄";
+
 const abortedIndicator = NO_COLOR
   ? "▲"
   : !SUPPORTS_EMOJI
@@ -740,7 +747,10 @@ const statusText = (
       return [statusFromRules, undefined];
 
     case "Killing":
-      return [killingIndicator, undefined];
+      return [
+        status.restartAfterKill ? restartingIndicator : killingIndicator,
+        undefined,
+      ];
 
     case "Exit":
       return [
