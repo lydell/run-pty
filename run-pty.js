@@ -1360,6 +1360,7 @@ class Command {
           this.status.terminal.write(this.killAllSequence);
         }
         this.status.lastKillPress = now;
+        this.status.restartAfterKill = restartAfterKill;
         return undefined;
       }
 
