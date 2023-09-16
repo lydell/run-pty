@@ -20,6 +20,7 @@ module.exports = {
     "no-control-regex": "off",
     "no-fallthrough": "off",
     "no-shadow": "error",
+    "no-unused-expressions": "error",
     "object-shorthand": "error",
     "one-var": ["error", "never"],
     "prefer-arrow-callback": "error",

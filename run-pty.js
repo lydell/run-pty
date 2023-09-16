@@ -308,6 +308,25 @@ Environment variables:
 `.trim();
 
 /**
+ *
+ * @param {Array<Command>} selectedCommandsForKilling
+ * @param {Array<Command>} commands
+ * @returns {string}
+ */
+const killLabel = (selectedCommandsForKilling, commands) =>
+  selectedCommandsForKilling.length === 0
+    ? killAllLabel(commands)
+    : selectedCommandsForKilling.every(
+        (command) => command.status.tag === "Killing",
+      )
+    ? `kill selected ${dim("(double-press to force) ")}`
+    : selectedCommandsForKilling.every(
+        (command) => !("terminal" in command.status),
+      )
+    ? dim("(selected already exited)")
+    : "kill selected";
+
+/**
  * @param {Array<Command>} commands
  * @returns {string}
  */
@@ -433,17 +452,20 @@ const drawDashboard = ({
   // https://github.com/microsoft/terminal/issues/376
   const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
 
-  const killLabel =
-    selection.tag === "ByIndicator" ||
-    (selection.tag === "Keyboard" &&
-      "terminal" in commands[selection.index].status)
-      ? "kill selected"
-      : killAllLabel(commands);
-
   const selectByIndicator =
     autoExit.tag === "AutoExit"
       ? ""
       : `${shortcut(KEYS.selectByIndicator)} select by indicator\n`;
+
+  const selectedCommandsForKilling =
+    selection.tag === "ByIndicator"
+      ? commands.filter(
+          (command) => getIndicatorChoice(command) === selection.indicator,
+        )
+      : selection.tag === "Keyboard" &&
+        "terminal" in commands[selection.index].status
+      ? [commands[selection.index]]
+      : [];
 
   const enter =
     selection.tag === "Keyboard"
@@ -451,9 +473,13 @@ const drawDashboard = ({
           commands[selection.index],
         )}\n${shortcut(KEYS.unselect)} unselect`
       : selection.tag === "ByIndicator"
-      ? `${shortcut(KEYS.enter)} restart selected\n${shortcut(
-          KEYS.unselect,
-        )} unselect`
+      ? `${shortcut(KEYS.enter)} ${
+          selectedCommandsForKilling.every(
+            (command) => command.status.tag === "Killing",
+          )
+            ? "force "
+            : ""
+        }restart selected\n${shortcut(KEYS.unselect)} unselect`
       : autoExit.tag === "AutoExit"
       ? commands.some(
           (command) =>
@@ -486,7 +512,7 @@ const drawDashboard = ({
 ${finalLines}
 
 ${shortcut(label)} focus command${click}
-${shortcut(KEYS.kill)} ${killLabel}
+${shortcut(KEYS.kill)} ${killLabel(selectedCommandsForKilling, commands)}
 ${shortcut(KEYS.navigate)} move selection
 ${selectByIndicator}${enter}
 ${autoExitText}
@@ -1751,6 +1777,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
       for (const command of matchingCommands) {
         command.kill();
       }
+      // So you can see how killing other commands go:
+      switchToDashboard();
     }
   };
 
@@ -1835,7 +1863,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
           command.kill({ restartAfterKill: true });
           break;
         case "Killing":
-          command.status.restartAfterKill = true;
+          command.status.lastKillPress = Date.now(); // Force kill.
+          command.kill({ restartAfterKill: true });
           break;
       }
     }
@@ -2155,8 +2184,10 @@ const onStdin = (
               const command = commands[selection.index];
               if ("terminal" in command.status) {
                 command.kill();
+                // Redraw dashboard.
+                switchToDashboard();
               } else {
-                killAll;
+                killAll();
               }
               return undefined;
             }
