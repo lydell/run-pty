@@ -377,22 +377,27 @@ const drawDashboardCommandLines = (
   );
 
   const selectedIndicator =
-    selection.tag === "ByIndicator" ? selection.indicator : "";
+    selection.tag === "ByIndicator" ? selection.indicator : undefined;
 
   /**
    * @param {string} string
    * @param {boolean} isSelected
+   * @param {number} pad
    * @returns {string}
    */
-  const highlightWithSeparator = (string, isSelected) =>
+  const highlightWithSeparator = (string, isSelected, pad) =>
     isSelected
       ? NO_COLOR
         ? `${separator.slice(0, -1)}→${string}`
-        : `${separator}${invert(string)}`
+        : `${separator}${invert(string + " ".repeat(pad))}`
       : `${separator}${string}`;
 
   return lines.map(({ label, icon, status, title }, index) => {
-    const finalIcon = highlightWithSeparator(icon, icon === selectedIndicator);
+    const finalIcon = highlightWithSeparator(
+      icon,
+      icon === selectedIndicator,
+      2, // Make sure that two terminal slots get inverted, no matter the width of the icon.
+    );
     const start = truncate(`${label}${finalIcon}`, width);
     const startLength =
       removeGraphicRenditions(label).length + separator.length + ICON_WIDTH;
@@ -409,6 +414,7 @@ const drawDashboardCommandLines = (
       truncatedEnd,
       (selection.tag === "Mousedown" || selection.tag === "Keyboard") &&
         index === selection.index,
+      0,
     );
     return {
       line: `${start}${RESET_COLOR}${cursorHorizontalAbsolute(
