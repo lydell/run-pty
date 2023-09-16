@@ -200,8 +200,7 @@ describe("dashboard", () => {
     expect(testDashboard([], { width: 0 })).toMatchInlineSnapshot(`
       ⧙[⧘⧙⧘⧙]⧘       focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
+      ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
     `);
   });
 
@@ -218,8 +217,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ exit
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
+      ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
       ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
@@ -241,7 +239,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙↑↓⧘⧙]⧘     move selection
 
       At most 3 commands run at a time.
       The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
@@ -265,7 +263,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙↑↓⧘⧙]⧘     move selection
 
       At most 1 command runs at a time.
       The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
@@ -289,7 +287,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙↑↓⧘⧙]⧘     move selection
 
       At most 2 commands run at a time.
       The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
@@ -319,7 +317,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1-2⧘⧙]⧘    focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙↑↓⧘⧙]⧘     move selection
       ⧙[⧘⧙enter⧘⧙]⧘  restart failed
 
       At most 3 commands run at a time.
@@ -349,8 +347,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
+      ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
     `);
   });
 
@@ -376,8 +373,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
+      ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
     `);
   });
 
@@ -407,7 +403,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1⧘⧙]⧘      focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
+      ⧙[⧘⧙↑↓⧘⧙]⧘     move selection
 
       At most 3 commands run at a time.
       The session ends automatically once all commands are ⚪ ⧙exit 0⧘.
@@ -512,8 +508,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1-7⧘⧙]⧘    focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all ⧙(double-press to force) ⧘
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
+      ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
       ⧙[⧘⧙enter⧘⧙]⧘  restart exited
     `);
   });
@@ -595,8 +590,7 @@ describe("dashboard", () => {
 
       ⧙[⧘⧙1-9/a-z/A-Z⧘⧙]⧘ focus command ⧙(or click)⧘
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
-      ⧙[⧘⧙↑/↓⧘⧙]⧘    move selection
-      ⧙[⧘⧙tab⧘⧙]⧘    select by indicator
+      ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
     `);
   });
 });

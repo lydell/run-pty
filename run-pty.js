@@ -49,10 +49,10 @@ const KEYS = {
   kill: "ctrl+c",
   restart: "enter",
   dashboard: "ctrl+z",
-  navigate: "↑/↓",
+  navigate: "↑↓←→",
+  navigateVerticallyOnly: "↑↓",
   enter: "enter",
   unselect: "escape",
-  selectByIndicator: "tab",
 };
 
 const KEY_CODES = {
@@ -61,10 +61,10 @@ const KEY_CODES = {
   dashboard: "\x1a",
   up: "\x1B[A",
   down: "\x1B[B",
+  left: "\x1B[D",
+  right: "\x1B[C",
   enter: "\r",
   esc: "\x1B",
-  tab: "\t",
-  shiftTab: "\x1B[Z",
 };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
@@ -460,11 +460,6 @@ const drawDashboard = ({
   // https://github.com/microsoft/terminal/issues/376
   const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
 
-  const selectByIndicator =
-    autoExit.tag === "AutoExit"
-      ? ""
-      : `${shortcut(KEYS.selectByIndicator)} select by indicator\n`;
-
   const selectedCommandsForKilling =
     selection.tag === "ByIndicator"
       ? commands.filter(
@@ -500,6 +495,9 @@ const drawDashboard = ({
       ? `${shortcut(KEYS.enter)} restart exited`
       : "";
 
+  const navigationKeys =
+    autoExit.tag === "AutoExit" ? KEYS.navigateVerticallyOnly : KEYS.navigate;
+
   const sessionEnds = "The session ends automatically once all commands are ";
   const autoExitText =
     autoExit.tag === "AutoExit"
@@ -521,8 +519,8 @@ ${finalLines}
 
 ${shortcut(label)} focus command${click}
 ${shortcut(KEYS.kill)} ${killLabel(selectedCommandsForKilling, commands)}
-${shortcut(KEYS.navigate)} move selection
-${selectByIndicator}${enter}
+${shortcut(navigationKeys)} move selection
+${enter}
 ${autoExitText}
 `.trim();
 };
@@ -2240,68 +2238,61 @@ const onStdin = (
           }
 
         case KEY_CODES.up:
-          setSelection({
-            tag: "Keyboard",
-            index:
-              selection.tag === "Invisible"
-                ? selection.index
-                : selection.tag === "ByIndicator"
-                ? selection.keyboardIndex
-                : selection.index === 0
-                ? commands.length - 1
-                : selection.index - 1,
-          });
+          if (selection.tag === "ByIndicator") {
+            const indicators = getIndicatorChoices(commands);
+            const index = indicators.indexOf(selection.indicator);
+            const newIndex = index === 0 ? indicators.length - 1 : index - 1;
+            setSelection({
+              tag: "ByIndicator",
+              indicator: indicators[newIndex],
+              keyboardIndex: selection.keyboardIndex,
+            });
+          } else {
+            setSelection({
+              tag: "Keyboard",
+              index:
+                selection.tag === "Invisible"
+                  ? selection.index
+                  : selection.index === 0
+                  ? commands.length - 1
+                  : selection.index - 1,
+            });
+          }
           return undefined;
 
         case KEY_CODES.down:
-          setSelection({
-            tag: "Keyboard",
-            index:
-              selection.tag === "Invisible"
-                ? selection.index
-                : selection.tag === "ByIndicator"
-                ? selection.keyboardIndex
-                : selection.index === commands.length - 1
+          if (selection.tag === "ByIndicator") {
+            const indicators = getIndicatorChoices(commands);
+            const index = indicators.indexOf(selection.indicator);
+            const newIndex =
+              index === undefined || index === indicators.length - 1
                 ? 0
-                : selection.index + 1,
-          });
-          return undefined;
-
-        case KEY_CODES.shiftTab: {
-          if (autoExit.tag === "NoAutoExit") {
-            if (selection.tag === "ByIndicator") {
-              const indicators = getIndicatorChoices(commands);
-              const index = indicators.indexOf(selection.indicator);
-              const newIndex = index === 0 ? indicators.length - 1 : index - 1;
-              setSelection({
-                tag: "ByIndicator",
-                indicator: indicators[newIndex],
-                keyboardIndex: selection.keyboardIndex,
-              });
-            } else {
-              setSelection({
-                tag: "ByIndicator",
-                indicator: getIndicatorChoice(commands[selection.index]),
-                keyboardIndex: selection.index,
-              });
-            }
+                : index + 1;
+            setSelection({
+              tag: "ByIndicator",
+              indicator: indicators[newIndex],
+              keyboardIndex: selection.keyboardIndex,
+            });
+          } else {
+            setSelection({
+              tag: "Keyboard",
+              index:
+                selection.tag === "Invisible"
+                  ? selection.index
+                  : selection.index === commands.length - 1
+                  ? 0
+                  : selection.index + 1,
+            });
           }
           return undefined;
-        }
 
-        case KEY_CODES.tab: {
+        case KEY_CODES.left:
+        case KEY_CODES.right: {
           if (autoExit.tag === "NoAutoExit") {
             if (selection.tag === "ByIndicator") {
-              const indicators = getIndicatorChoices(commands);
-              const index = indicators.indexOf(selection.indicator);
-              const newIndex =
-                index === undefined || index === indicators.length - 1
-                  ? 0
-                  : index + 1;
               setSelection({
-                tag: "ByIndicator",
-                indicator: indicators[newIndex],
-                keyboardIndex: selection.keyboardIndex,
+                tag: "Keyboard",
+                index: selection.keyboardIndex,
               });
             } else {
               setSelection({

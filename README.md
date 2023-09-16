@@ -39,8 +39,7 @@ $ npm start
 
 [1-2]    focus command (or click)
 [ctrl+c] kill all
-[↑/↓]    move selection
-[tab]    select by indicator
+[↑↓←→]   move selection
 ```
 
 ➡️ <kbd>1</kbd> ️️➡️
@@ -92,8 +91,7 @@ exit 0
 
 [1-2]    focus command (or click)
 [ctrl+c] kill all
-[↑/↓]    move selection
-[tab]    select by indicator
+[↑↓←→]   move selection
 [enter]  restart exited
 ```
 
