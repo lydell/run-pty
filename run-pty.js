@@ -315,25 +315,6 @@ Environment variables:
 `.trim();
 
 /**
- *
- * @param {Array<Command>} selectedCommandsForKilling
- * @param {Array<Command>} commands
- * @returns {string}
- */
-const killLabel = (selectedCommandsForKilling, commands) =>
-  selectedCommandsForKilling.length === 0
-    ? killAllLabel(commands)
-    : selectedCommandsForKilling.every(
-        (command) => command.status.tag === "Killing",
-      )
-    ? `kill selected ${dim("(double-press to force) ")}`
-    : selectedCommandsForKilling.every(
-        (command) => !("terminal" in command.status),
-      )
-    ? dim("(selected already exited)")
-    : "kill selected";
-
-/**
  * @param {Array<Command>} commands
  * @returns {string}
  */
@@ -518,7 +499,7 @@ const drawDashboard = ({
 ${finalLines}
 
 ${shortcut(label)} focus command${click}
-${shortcut(KEYS.kill)} ${killLabel(selectedCommandsForKilling, commands)}
+${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(navigationKeys)} move selection
 ${enter}
 ${autoExitText}
@@ -1783,29 +1764,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
   };
 
   /**
-   * @param {string} indicator
-   * @returns {void}
-   */
-  const killByIndicator = (indicator) => {
-    const matchingCommands = commands.filter(
-      (command) =>
-        getIndicatorChoice(command) === indicator &&
-        "terminal" in command.status,
-    );
-    if (matchingCommands.length === 0) {
-      hideSelection();
-      // Redraw dashboard.
-      switchToDashboard();
-    } else {
-      for (const command of matchingCommands) {
-        command.kill();
-      }
-      // So you can see how killing other commands go:
-      switchToDashboard();
-    }
-  };
-
-  /**
    * @param {number} index
    * @param {Extract<Status, {tag: "Exit"}>} status
    * @returns {void}
@@ -2082,7 +2040,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
           switchToCommand,
           setSelection,
           killAll,
-          killByIndicator,
           restart,
           restartExited,
           restartByIndicator,
@@ -2120,7 +2077,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @param {(index: number, options?: { hideSelection?: boolean }) => void} switchToCommand
  * @param {(newSelection: Selection) => void} setSelection
  * @param {() => void} killAll
- * @param {(indicator: string) => void} killByIndicator
  * @param {(index: number, status: Extract<Status, {tag: "Exit"}>) => void} restart
  * @param {() => void} restartExited
  * @param {(indicator: string) => void} restartByIndicator
@@ -2136,7 +2092,6 @@ const onStdin = (
   switchToCommand,
   setSelection,
   killAll,
-  killByIndicator,
   restart,
   restartExited,
   restartByIndicator,
@@ -2202,26 +2157,8 @@ const onStdin = (
     case "Dashboard":
       switch (data) {
         case KEY_CODES.kill:
-          switch (selection.tag) {
-            case "Invisible":
-            case "Mousedown":
-              killAll();
-              return undefined;
-            case "Keyboard": {
-              const command = commands[selection.index];
-              if ("terminal" in command.status) {
-                command.kill();
-                // Redraw dashboard.
-                switchToDashboard();
-              } else {
-                killAll();
-              }
-              return undefined;
-            }
-            case "ByIndicator":
-              killByIndicator(selection.indicator);
-              return undefined;
-          }
+          killAll();
+          return undefined;
 
         case KEY_CODES.enter:
           switch (selection.tag) {
