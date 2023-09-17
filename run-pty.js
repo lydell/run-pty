@@ -139,10 +139,9 @@ const killingIndicator = NO_COLOR
   : "⭕";
 
 const restartingIndicator = NO_COLOR
-  ? // TODO: Fallback icons
-    "○"
+  ? "◌"
   : !SUPPORTS_EMOJI
-  ? `\x1B[91m○${RESET_COLOR}`
+  ? `\x1B[96m◌${RESET_COLOR}`
   : "🔄";
 
 const abortedIndicator = NO_COLOR
