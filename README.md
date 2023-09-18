@@ -45,7 +45,7 @@ $ npm start
 ➡️ <kbd>1</kbd> ️️➡️
 
 ```
-🟢  npm run frontend
+🟢 npm run frontend
 
 > frontend
 > vite --no-clearScreen
@@ -63,7 +63,7 @@ $ npm start
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
-🟢  npm run frontend
+🟢 npm run frontend
 
 > frontend
 > vite --no-clearScreen
@@ -75,7 +75,7 @@ $ npm start
   ➜  Network: use --host to expose
 ^C
 
-⚪  npm run frontend
+⚪ npm run frontend
 exit 0
 
 [enter]  restart
