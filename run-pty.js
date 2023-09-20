@@ -443,16 +443,6 @@ const drawDashboard = ({
   // https://github.com/microsoft/terminal/issues/376
   const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
 
-  const selectedCommandsForKilling =
-    selection.tag === "ByIndicator"
-      ? commands.filter(
-          (command) => getIndicatorChoice(command) === selection.indicator,
-        )
-      : selection.tag === "Keyboard" &&
-        "terminal" in commands[selection.index].status
-      ? [commands[selection.index]]
-      : [];
-
   const enter =
     selection.tag === "Keyboard"
       ? `${shortcut(KEYS.enter)} focus selected${getPid(
@@ -460,8 +450,10 @@ const drawDashboard = ({
         )}\n${shortcut(KEYS.unselect)} unselect`
       : selection.tag === "ByIndicator"
       ? `${shortcut(KEYS.enter)} ${
-          selectedCommandsForKilling.every(
-            (command) => command.status.tag === "Killing",
+          commands.some(
+            (command) =>
+              getIndicatorChoice(command) === selection.indicator &&
+              command.status.tag === "Killing",
           )
             ? "force "
             : ""
