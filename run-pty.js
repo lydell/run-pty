@@ -364,9 +364,12 @@ const drawDashboardCommandLines = (
       icon === selectedIndicator
         ? NO_COLOR
           ? `${separator.slice(0, -1)}→${icon}`
-          : // Add two spaces at the end to make sure that two terminal slots get
-            // inverted, no matter the width of the icon.
-            `${separator.slice(0, -1)}${invert(` ${icon}  `)}`
+          : // Add spaces at the end to make sure that two terminal slots get
+            // inverted, no matter the actual width of the icon (which may even
+            // be the empty string).
+            `${separator.slice(0, -1)}${invert(
+              ` ${icon}${" ".repeat(ICON_WIDTH)}`,
+            )}`
         : `${separator}${icon}`;
     const start = truncate(`${label}${finalIcon}`, width);
     const startLength =
