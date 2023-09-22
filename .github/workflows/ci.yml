@@ -30,4 +30,4 @@ jobs:
       - if: steps.cache-node_modules.outputs.cache-hit != 'true'
         run: npm ci
 
-      # - run: npm test
+      - run: npm test
