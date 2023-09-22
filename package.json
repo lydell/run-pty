@@ -41,7 +41,7 @@
     "example": "node run-pty.js example.json",
     "auto-exit": "node run-pty.js --auto-exit=2 % sleep 3 % sleep 1 % sleep 2 % sleep 1 % sleep 1 && echo success",
     "testA": "node run-pty.js --auto-exit % prettier --check . % eslint . --report-unused-disable-directives % tsc % vitest run % node script.mjs",
-    "test": "node run-pty.js --auto-exit % true % true % true % true % false",
+    "test": "node run-pty.js --auto-exit % node repro.js 0 % node repro.js 0 % node repro.js 0 % node repro.js 0 % node repro.js 1",
     "prepublishOnly": "npm test"
   }
 }
