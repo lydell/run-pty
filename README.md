@@ -39,7 +39,7 @@ $ npm start
 
 [1-2]    focus command (or click)
 [ctrl+c] kill all
-[↑/↓]    move selection
+[↑↓←→]   move selection
 ```
 
 ➡️ <kbd>1</kbd> ️️➡️
@@ -51,34 +51,31 @@ $ npm start
 > vite --no-clearScreen
 
 
-  VITE v3.0.9  ready in 137 ms
+  VITE v3.2.1  ready in 91 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
 ▊
-[ctrl+c] kill (pid 63096)
+[ctrl+c] kill (pid 36842)
 [ctrl+z] dashboard
 ```
 
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
-🟢  npm run frontend
+🟢 npm run frontend
 
 > frontend
 > vite --no-clearScreen
 
 
-  vite v2.8.4 dev server running at:
+  VITE v3.2.1  ready in 91 ms
 
-  > Local: http://localhost:3000/
-  > Network: use `--host` to expose
-
-  ready in 136ms.
-
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
 ^C
 
-⚪  npm run frontend
+⚪ npm run frontend
 exit 0
 
 [enter]  restart
@@ -94,7 +91,7 @@ exit 0
 
 [1-2]    focus command (or click)
 [ctrl+c] kill all
-[↑/↓]    move selection
+[↑↓←→]   move selection
 [enter]  restart exited
 ```
 
@@ -182,7 +179,7 @@ The JSON format lets you specify additional things apart from the command itself
 
 - defaultStatus: This lets you replace 🟢 with a custom status indicator at startup (before your command has written anything). The value works like for `status`.
 
-- killAllSequence: When you use “kill all” run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to send to the command to make it exit.
+- killAllSequence: When you use “kill all” (or “restart selected”) run-pty sends <kbd>ctrl+c</kbd> to all commands. However, not all commands exit when you do that. In such cases, you can use `killAllSequence` to specify what sequence of characters to send to the command to make it exit.
 
 ## --auto-exit
 
