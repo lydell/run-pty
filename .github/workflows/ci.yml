@@ -8,8 +8,9 @@ on:
 
 jobs:
   build:
-    matrix:
-      os: [ubuntu-latest, macOS-latest]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
     runs-on: ${{matrix.os}}
 
     steps:
