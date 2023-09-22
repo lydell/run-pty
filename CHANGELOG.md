@@ -1,3 +1,7 @@
+### Version 4.1.0 (2023-09-22)
+
+- Added: Just like before, you can press <kbd>↑</kbd> and <kbd>↓</kbd> to select a command. Now, you can now press <kbd>←</kbd> to select the indicator (emoji) of the current command, as well as for all other commands with the same indicator (emoji)! This is the most useful if you’ve created a [JSON file for your commands](https://github.com/lydell/run-pty#advanced-mode), with custom status indicators. For example, maybe you use 🚨 to indicate that a watcher is running but that there’s an error. You can now easily select all commands with the 🚨 indicator, and then press <kbd>enter</kbd> to restart them.
+
 ### Version 4.0.4 (2023-08-09)
 
 - run-pty now works on Node.js 20, by upgrading the node-pty dependency to 1.0.0. I haven’t found any breaking changes in that major version bump that results in breakage for run-pty users.
