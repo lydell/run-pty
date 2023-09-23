@@ -3,8 +3,8 @@
 const pty = require("node-pty");
 
 const configurations = [
-  [0, 800],
   [0, 700],
+  [0, 800],
   [0, 2000],
   [0, 700],
   [1, 700],
@@ -52,6 +52,6 @@ function run(i, wantedExitCode, delay) {
   };
 }
 
-for (let i = 0; i < 2; i++) {
+for (let i = 0; i < 3; i++) {
   queue.shift()?.();
 }
