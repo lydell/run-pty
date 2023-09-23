@@ -2,21 +2,35 @@
 
 const pty = require("node-pty");
 
-const NUM = 5;
+const configurations = [
+  [0, 700],
+  [0, 800],
+  [0, 2000],
+  [0, 700],
+  [1, 700],
+];
 
-const queue = Array.from({ length: NUM }, (_, i) => run(i + 1));
+const queue = configurations.map(([exitCode, delay], i) =>
+  run(i + 1, exitCode, delay),
+);
 
 /** @type {Array<number>} */
 const results = [];
 
 /**
  * @param {number} i
+ * @param {number} wantedExitCode
+ * @param {number} delay
  */
-function run(i) {
+function run(i, wantedExitCode, delay) {
   return () => {
     console.log("Start", i);
     let buffer = "";
-    const terminal = pty.spawn("node", ["repro.js", i === NUM ? "1" : "0"], {});
+    const terminal = pty.spawn(
+      "node",
+      ["repro.js", wantedExitCode.toString(), delay.toString()],
+      {},
+    );
     terminal.onData((data) => {
       buffer += data;
     });
@@ -26,7 +40,7 @@ function run(i) {
       results.push(exitCode);
       const next = queue.shift();
       if (next === undefined) {
-        if (results.length === NUM) {
+        if (results.length === configurations.length) {
           const isSuccess = results.every((code) => code === 0);
           console.log(isSuccess ? "SUCCESS" : "ERROR", results);
           process.exit(isSuccess ? 0 : 1);
