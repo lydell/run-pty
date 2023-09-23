@@ -3,8 +3,8 @@
 const pty = require("node-pty");
 
 const configurations = [
-  [0, 700],
   [0, 800],
+  [0, 700],
   [0, 2000],
   [0, 700],
   [1, 700],
