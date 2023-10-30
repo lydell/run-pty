@@ -1189,8 +1189,7 @@ describe("parse json", () => {
     expect(testJsonError("empty.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
       At root:
-      Unexpected end of JSON input
-      Got: ""
+      SyntaxError: Unexpected end of JSON input
     `);
   });
 
@@ -1198,10 +1197,9 @@ describe("parse json", () => {
     expect(testJsonError("invalid-json-syntax.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
       At root:
-      Unexpected token ']', ..."kend"] },
+      SyntaxError: Unexpected token ']', ..."kend"] },
       ]
       " is not valid JSON
-      Got: "[\\n  { \\"command\\": [\\"npm\\", \\"run\\", \\"frontend…ommand\\": [\\"npm\\", \\"run\\", \\"backend\\"] },\\n]\\n"
     `);
   });
 
@@ -1260,9 +1258,15 @@ describe("parse json", () => {
     expect(testJsonError("key-typo.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
       At root[0]:
-      Expected only these fields: "command", "title", "cwd", "status", "defaultStatus", "killAllSequence"
-      Found extra fields: 
-        "titel"␊
+      Expected only these fields:
+        "command",
+        "title",
+        "cwd",
+        "status",
+        "defaultStatus",
+        "killAllSequence"
+      Found extra fields:
+        "titel"
     `);
   });
 
