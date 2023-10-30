@@ -1188,14 +1188,16 @@ describe("parse json", () => {
   test("empty file", () => {
     expect(testJsonError("empty.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Unexpected end of JSON input
+      At root:
+      SyntaxError: Unexpected end of JSON input
     `);
   });
 
   test("invalid json syntax", () => {
     expect(testJsonError("invalid-json-syntax.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      Unexpected token ']', ..."kend"] },
+      At root:
+      SyntaxError: Unexpected token ']', ..."kend"] },
       ]
       " is not valid JSON
     `);
@@ -1226,9 +1228,11 @@ describe("parse json", () => {
   test("missing command", () => {
     expect(testJsonError("missing-command.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
-      At root[0]["command"]:
-      Expected an array
-      Got: undefined
+      At root[0]:
+      Expected an object with a field called: "command"
+      Got: {
+        "title": "Something"
+      }
     `);
   });
 
@@ -1246,6 +1250,7 @@ describe("parse json", () => {
       Failed to read command descriptions file as JSON:
       At root[0]["status"]["{}"]:
       Invalid regular expression: /{}/u: Lone quantifier brackets
+      Got: "{}"
     `);
   });
 
@@ -1253,8 +1258,15 @@ describe("parse json", () => {
     expect(testJsonError("key-typo.json")).toMatchInlineSnapshot(`
       Failed to read command descriptions file as JSON:
       At root[0]:
-      Expected only these fields: "command", "title", "cwd", "status", "defaultStatus", "killAllSequence"
-      Found extra fields: "titel"
+      Expected only these fields:
+        "command",
+        "title",
+        "cwd",
+        "status",
+        "defaultStatus",
+        "killAllSequence"
+      Found extra fields:
+        "titel"
     `);
   });
 
@@ -1266,7 +1278,6 @@ describe("parse json", () => {
           command: ["node"],
           title: "node",
           cwd: ".",
-          defaultStatus: undefined,
           status: [],
           killAllSequence: "\x03\x03",
         },
