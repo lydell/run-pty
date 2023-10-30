@@ -24,7 +24,6 @@ module.exports = {
     "object-shorthand": "error",
     "one-var": ["error", "never"],
     "prefer-arrow-callback": "error",
-    "prefer-destructuring": ["error", { array: false, object: true }],
     "prefer-template": "error",
     eqeqeq: "error",
   },
@@ -40,6 +39,10 @@ module.exports = {
         ].rules,
         "@typescript-eslint/no-unnecessary-condition": "off",
         "@typescript-eslint/no-var-requires": "off",
+        "@typescript-eslint/prefer-destructuring": [
+          "error",
+          { array: false, object: true },
+        ],
         "@typescript-eslint/strict-boolean-expressions": [
           "error",
           {
