@@ -2569,6 +2569,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  __internalRun: run,
   __forTests: {
     ALL_LABELS,
     commandToPresentationName,

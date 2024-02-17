@@ -6,7 +6,7 @@
   "description": "Run several commands concurrently. Show output for one command at a time. Kill all at once.",
   "repository": "lydell/run-pty",
   "type": "commonjs",
-  "bin": "./run-pty.js",
+  "bin": "./run-pty-bin.js",
   "files": [
     "run-pty.js"
   ],
