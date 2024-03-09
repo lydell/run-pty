@@ -2,21 +2,6 @@
 
 "use strict";
 
-// Workaround for:
-// https://github.com/lydell/run-pty/issues/45
-// https://github.com/lydell/run-pty/issues/53
-if (process.platform === "linux" && !("UV_USE_IO_URING" in process.env)) {
-  require("child_process")
-    .spawn(process.execPath, [__filename, ...process.argv.slice(2)], {
-      stdio: "inherit",
-      env: { UV_USE_IO_URING: "0", ...process.env },
-    })
-    // eslint-disable-next-line @typescript-eslint/unbound-method
-    .on("exit", process.exit);
-  // @ts-expect-error This is a deliberate exit.
-  return;
-}
-
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -2584,6 +2569,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  __internalRun: run,
   __forTests: {
     ALL_LABELS,
     commandToPresentationName,
