@@ -213,7 +213,7 @@ If you want a shell, you could do something like this: `run-pty % bash -c 'npm i
 
 ## Credits
 
-- [microsoft/node-pty] does all the heavy lifting of running the commands.
+- [microsoft/node-pty] does all the heavy lifting of running the commands. But it’s actually the fork [@lydell/node-pty] that is used. The only difference is that it has prebuilt binaries.
 - [apiel/run-screen] was the inspiration for this tool.
 
 ## iTerm2 flicker
@@ -230,6 +230,7 @@ run-pty tries to avoid clearing the screen and only redraw lines that have chang
 
 [MIT](LICENSE).
 
+[@lydell/node-pty]: https://github.com/lydell/node-pty
 [apiel/run-screen]: https://github.com/apiel/run-screen
 [concurrently]: https://github.com/kimmobrunfeldt/concurrently
 [gnu parallel]: https://www.gnu.org/software/parallel/
