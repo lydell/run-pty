@@ -27,7 +27,7 @@ const {
 
 /**
  * @param {{ pid: number }} init
- * @returns {import("node-pty").IPty}
+ * @returns {import("@lydell/node-pty").IPty}
  */
 function fakeTerminal({ pid }) {
   return {

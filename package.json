@@ -1,6 +1,6 @@
 {
   "name": "run-pty",
-  "version": "4.1.0",
+  "version": "5.0.0-beta.1",
   "author": "Simon Lydell",
   "license": "MIT",
   "description": "Run several commands concurrently. Show output for one command at a time. Kill all at once.",
@@ -24,7 +24,7 @@
     "xterm"
   ],
   "dependencies": {
-    "node-pty": "^1.0.0",
+    "@lydell/node-pty": "^1.0.0-beta.2",
     "tiny-decoders": "^23.0.0"
   },
   "devDependencies": {

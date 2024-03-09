@@ -20,14 +20,14 @@ if (process.platform === "linux" && !("UV_USE_IO_URING" in process.env)) {
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const pty = require("node-pty");
+const pty = require("@lydell/node-pty");
 const Codec = require("tiny-decoders");
 
 /**
  * @typedef {
     | { tag: "Waiting" }
-    | { tag: "Running", terminal: import("node-pty").IPty }
-    | { tag: "Killing", terminal: import("node-pty").IPty, slow: boolean, lastKillPress: number | undefined, restartAfterKill: boolean }
+    | { tag: "Running", terminal: import("@lydell/node-pty").IPty }
+    | { tag: "Killing", terminal: import("@lydell/node-pty").IPty, slow: boolean, lastKillPress: number | undefined, restartAfterKill: boolean }
     | { tag: "Exit", exitCode: number, wasKilled: boolean }
    } Status
  *
