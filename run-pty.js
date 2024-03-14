@@ -155,7 +155,7 @@ const abortedIndicator = NO_COLOR
  * @returns {string}
  */
 const exitIndicator = (exitCode) =>
-  // 130 commonly means exit by ctrl+c.
+  // 130 (128 + 2 (SIGINT)) commonly means exit by ctrl+c.
   exitCode === 0 || exitCode === 130
     ? NO_COLOR
       ? "●"
@@ -1334,21 +1334,30 @@ class Command {
       }
     });
 
-    const disposeOnExit = terminal.onExit(({ exitCode }) => {
-      disposeOnData.dispose();
-      disposeOnExit.dispose();
+    const disposeOnExit = terminal.onExit(
+      ({ exitCode: actualExitCode, signal }) => {
+        disposeOnData.dispose();
+        disposeOnExit.dispose();
 
-      const previousStatus = this.status;
-      this.status = {
-        tag: "Exit",
-        exitCode,
-        wasKilled: this.status.tag === "Killing",
-      };
-      if (previousStatus.tag === "Killing" && previousStatus.restartAfterKill) {
-        this.start({ needsToWait: false });
-      }
-      this.onExit(exitCode);
-    });
+        // There’s a convention to use 128 + signal for the exit code when a
+        // process is killed by a signal.
+        const exitCode =
+          signal === undefined || signal === 0 ? actualExitCode : 128 + signal;
+        const previousStatus = this.status;
+        this.status = {
+          tag: "Exit",
+          exitCode,
+          wasKilled: this.status.tag === "Killing",
+        };
+        if (
+          previousStatus.tag === "Killing" &&
+          previousStatus.restartAfterKill
+        ) {
+          this.start({ needsToWait: false });
+        }
+        this.onExit(exitCode);
+      },
+    );
 
     this.status = { tag: "Running", terminal };
   }
