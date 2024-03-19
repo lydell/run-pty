@@ -27,7 +27,7 @@ Another use case is running a couple of commands in parallel, using [--auto-exit
 ```
 $ npm start
 
-> @ start /Users/lydell/src/run-pty/demo
+> start
 > run-pty % npm run frontend % npm run backend
 ```
 
@@ -51,10 +51,11 @@ $ npm start
 > vite --no-clearScreen
 
 
-  VITE v3.2.1  ready in 91 ms
+  VITE v5.1.6  ready in 81 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
+  ➜  press h + enter to show help
 ▊
 [ctrl+c] kill (pid 36842)
 [ctrl+z] dashboard
@@ -69,14 +70,15 @@ $ npm start
 > vite --no-clearScreen
 
 
-  VITE v3.2.1  ready in 91 ms
+  VITE v5.1.6  ready in 81 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
+  ➜  press h + enter to show help
 ^C
 
 ⚪ npm run frontend
-exit 0
+exit 130
 
 [enter]  restart
 [ctrl+c] kill all
@@ -86,7 +88,7 @@ exit 0
 ➡️ <kbd>ctrl+z</kbd> ➡️
 
 ```
-[1]  ⚪   exit 0  npm run frontend
+[1]  ⚪   exit 130  npm run frontend
 [2]  🟢   npm run backend
 
 [1-2]    focus command (or click)
@@ -98,8 +100,8 @@ exit 0
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
-[1]  ⚪  exit 0  npm run frontend
-[2]  ⚪  exit 0  npm run backend
+[1]  ⚪  exit 130  npm run frontend
+[2]  ⚪  exit 130  npm run backend
 
 $ ▊
 ```
