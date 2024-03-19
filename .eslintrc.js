@@ -43,6 +43,16 @@ module.exports = {
           "error",
           { array: false, object: true },
         ],
+        "@typescript-eslint/restrict-template-expressions": [
+          "error",
+          {
+            allowAny: false,
+            allowBoolean: false,
+            allowNullish: false,
+            allowNumber: true,
+            allowRegExp: false,
+          },
+        ],
         "@typescript-eslint/strict-boolean-expressions": [
           "error",
           {

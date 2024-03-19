@@ -123,32 +123,32 @@ const CLEAR_REGEX = (() => {
 const waitingIndicator = NO_COLOR
   ? "■"
   : !SUPPORTS_EMOJI
-  ? `\x1B[93m■${RESET_COLOR}`
-  : "🥱";
+    ? `\x1B[93m■${RESET_COLOR}`
+    : "🥱";
 
 const runningIndicator = NO_COLOR
   ? "›"
   : !SUPPORTS_EMOJI
-  ? `\x1B[92m●${RESET_COLOR}`
-  : "🟢";
+    ? `\x1B[92m●${RESET_COLOR}`
+    : "🟢";
 
 const killingIndicator = NO_COLOR
   ? "○"
   : !SUPPORTS_EMOJI
-  ? `\x1B[91m○${RESET_COLOR}`
-  : "⭕";
+    ? `\x1B[91m○${RESET_COLOR}`
+    : "⭕";
 
 const restartingIndicator = NO_COLOR
   ? "◌"
   : !SUPPORTS_EMOJI
-  ? `\x1B[96m◌${RESET_COLOR}`
-  : "🔄";
+    ? `\x1B[96m◌${RESET_COLOR}`
+    : "🔄";
 
 const abortedIndicator = NO_COLOR
   ? "▲"
   : !SUPPORTS_EMOJI
-  ? `\x1B[91m▲${RESET_COLOR}`
-  : "⛔️";
+    ? `\x1B[91m▲${RESET_COLOR}`
+    : "⛔️";
 
 /**
  * @param {number} exitCode
@@ -160,19 +160,19 @@ const exitIndicator = (exitCode) =>
     ? NO_COLOR
       ? "●"
       : !SUPPORTS_EMOJI
-      ? `\x1B[97m●${RESET_COLOR}`
-      : "⚪"
+        ? `\x1B[97m●${RESET_COLOR}`
+        : "⚪"
     : NO_COLOR
-    ? "×"
-    : !SUPPORTS_EMOJI
-    ? `\x1B[91m●${RESET_COLOR}`
-    : "🔴";
+      ? "×"
+      : !SUPPORTS_EMOJI
+        ? `\x1B[91m●${RESET_COLOR}`
+        : "🔴";
 
 const folder = NO_COLOR
   ? "⌂"
   : !SUPPORTS_EMOJI
-  ? `\x1B[2m⌂${RESET_COLOR}`
-  : "📂";
+    ? `\x1B[2m⌂${RESET_COLOR}`
+    : "📂";
 
 /**
  * @param {number} n
@@ -321,8 +321,8 @@ const killAllLabel = (commands) =>
   commands.some((command) => command.status.tag === "Killing")
     ? `kill all ${dim("(double-press to force) ")}`
     : commands.every((command) => !("terminal" in command.status))
-    ? "exit"
-    : "kill all";
+      ? "exit"
+      : "kill all";
 
 /**
  * @param {Array<Command>} commands
@@ -449,26 +449,26 @@ const drawDashboard = ({
           commands[selection.index],
         )}\n${shortcut(KEYS.unselect)} unselect`
       : selection.tag === "ByIndicator"
-      ? `${shortcut(KEYS.enter)} ${
-          commands.some(
-            (command) =>
-              getIndicatorChoice(command) === selection.indicator &&
-              command.status.tag === "Killing",
-          )
-            ? "force "
+        ? `${shortcut(KEYS.enter)} ${
+            commands.some(
+              (command) =>
+                getIndicatorChoice(command) === selection.indicator &&
+                command.status.tag === "Killing",
+            )
+              ? "force "
+              : ""
+          }restart selected\n${shortcut(KEYS.unselect)} unselect`
+        : autoExit.tag === "AutoExit"
+          ? commands.some(
+              (command) =>
+                command.status.tag === "Exit" &&
+                (command.status.exitCode !== 0 || command.status.wasKilled),
+            )
+            ? `${shortcut(KEYS.enter)} restart failed`
             : ""
-        }restart selected\n${shortcut(KEYS.unselect)} unselect`
-      : autoExit.tag === "AutoExit"
-      ? commands.some(
-          (command) =>
-            command.status.tag === "Exit" &&
-            (command.status.exitCode !== 0 || command.status.wasKilled),
-        )
-        ? `${shortcut(KEYS.enter)} restart failed`
-        : ""
-      : commands.some((command) => command.status.tag === "Exit")
-      ? `${shortcut(KEYS.enter)} restart exited`
-      : "";
+          : commands.some((command) => command.status.tag === "Exit")
+            ? `${shortcut(KEYS.enter)} restart exited`
+            : "";
 
   const navigationKeys =
     autoExit.tag === "AutoExit" ? KEYS.navigateVerticallyOnly : KEYS.navigate;
@@ -513,13 +513,13 @@ const drawSummary = (commands) => {
   )
     ? "success"
     : commands.some(
-        (command) =>
-          command.status.tag === "Exit" &&
-          command.status.exitCode !== 0 &&
-          !command.status.wasKilled,
-      )
-    ? "failure"
-    : "aborted";
+          (command) =>
+            command.status.tag === "Exit" &&
+            command.status.exitCode !== 0 &&
+            !command.status.wasKilled,
+        )
+      ? "failure"
+      : "aborted";
   const lines = commands.map((command) => {
     const [indicator, status] = statusText(command.status, {
       statusFromRules: runningIndicator,
@@ -809,12 +809,12 @@ const respondToRequestFake = (request) =>
   request.endsWith("6n")
     ? "\x1B[1;1R"
     : request.endsWith("t")
-    ? "\x1B[3;0;0t"
-    : request.startsWith("\x1B]10;") || request.startsWith("\x1B]4;")
-    ? request.replace("?", "rgb:ffff/ffff/ffff")
-    : request.startsWith("\x1B]11;")
-    ? request.replace("?", "rgb:0000/0000/0000")
-    : "";
+      ? "\x1B[3;0;0t"
+      : request.startsWith("\x1B]10;") || request.startsWith("\x1B]4;")
+        ? request.replace("?", "rgb:ffff/ffff/ffff")
+        : request.startsWith("\x1B]11;")
+          ? request.replace("?", "rgb:0000/0000/0000")
+          : "";
 
 // Inspired by this well researched Stack Overflow answer:
 // https://stackoverflow.com/a/14693789
@@ -895,10 +895,10 @@ const commandToPresentationName = (command) =>
               subPart === ""
                 ? ""
                 : subPart === "'"
-                ? "\\'"
-                : /^[\w.,:/=@%+-]+$/.test(subPart)
-                ? subPart
-                : `'${subPart}'`,
+                  ? "\\'"
+                  : /^[\w.,:/=@%+-]+$/.test(subPart)
+                    ? subPart
+                    : `'${subPart}'`,
             )
             .join(""),
     )
@@ -1005,17 +1005,17 @@ const parseArgs = (args) => {
           error === undefined
             ? "An unknown error occurred when reading command descriptions file."
             : typeof error.code === "string"
-            ? [
-                "The first argument is either the delimiter to use between commands,",
-                "or the path to a JSON file that describes the commands.",
-                "If you meant to use a file, make sure it exists.",
-                "Otherwise, choose a delimiter like % and provide at least one command.",
-                error.message,
-              ].join("\n")
-            : [
-                "Failed to read command descriptions file as JSON:",
-                error.message,
-              ].join("\n"),
+              ? [
+                  "The first argument is either the delimiter to use between commands,",
+                  "or the path to a JSON file that describes the commands.",
+                  "If you meant to use a file, make sure it exists.",
+                  "Otherwise, choose a delimiter like % and provide at least one command.",
+                  error.message,
+                ].join("\n")
+              : [
+                  "Failed to read command descriptions file as JSON:",
+                  error.message,
+                ].join("\n"),
       };
     }
   }
@@ -1227,8 +1227,8 @@ class Command {
       title === formattedCommand
         ? formattedCommand
         : NO_COLOR
-        ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
-        : `${bold(title)}: ${formattedCommand}`;
+          ? `${removeGraphicRenditions(title)}: ${formattedCommand}`
+          : `${bold(title)}: ${formattedCommand}`;
     this.onData = onData;
     this.onRequest = onRequest;
     this.onExit = onExit;
@@ -1436,9 +1436,8 @@ class Command {
               this.historyAlternateScreen = "";
             } else {
               if (this.historyAlternateScreen.length > MAX_HISTORY) {
-                this.historyAlternateScreen = this.historyAlternateScreen.slice(
-                  -MAX_HISTORY,
-                );
+                this.historyAlternateScreen =
+                  this.historyAlternateScreen.slice(-MAX_HISTORY);
               }
             }
           } else {
@@ -1499,10 +1498,10 @@ const extractStatus = (status) =>
   status === undefined
     ? undefined
     : NO_COLOR
-    ? removeGraphicRenditions(status[1])
-    : !SUPPORTS_EMOJI
-    ? status[1]
-    : status[0];
+      ? removeGraphicRenditions(status[1])
+      : !SUPPORTS_EMOJI
+        ? status[1]
+        : status[0];
 
 /**
  * @param {string} string
@@ -2216,8 +2215,8 @@ const onStdin = (
                 selection.tag === "Invisible"
                   ? selection.index
                   : selection.index === 0
-                  ? commands.length - 1
-                  : selection.index - 1,
+                    ? commands.length - 1
+                    : selection.index - 1,
             });
           }
           return undefined;
@@ -2242,8 +2241,8 @@ const onStdin = (
                 selection.tag === "Invisible"
                   ? selection.index
                   : selection.index === commands.length - 1
-                  ? 0
-                  : selection.index + 1,
+                    ? 0
+                    : selection.index + 1,
             });
           }
           return undefined;
