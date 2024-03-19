@@ -1,3 +1,24 @@
+### Version 5.0.0 (2024-03-19)
+
+- Breaking change: The [microsoft/node-pty](https://github.com/microsoft/node-pty) dependency has been replaced by the fork [@lydell/node-pty](https://github.com/lydell/node-pty), which has prebuilt binaries. This means that a C++ compiler and Python is no longer needed to install run-pty. No C++ compilation is done on install, and you don’t need to rebuild when switching Node.js versions. On the other hand, run-pty now only works on the platforms it has prebuilt binaries for:
+
+  - macOS x86_64
+  - macOS ARM64
+  - Linux x86_64
+  - Windows x86_64
+  - Windows ARM64
+
+  If you use some other platform, please help with setting up builds for your platform over at [@lydell/node-pty](https://github.com/lydell/node-pty)!
+
+- Workaround: Node.js has started work towards using [io_uring](https://en.wikipedia.org/wiki/Io_uring) on Linux, which is supposed to improve performance, but unfortunately causes a [bug in the underlying node-pty library](https://github.com/microsoft/node-pty/issues/630), which can cause [commands to exit unexpectedly](https://github.com/lydell/run-pty/issues/45) (due a signal), or can cause [100 % CPU usage](https://github.com/lydell/run-pty/issues/53). run-pty now disables `io_uring`, by setting the [UV_USE_IO_URING](https://nodejs.org/docs/latest-v21.x/api/cli.html#uv_use_io_uringvalue) environment variable to `0`. (You can still set `UV_USE_IO_URING=1` yourself to force `io_uring`.) Note that:
+
+  - That environment variable is implemented by a dependency of Node.js and may be removed in future versions of Node.js. They provide no stability guarantees for the behavior of this environment variable. This means that even with the workaround added by run-pty, you might get `io_uring` enabled in future versions of Node.js anyway. (Hopefully with the bug fixed by then!)
+  - Node.js [20.11.1](https://github.com/nodejs/node/blob/1f193165b990190074faab34f503683148816d39/doc/changelogs/CHANGELOG_V20.md#20.11.1) and [21.6.2](https://github.com/nodejs/node/blob/1f193165b990190074faab34f503683148816d39/doc/changelogs/CHANGELOG_V21.md#21.6.2) disabled `io_uring` by default due to a security issue (making the workaround less important for now).
+
+- Changed: When a command is killed by a signal, run-pty receives exit code 0 and then the signal number. run-pty used to ignore the signal number and exit with code 0. Now, run-pty follows the shell convention of exiting with 128 plus the signal number. You might notice this when using <kbd>ctrl+c</kbd> to exit commands: Now they might show “exit 130”, which is 128+2, where 2 is the SIGINT signal which usually means exit by ctrl+c. (Fun fact: run-pty already supported showing exit code 130 with ⚪️ instead of 🔴, so that exiting a command doesn’t look so much as an error). This is useful for example if a command goes out of memory. The operating system then kills it with signal 9, SIGKILL, which now results in exit code 128+9=137 instead of 0, which is good since the command wasn’t successful. It’s also useful in the above `io_uring` case: Previously the `io_uring` bug could cause commands to unexpectedly exit with code 0 (successful); now they would exit with 128 plus the signal that killed them (unsuccessful), which probably results in 129.
+
+- Improved: There are now slightly better error messages for invalid JSON files.
+
 ### Version 4.1.0 (2023-09-22)
 
 - Added: Just like before, you can press <kbd>↑</kbd> and <kbd>↓</kbd> to select a command. Now, you can now press <kbd>←</kbd> to select the indicator (emoji) of the current command, as well as for all other commands with the same indicator (emoji)! This is the most useful if you’ve created a [JSON file for your commands](https://github.com/lydell/run-pty#advanced-mode), with custom status indicators. For example, maybe you use 🚨 to indicate that a watcher is running but that there’s an error. You can now easily select all commands with the 🚨 indicator, and then press <kbd>enter</kbd> to restart them.
