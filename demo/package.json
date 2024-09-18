@@ -9,6 +9,6 @@
   "devDependencies": {
     "nodemon": "3.1.0",
     "run-pty": "file:..",
-    "vite": "5.1.7"
+    "vite": "5.2.14"
   }
 }
