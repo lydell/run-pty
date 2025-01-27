@@ -211,7 +211,7 @@ Another example: Let’s say you wanted a command to first run `npm install` and
 
 run-pty only executes programs with an array of literal strings as arguments.
 
-If you want a shell, you could do something like this: `run-pty % bash -c 'npm install && npm start'` or `"command": ["bash", "-c", "npm run \"$command\""]`. You can also but that in a file, like `my-script.bash`, and use `run-pty % ./my-script.bash` or `"command": ["./my-script.bash"]`. If you need cross-platform support (or get tired of bash), you could instead use `run-pty % node my-script.js` or `"command": ["node", "my-script.js"]`.
+If you want a shell, you could do something like this: `run-pty % bash -c 'npm install && npm start'` or `"command": ["bash", "-c", "npm run \"$command\""]`. You can also put that in a file, like `my-script.bash`, and use `run-pty % ./my-script.bash` or `"command": ["./my-script.bash"]`. If you need cross-platform support (or get tired of bash), you could instead use `run-pty % node my-script.js` or `"command": ["node", "my-script.js"]`.
 
 ## Credits
 
