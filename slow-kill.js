@@ -1,7 +1,7 @@
 "use strict";
 
-const timeout = Number(process.argv[2]) || 3000;
-const message = process.argv[3] || "";
+const timeout = Number(process.argv[2] ?? "3000");
+const message = process.argv[3] ?? "";
 
 const killSignals = ["SIGHUP", "SIGINT", "SIGTERM"];
 
