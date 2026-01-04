@@ -1,14 +1,13 @@
 {
   "private": true,
   "scripts": {
-    "start": "run-pty % npm run frontend % npm run backend",
+    "start": "run-pty % node --run frontend % node --run backend",
     "start-advanced": "run-pty run-pty.json",
     "frontend": "vite --no-clearScreen",
-    "backend": "nodemon server.js"
+    "backend": "node --watch server.js"
   },
   "devDependencies": {
-    "nodemon": "3.1.0",
     "run-pty": "file:..",
-    "vite": "7.1.11"
+    "vite": "7.3.0"
   }
 }

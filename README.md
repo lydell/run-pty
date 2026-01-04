@@ -8,7 +8,7 @@ It’s like [concurrently] but the command outputs aren’t mixed, and you can r
 
 <kbd>ctrl+c</kbd> kills commands.
 
-A use case is running several watchers. Maybe one or two for frontend (webpack, Parcel, Vite), and one for backend (nodemon, or even some watcher for another programming language).
+A use case is running several watchers. Maybe one or two for frontend (webpack, Parcel, Vite), and one for backend (`node --watch`, or even some watcher for another programming language).
 
 Another use case is running a couple of commands in parallel, using [--auto-exit](#--auto-exit).
 
@@ -17,9 +17,9 @@ Another use case is running a couple of commands in parallel, using [--auto-exit
 ```json
 {
   "scripts": {
-    "start": "run-pty % npm run frontend % npm run backend",
+    "start": "run-pty % node --run frontend % node --run backend",
     "frontend": "parcel watch index.html",
-    "backend": "nodemon server.js"
+    "backend": "node --watch server.js"
   }
 }
 ```
@@ -28,14 +28,14 @@ Another use case is running a couple of commands in parallel, using [--auto-exit
 $ npm start
 
 > start
-> run-pty % npm run frontend % npm run backend
+> run-pty % node --run frontend % node --run backend
 ```
 
 ➡️
 
 ```
-[1]  🟢   npm run frontend
-[2]  🟢   npm run backend
+[1]  🟢   node --run frontend
+[2]  🟢   node --run backend
 
 [1-2]    focus command (or click)
 [ctrl+c] kill all
@@ -45,13 +45,9 @@ $ npm start
 ➡️ <kbd>1</kbd> ️️➡️
 
 ```
-🟢 npm run frontend
+🟢 node --run frontend
 
-> frontend
-> vite --no-clearScreen
-
-
-  VITE v5.1.6  ready in 81 ms
+  VITE v7.3.0  ready in 53 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
@@ -64,20 +60,16 @@ $ npm start
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
-🟢 npm run frontend
+🟢 node --run frontend
 
-> frontend
-> vite --no-clearScreen
-
-
-  VITE v5.1.6  ready in 81 ms
+  VITE v7.3.0  ready in 53 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
   ➜  press h + enter to show help
 ^C
 
-⚪ npm run frontend
+⚪ node --run frontend
 exit 130
 
 [enter]  restart
@@ -88,8 +80,8 @@ exit 130
 ➡️ <kbd>ctrl+z</kbd> ➡️
 
 ```
-[1]  ⚪   exit 130  npm run frontend
-[2]  🟢   npm run backend
+[1]  ⚪   exit 130  node --run frontend
+[2]  🟢   node --run backend
 
 [1-2]    focus command (or click)
 [ctrl+c] kill all
@@ -100,8 +92,8 @@ exit 130
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
-[1]  ⚪  exit 130  npm run frontend
-[2]  ⚪  exit 130  npm run backend
+[1]  ⚪  exit 130  node --run frontend
+[2]  ⚪  exit 130  node --run backend
 
 $ ▊
 ```
@@ -117,7 +109,7 @@ $ ▊
 The above example called `run-pty` like so:
 
 ```
-run-pty % npm run frontend % npm run backend
+run-pty % node --run frontend % node --run backend
 ```
 
 Instead of defining the commands at the command line, you can define them in a JSON file:
@@ -126,12 +118,8 @@ _run-pty.json:_
 
 ```json
 [
-  {
-    "command": ["npm", "run", "frontend"]
-  },
-  {
-    "command": ["npm", "run", "backend"]
-  }
+  { "command": ["node", "--run", "frontend"] },
+  { "command": ["node", "--run", "backend"] }
 ]
 ```
 
@@ -154,14 +142,14 @@ The JSON format lets you specify additional things apart from the command itself
 | defaultStatus | <code>[string,&nbsp;string] &vert; null</code> | `null` | Customize the default status of the command in the dashboard. |
 | killAllSequence | `string` | `"\u0003"` | Sequence to send to the command when using “kill all”. The default is the escape code for <kbd>ctrl+c</kbd>. |
 
-- command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % npm run frontend` on the command line, the JSON version of it is `["npm", "run", "frontend"]`. And `run-pty % echo 'hello world'` would be `["echo", "hello world"]`. See also: [Shell scripting](#shell-scripting).
+- command: On the command line, you let your shell split the commands into arguments. In the JSON format, you need to do it yourself. For example, if you had `run-pty % node --run frontend` on the command line, the JSON version of it is `["node", "--run", "frontend"]`. And `run-pty % echo 'hello world'` would be `["echo", "hello world"]`. See also: [Shell scripting](#shell-scripting).
 
 - title: If you have complicated commands, it might be hard to find what you’re looking for in the dashboard. This lets you use more human readable titles instead. The titles are also shown when you focus a command (before the command itself).
 
 - cwd: This is handy if you need to run some command as if you were in a subdirectory. When focusing a command, the `cwd` is shown below the title/command (unless it’s `"."` (the CWD of the `run-pty` process itself) or equal to the title):
 
   ```
-  🟢 Custom title: npm run something
+  🟢 Custom title: node --run something
   📂 my/cwd/path
   ```
 
@@ -174,7 +162,6 @@ The JSON format lets you specify additional things apart from the command itself
   For each _line_ of output, `run-pty` matches all the regexes from top to bottom. For every match, the status indicator is set to the corresponding value. If several regexes match, the last match wins. [Graphic renditions] are stripped before matching.
 
   This is how the value (`[string, string] | null`) is used:
-
   - The first string is used primarily. The string is drawn in 2 character slots in the terminal – if your string is longer, it will be cut off. Emojis usually need 2 character slots.
   - The second string is used on Windows (except if you use [Windows Terminal] instead of for example cmd.exe) or if the `NO_COLOR` environment variable is set. In `NO_COLOR` mode, [graphic renditions] are stripped as well. So you can use ANSI codes (in either string) to make your experience more colorful while still letting people have monochrome output if they prefer. Unlike the first string, the second string is drawn in **1** character slot in the terminal. (Windows – except the newer [Windows Terminal] – does not support emojis in the terminal very well, and for `NO_COLOR` you might not want colored emojis, so a single character should do.)
   - `null` resets the indicator to the standard 🟢 one (_not_ `defaultStatus`).
@@ -203,15 +190,15 @@ Note: `--auto-exit` is for conveniently running a couple of commands in parallel
 
 ## Shell scripting
 
-Let’s say you run `run-pty % npm run $command` on the command line. If the `command` variable is set to `frontend`, the command actually executed is `run-pty % npm run frontend` – run-pty receives `["%", "npm", "run", "frontend"]` as arguments (and has no idea that `frontend` came from a variable initially). This is all thanks to your shell – which is assumed to be a bash-like shell here; the syntax for Windows’ `cmd.exe` would be different, for example.
+Let’s say you run `run-pty % node --run $command` on the command line. If the `command` variable is set to `frontend`, the command actually executed is `run-pty % node --run frontend` – run-pty receives `["%", "node", "--run", "frontend"]` as arguments (and has no idea that `frontend` came from a variable initially). This is all thanks to your shell – which is assumed to be a bash-like shell here; the syntax for Windows’ `cmd.exe` would be different, for example.
 
-If you try to put that in a [JSON file](#advanced-mode) as `"command": ["npm", "run", "$command"]`, run-pty is going to try to execute `npm` with the literal strings `run` and `$command`, so `npm` receives `["run", "$command"]` as arguments. There’s no shell in play here.
+If you try to put that in a [JSON file](#advanced-mode) as `"command": ["node", "--run", "$command"]`, run-pty is going to try to execute `node` with the literal strings `--run` and `$command`, so `node` receives `["--run", "$command"]` as arguments. There’s no shell in play here.
 
 Another example: Let’s say you wanted a command to first run `npm install` and then run `npm start` to start a server or something. If you run `run-pty % npm install && npm start` from the command line, it actually means “first run `run-pty % npm install` and once that’s done (and succeeded), run `npm start`”, which is not what you wanted. You might try to fix that by using escapes: `run-pty % npm install \&\& npm start`. However, run-pty is then going to execute `npm` with `["install", "&&", "npm", "start"]` as arguments. There’s no shell in play here either.
 
 run-pty only executes programs with an array of literal strings as arguments.
 
-If you want a shell, you could do something like this: `run-pty % bash -c 'npm install && npm start'` or `"command": ["bash", "-c", "npm run \"$command\""]`. You can also put that in a file, like `my-script.bash`, and use `run-pty % ./my-script.bash` or `"command": ["./my-script.bash"]`. If you need cross-platform support (or get tired of bash), you could instead use `run-pty % node my-script.js` or `"command": ["node", "my-script.js"]`.
+If you want a shell, you could do something like this: `run-pty % bash -c 'npm install && npm start'` or `"command": ["bash", "-c", "node --run \"$command\""]`. You can also put that in a file, like `my-script.bash`, and use `run-pty % ./my-script.bash` or `"command": ["./my-script.bash"]`. If you need cross-platform support (or get tired of bash), you could instead use `run-pty % node my-script.js` or `"command": ["node", "my-script.js"]`.
 
 ## Credits
 

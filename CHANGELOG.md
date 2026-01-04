@@ -1,7 +1,6 @@
 ### Version 5.0.0 (2024-03-19)
 
 - Breaking change: The [microsoft/node-pty](https://github.com/microsoft/node-pty) dependency has been replaced by the fork [@lydell/node-pty](https://github.com/lydell/node-pty), which has prebuilt binaries. This means that a C++ compiler and Python is no longer needed to install run-pty. No C++ compilation is done on install, and you don’t need to rebuild when switching Node.js versions. On the other hand, run-pty now only works on the platforms it has prebuilt binaries for:
-
   - macOS x86_64
   - macOS ARM64
   - Linux x86_64
@@ -11,7 +10,6 @@
   If you use some other platform, please help with setting up builds for your platform over at [@lydell/node-pty](https://github.com/lydell/node-pty)!
 
 - Workaround: Node.js has started work towards using [io_uring](https://en.wikipedia.org/wiki/Io_uring) on Linux, which is supposed to improve performance, but unfortunately causes a [bug in the underlying node-pty library](https://github.com/microsoft/node-pty/issues/630), which can cause [commands to exit unexpectedly](https://github.com/lydell/run-pty/issues/45) (due a signal), or can cause [100 % CPU usage](https://github.com/lydell/run-pty/issues/53). run-pty now disables `io_uring`, by setting the [UV_USE_IO_URING](https://nodejs.org/docs/latest-v21.x/api/cli.html#uv_use_io_uringvalue) environment variable to `0`. (You can still set `UV_USE_IO_URING=1` yourself to force `io_uring`.) Note that:
-
   - That environment variable is implemented by a dependency of Node.js and may be removed in future versions of Node.js. They provide no stability guarantees for the behavior of this environment variable. This means that even with the workaround added by run-pty, you might get `io_uring` enabled in future versions of Node.js anyway. (Hopefully with the bug fixed by then!)
   - Node.js [20.11.1](https://github.com/nodejs/node/blob/1f193165b990190074faab34f503683148816d39/doc/changelogs/CHANGELOG_V20.md#20.11.1) and [21.6.2](https://github.com/nodejs/node/blob/1f193165b990190074faab34f503683148816d39/doc/changelogs/CHANGELOG_V21.md#21.6.2) disabled `io_uring` by default due to a security issue (making the workaround less important for now).
 
@@ -65,7 +63,6 @@
   See the readme for more information!
 
 - Improved: Output on Windows.
-
   - [Windows Terminal](https://aka.ms/terminal) is now detected, because it supports emojis and a few more ANSI escape codes than the old cmd.exe. So Windows Terminal users now get nicer-looking output!
 
   - Fixed an issue where output could be cut off. For example, `run-pty % ping localhost` many times printed “eply” instead of “Reply”.

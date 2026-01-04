@@ -34,7 +34,7 @@ const variants = [
   },
 ];
 
-const index = Number(process.argv[2]) || 0;
+const index = Number(process.argv[2] ?? "0");
 
 console.log("Number of variants:", variants.length);
 console.log("Chosen variant (CLI arg 1):", index);

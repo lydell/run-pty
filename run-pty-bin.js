@@ -15,6 +15,7 @@ if (process.platform === "linux" && !("UV_USE_IO_URING" in process.env)) {
         env: { ...process.env, UV_USE_IO_URING: "0" },
       },
     )
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     .on("exit", process.exit);
 } else {
   require("./run-pty.js").__internalRun();

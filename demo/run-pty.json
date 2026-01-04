@@ -1,6 +1,6 @@
 [
   {
-    "command": ["npm", "run", "frontend"],
+    "command": ["node", "--run", "frontend"],
     "title": "Frontend",
     "status": {
       "Internal server error": ["🚨", "E"],
@@ -9,14 +9,11 @@
     "defaultStatus": ["⏳", "S"]
   },
   {
-    "command": ["npm", "run", "backend"],
+    "command": ["node", "--run", "backend"],
     "title": "Backend",
     "status": {
-      "\\[nodemon\\] starting": ["⏳", "S"],
-      "\\[nodemon\\] app crashed - waiting for file changes before starting": [
-        "🚨",
-        "E"
-      ],
+      "Restarting": ["⏳", "S"],
+      "Failed running": ["🚨", "E"],
       "Listening on port": null
     },
     "defaultStatus": ["⏳", "S"]
