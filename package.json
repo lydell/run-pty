@@ -24,7 +24,7 @@
     "xterm"
   ],
   "dependencies": {
-    "@lydell/node-pty": "^1.2.0-beta.3",
+    "@lydell/node-pty": "^1.0.1",
     "tiny-decoders": "^23.0.0"
   },
   "devDependencies": {
