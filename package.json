@@ -1,6 +1,6 @@
 {
   "name": "run-pty",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "author": "Simon Lydell",
   "license": "MIT",
   "description": "Run several commands concurrently. Show output for one command at a time. Kill all at once.",

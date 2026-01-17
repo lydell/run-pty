@@ -1,3 +1,7 @@
+### Version 5.0.1 (2026-01-17)
+
+- Fixed: run-pty no longer “hangs” on Windows. Windows Terminal has introduced something called “Win32 Input Mode”. When that mode is triggered, key presses are no longer encoded the same way. This caused run-pty’s keyboard shortcuts (<kbd>ctrl+z</kbd>, arrow keys, etc.) not to match. run-pty now decodes Win32 Input Mode sequences so that the keyboard shortcuts work again. Thanks to [Travis Collins](https://github.com/tec27)!
+
 ### Version 5.0.0 (2024-03-19)
 
 - Breaking change: The [microsoft/node-pty](https://github.com/microsoft/node-pty) dependency has been replaced by the fork [@lydell/node-pty](https://github.com/lydell/node-pty), which has prebuilt binaries. This means that a C++ compiler and Python is no longer needed to install run-pty. No C++ compilation is done on install, and you don’t need to rebuild when switching Node.js versions. On the other hand, run-pty now only works on the platforms it has prebuilt binaries for:
