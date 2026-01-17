@@ -1591,22 +1591,26 @@ const runInteractively = (commandDescriptions, autoExit) => {
    * @param {{ ignoreAlternateScreen?: boolean }} options
    * @returns {undefined}
    */
-  const printDataWithExtraText = (command, data, options) => {
+  const printDataWithExtraText = (
+    command,
+    data,
+    { ignoreAlternateScreen = false } = {},
+  ) => {
     process.stdout.write(BEGIN_SYNC_UPDATE);
-    printDataWithExtraTextHelper(command, data, options);
+    printDataWithExtraTextHelper(command, data, ignoreAlternateScreen);
     process.stdout.write(END_SYNC_UPDATE);
   };
 
   /**
    * @param {Command} command
    * @param {string} data
-   * @param {{ ignoreAlternateScreen?: boolean }} options
+   * @param {boolean} ignoreAlternateScreen
    * @returns {undefined}
    */
   const printDataWithExtraTextHelper = (
     command,
     data,
-    { ignoreAlternateScreen = false } = {},
+    ignoreAlternateScreen,
   ) => {
     // Note: For a simple log (no complicating cursor movements or anything) we
     // can _always_ show extra text. Otherwise, it’s better not to print
