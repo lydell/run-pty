@@ -865,7 +865,7 @@ const removeGraphicRenditions = (string) =>
 // 5. Modifier key state: Not interesting for us. (It doesn’t matter if the unicode char was produced with a modifier held or not.)
 // 6. Repeat count: Not interesting for us.
 const WIN32_INPUT_MODE_REGEX =
-  /\x1B\[\d*(?:;\d*(?:;(?:(\d*)(?:;([01]?)(?:;\d*(?:;\d+)?)?)?)?)?)?_/g;
+  /\x1B\[\d*(?:;\d*(?:;(?:(\d*)(?:;([01]?)(?:;\d*(?:;\d*)?)?)?)?)?)?_/g;
 
 /**
  * https://dev.to/andylbrummer/taming-windows-terminals-win32-input-mode-in-go-conpty-applications-7gg
