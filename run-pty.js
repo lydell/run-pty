@@ -856,6 +856,39 @@ const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 const removeGraphicRenditions = (string) =>
   string.replace(GRAPHIC_RENDITIONS, "");
 
+// https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md
+// All fields are optional. These are the fields:
+// 1. Virtual key code: Not interesting for us.
+// 2. Virtual scan code: Not interesting for us.
+// 3. Unicode char: Captured by the regex.
+// 4. Keydown: Captured by the regex.
+// 5. Modifier key state: Not interesting for us. (It doesn’t matter if the unicode char was produced with a modifier held or not.)
+// 6. Repeat count: Not interesting for us.
+const WIN32_INPUT_MODE_REGEX =
+  /\x1B\[\d*(?:;\d*(?:;(?:(\d*)(?:;([01]?)(?:;\d*(?:;\d*)?)?)?)?)?)?_/g;
+
+/**
+ * https://dev.to/andylbrummer/taming-windows-terminals-win32-input-mode-in-go-conpty-applications-7gg
+ * > writing PTY output to stdout causes Windows Terminal to enable win32-input-mode for the session
+ * This translates some of the win32-input-mode escape sequences back to “normal” so that run-pty’s
+ * keyboard shortcuts work.
+ * @param {string} data
+ * @returns {string}
+ */
+const convertWin32InputMode = (data) =>
+  data.replace(
+    WIN32_INPUT_MODE_REGEX,
+    /**
+     * @param {string} match
+     * @param {string | undefined} unicodeChar
+     * @param {string | undefined} keyDown
+     */
+    // eslint-disable-next-line @typescript-eslint/no-useless-default-assignment
+    (match, unicodeChar = "0", keyDown = "0") =>
+      // Only process keydown events (keyDown=1), ignore keyup (keyDown=0).
+      keyDown === "1" ? String.fromCodePoint(Number(unicodeChar)) : match,
+  );
+
 /**
  * @param {string} string
  * @param {number} maxLength
@@ -2092,7 +2125,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
 };
 
 /**
- * @param {string} data
+ * @param {string} rawData
  * @param {AutoExit} autoExit
  * @param {Current} current
  * @param {Array<Command>} commands
@@ -2107,7 +2140,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @returns {undefined}
  */
 const onStdin = (
-  data,
+  rawData,
   autoExit,
   current,
   commands,
@@ -2120,6 +2153,7 @@ const onStdin = (
   restartExited,
   restartByIndicator,
 ) => {
+  const data = IS_WINDOWS ? convertWin32InputMode(rawData) : rawData;
   switch (current.tag) {
     case "Command": {
       const command = commands[current.index];
@@ -2154,7 +2188,7 @@ const onStdin = (
                 tag: "Running",
                 terminal: command.status.terminal,
               };
-              command.status.terminal.write(data);
+              command.status.terminal.write(rawData);
               return undefined;
           }
 
