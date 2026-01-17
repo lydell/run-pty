@@ -88,6 +88,9 @@ const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const DISABLE_APPLICATION_CURSOR_KEYS = "\x1B[?1l"; // https://www.vt100.net/docs/vt510-rm/DECCKM.html
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
 const DISABLE_MOUSE = "\x1B[?1000;1006l";
+// https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md
+const BEGIN_SYNC_UPDATE = "\x1B[?2026h";
+const END_SYNC_UPDATE = "\x1B[?2026l";
 const RESET_COLOR = "\x1B[m";
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_LEFT = "\x1B[1K";
@@ -1593,6 +1596,22 @@ const runInteractively = (commandDescriptions, autoExit) => {
     data,
     { ignoreAlternateScreen = false } = {},
   ) => {
+    process.stdout.write(BEGIN_SYNC_UPDATE);
+    printDataWithExtraTextHelper(command, data, ignoreAlternateScreen);
+    process.stdout.write(END_SYNC_UPDATE);
+  };
+
+  /**
+   * @param {Command} command
+   * @param {string} data
+   * @param {boolean} ignoreAlternateScreen
+   * @returns {undefined}
+   */
+  const printDataWithExtraTextHelper = (
+    command,
+    data,
+    ignoreAlternateScreen,
+  ) => {
     // Note: For a simple log (no complicating cursor movements or anything) we
     // can _always_ show extra text. Otherwise, it’s better not to print
     // anything extra in. We don’t want to put something in the middle of the
@@ -1734,7 +1753,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
     current = { tag: "Dashboard", previousRender: currentRender };
     process.stdout.write(
-      HIDE_CURSOR +
+      BEGIN_SYNC_UPDATE +
+        HIDE_CURSOR +
         DISABLE_ALTERNATE_SCREEN +
         DISABLE_APPLICATION_CURSOR_KEYS +
         ENABLE_MOUSE +
@@ -1751,7 +1771,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
           { length: numLinesToClear },
           (_, index) =>
             cursorAbsolute(currentRender.length + index + 1, 1) + CLEAR_RIGHT,
-        ).join(""),
+        ).join("") +
+        END_SYNC_UPDATE,
     );
   };
 
