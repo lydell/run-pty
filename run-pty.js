@@ -67,6 +67,14 @@ const KEY_CODES = {
   esc: "\x1B",
 };
 
+/** @type {Record<string, string>} */
+const WIN32_KEY_CODES = {
+  38: KEY_CODES.up,
+  40: KEY_CODES.down,
+  37: KEY_CODES.left,
+  39: KEY_CODES.right,
+};
+
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 const LABEL_GROUPS = ["123456789", ALPHABET, ALPHABET.toUpperCase()];
 const ALL_LABELS = LABEL_GROUPS.join("");
@@ -857,14 +865,14 @@ const removeGraphicRenditions = (string) =>
 
 // https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md
 // All fields are optional. These are the fields:
-// 1. Virtual key code: Not interesting for us.
+// 1. Virtual key code: Captured by the regex. Needed for the arrow keys.
 // 2. Virtual scan code: Not interesting for us.
-// 3. Unicode char: Captured by the regex.
+// 3. Unicode char: Captured by the regex. Needed for keys that have some sort of char output.
 // 4. Keydown: Captured by the regex.
 // 5. Modifier key state: Not interesting for us. (It doesn’t matter if the unicode char was produced with a modifier held or not.)
 // 6. Repeat count: Not interesting for us.
 const WIN32_INPUT_MODE_REGEX =
-  /\x1B\[\d*(?:;\d*(?:;(?:(\d*)(?:;([01]?)(?:;\d*(?:;\d*)?)?)?)?)?)?_/g;
+  /\x1B\[(\d*)(?:;\d*(?:;(?:(\d*)(?:;([01]?)(?:;\d*(?:;\d*)?)?)?)?)?)?_/g;
 
 /**
  * https://dev.to/andylbrummer/taming-windows-terminals-win32-input-mode-in-go-conpty-applications-7gg
@@ -879,13 +887,18 @@ const convertWin32InputMode = (data) =>
     WIN32_INPUT_MODE_REGEX,
     /**
      * @param {string} match
+     * @param {string | undefined} keyCode
      * @param {string | undefined} unicodeChar
      * @param {string | undefined} keyDown
      */
     // eslint-disable-next-line @typescript-eslint/no-useless-default-assignment
-    (match, unicodeChar = "0", keyDown = "0") =>
+    (match, keyCode = "0", unicodeChar = "0", keyDown = "0") =>
       // Only process keydown events (keyDown=1), ignore keyup (keyDown=0).
-      keyDown === "1" ? String.fromCodePoint(Number(unicodeChar)) : match,
+      keyDown === "1"
+        ? unicodeChar === "0"
+          ? (WIN32_KEY_CODES[keyCode] ?? match)
+          : String.fromCodePoint(Number(unicodeChar))
+        : match,
   );
 
 /**
