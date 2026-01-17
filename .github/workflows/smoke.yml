@@ -1,4 +1,4 @@
-name: CI
+name: Smoke test
 
 on:
   push:
@@ -7,13 +7,20 @@ on:
   pull_request:
 
 jobs:
-  build:
+  smoke:
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        os: [ubuntu-latest]
-        node-version: [24]
+        os:
+          [
+            ubuntu-latest,
+            ubuntu-24.04-arm,
+            macOS-latest,
+            macos-15-intel,
+            windows-latest,
+          ]
+        node-version: [22, 24]
 
     steps:
       - uses: actions/checkout@v6
@@ -31,4 +38,4 @@ jobs:
       - if: steps.cache-node_modules.outputs.cache-hit != 'true'
         run: npm ci --no-audit
 
-      - run: node --run test
+      - run: node --run auto-exit
