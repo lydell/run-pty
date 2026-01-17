@@ -1,3 +1,9 @@
+### Version 6.0.0 (2026-01-17)
+
+- Breaking change: Node.js 20 or newer is now required.
+- Improved: run-pty now uses [Synchronized Output](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md).
+- Improved: The [@lydell/node-pty](https://github.com/lydell/node-pty) dependency (which these days is just a re-packaging of [microsoft/node-pty](https://github.com/microsoft/node-pty)) has been updated with lots of improvements from the original `node-pty` package.
+
 ### Version 5.0.1 (2026-01-17)
 
 - Fixed: run-pty no longer “hangs” on Windows. Windows Terminal has introduced something called “Win32 Input Mode”. When that mode is triggered, key presses are no longer encoded the same way. This caused run-pty’s keyboard shortcuts (<kbd>ctrl+z</kbd>, arrow keys, etc.) not to match. run-pty now decodes Win32 Input Mode sequences so that the keyboard shortcuts work again. Thanks to [Travis Collins](https://github.com/tec27)!
