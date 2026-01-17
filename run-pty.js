@@ -439,10 +439,6 @@ const drawDashboard = ({
 
   const label = summarizeLabels(commands.map((command) => command.label));
 
-  // Clicks might be supported in Windows 11, but not Windows 10.
-  // https://github.com/microsoft/terminal/issues/376
-  const click = IS_WINDOWS ? "" : ` ${dim("(or click)")}`;
-
   const enter =
     selection.tag === "Keyboard"
       ? `${shortcut(KEYS.enter)} focus selected${getPid(
@@ -492,7 +488,7 @@ const drawDashboard = ({
   return `
 ${finalLines}
 
-${shortcut(label)} focus command${click}
+${shortcut(label)} focus command ${dim("(or click)")}
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(navigationKeys)} move selection
 ${enter}
