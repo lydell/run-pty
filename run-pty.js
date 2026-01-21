@@ -803,7 +803,7 @@ const NOT_SIMPLE_LOG_ESCAPE = RegExp(
 const ESCAPES_REQUEST =
   /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);\?(?:\x07|\x1B\\))/g;
 const ESCAPES_RESPONSE =
-  /(\x1B\[(?:\??\d+;\d+R|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);[^\x07\x1B]+(?:\x07|\x1B\\))/g;
+  /(\x1B\[(?:\??\d+;\d+(?:;\d+)?R|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);[^\x07\x1B]+(?:\x07|\x1B\\))/g;
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
 const CONPTY_CURSOR_MOVE = /\x1B\[\d+;1H/;
 const CONPTY_CURSOR_MOVE_REPLACEMENT = "\n\n";
