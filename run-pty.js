@@ -1596,22 +1596,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
     data,
     { ignoreAlternateScreen = false } = {},
   ) => {
-    process.stdout.write(BEGIN_SYNC_UPDATE);
-    printDataWithExtraTextHelper(command, data, ignoreAlternateScreen);
-    process.stdout.write(END_SYNC_UPDATE);
-  };
-
-  /**
-   * @param {Command} command
-   * @param {string} data
-   * @param {boolean} ignoreAlternateScreen
-   * @returns {undefined}
-   */
-  const printDataWithExtraTextHelper = (
-    command,
-    data,
-    ignoreAlternateScreen,
-  ) => {
     // Note: For a simple log (no complicating cursor movements or anything) we
     // can _always_ show extra text. Otherwise, it’s better not to print
     // anything extra in. We don’t want to put something in the middle of the
@@ -1623,9 +1607,14 @@ const runInteractively = (commandDescriptions, autoExit) => {
       // use `RESET_COLOR`, we also have to use `SAVE_CURSOR` and
       // `RESTORE_CURSOR` to restore the current colors when done.
       process.stdout.write(
-        `${SAVE_CURSOR}${cursorDown(
-          1,
-        )}${RESET_COLOR}${CLEAR_LEFT}${CLEAR_DOWN}${RESTORE_CURSOR}`,
+        BEGIN_SYNC_UPDATE +
+          SAVE_CURSOR +
+          cursorDown(1) +
+          RESET_COLOR +
+          CLEAR_LEFT +
+          CLEAR_DOWN +
+          RESTORE_CURSOR +
+          END_SYNC_UPDATE,
       );
       extraTextPrinted = false;
     }
@@ -1666,6 +1655,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
         // https://github.com/microsoft/terminal/pull/3271/files#diff-6d7a2ad03ef14def98192607612a235f881368c3828b3b732abdf8f8ecf9b03bR4322
         process.stdout.write(
           data +
+            BEGIN_SYNC_UPDATE +
             (isBadWindows ? "\n" : "\x1BD").repeat(numLines) +
             cursorUp(numLines) +
             SAVE_CURSOR +
@@ -1673,7 +1663,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
             "\n".repeat(1) +
             CLEAR_DOWN +
             extraText +
-            RESTORE_CURSOR,
+            RESTORE_CURSOR +
+            END_SYNC_UPDATE,
         );
         extraTextPrinted = true;
       } else {
@@ -1708,6 +1699,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
         process.stdout.write(
           data +
+            BEGIN_SYNC_UPDATE +
             HIDE_CURSOR +
             RESET_COLOR +
             disableAlternateScreen +
@@ -1715,7 +1707,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
             newlines +
             (command.status.tag === "Waiting"
               ? waitingText(commands)
-              : exitText(commands, command, command.status, autoExit)),
+              : exitText(commands, command, command.status, autoExit)) +
+            END_SYNC_UPDATE,
         );
 
         extraTextPrinted = false;
