@@ -89,6 +89,7 @@ function fakeCommand(item, index = 0) {
     unfinishedEscapeBuffer: "",
     onData: () => notCalled("onData"),
     onRequest: () => notCalled("onRequest"),
+    onSynchronizedOutputChange: () => notCalled("onSynchronizedOutputChange"),
     onExit: () => notCalled("onExit"),
     pushHistory: () => notCalled("pushHistory"),
     start: () => notCalled("start"),

@@ -91,6 +91,7 @@ const DISABLE_MOUSE = "\x1B[?1000;1006l";
 // https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md
 const BEGIN_SYNC_UPDATE = "\x1B[?2026h";
 const END_SYNC_UPDATE = "\x1B[?2026l";
+const SYNC_UPDATE_TIMEOUT = 1000;
 const RESET_COLOR = "\x1B[m";
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_LEFT = "\x1B[1K";
@@ -800,8 +801,9 @@ const NOT_SIMPLE_LOG_ESCAPE = RegExp(
 // - t: Report window position, size, title etc.
 // - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
 // - ]4;NUM;?: Report color NUM in the palette.
+// - `ESCAPES_REQUEST` also matches `BEGIN_SYNC_UPDATE` and `END_SYNC_UPDATE` at the end.
 const ESCAPES_REQUEST =
-  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);\?(?:\x07|\x1B\\))/g;
+  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);\?(?:\x07|\x1B\\)|\x1B\[\?2026[hl])/g;
 const ESCAPES_RESPONSE =
   /(\x1B\[(?:\??\d+;\d+(?:;\d+)?R|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);[^\x07\x1B]+(?:\x07|\x1B\\))/g;
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
@@ -1240,6 +1242,7 @@ class Command {
       commandDescription: CommandDescription,
       onData: (data: string, statusFromRulesChanged: boolean) => undefined,
       onRequest: (data: string) => undefined,
+      onSynchronizedOutputChange: (data: string) => undefined,
       onExit: (exitCode: number) => undefined,
      }} commandInit
    */
@@ -1256,6 +1259,7 @@ class Command {
     },
     onData,
     onRequest,
+    onSynchronizedOutputChange,
     onExit,
   }) {
     const formattedCommand = commandToPresentationName([file, ...args]);
@@ -1276,6 +1280,7 @@ class Command {
           : `${bold(title)}: ${formattedCommand}`;
     this.onData = onData;
     this.onRequest = onRequest;
+    this.onSynchronizedOutputChange = onSynchronizedOutputChange;
     this.onExit = onExit;
     this.addHistoryStart = addHistoryStart;
     this.isSimpleLog = true;
@@ -1373,6 +1378,8 @@ class Command {
             const statusFromRulesChanged = this.pushHistory(part);
             this.onData(part, statusFromRulesChanged);
           }
+        } else if (part === BEGIN_SYNC_UPDATE || part === END_SYNC_UPDATE) {
+          this.onSynchronizedOutputChange(part);
         } else {
           this.onRequest(part);
         }
@@ -1584,6 +1591,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
   let extraTextPrinted = false;
+  /** @type {number | undefined} */
+  let inSynchronizedOutputModeSince = undefined;
 
   /**
    * @param {Command} command
@@ -1632,6 +1641,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
       const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
       if (
         command.isSimpleLog &&
+        (inSynchronizedOutputModeSince === undefined ||
+          Date.now() - inSynchronizedOutputModeSince > SYNC_UPDATE_TIMEOUT) &&
         (!isBadWindows ||
           removeGraphicRenditions(getLastLine(command.history)) === "")
       ) {
@@ -2000,6 +2011,30 @@ const runInteractively = (commandDescriptions, autoExit) => {
           requests.push({ commandIndex: index, data });
           handleNextRequest();
           return undefined;
+        },
+        onSynchronizedOutputChange: (data) => {
+          switch (current.tag) {
+            case "Command":
+              if (current.index === index) {
+                const command = commands[index];
+                switch (command.status.tag) {
+                  case "Running":
+                  case "Killing":
+                    inSynchronizedOutputModeSince =
+                      data === BEGIN_SYNC_UPDATE ? Date.now() : undefined;
+                    printDataWithExtraText(command, data);
+                    return undefined;
+                  case "Waiting":
+                  case "Exit":
+                    throw new Error(
+                      `Received unexpected synchronized output change from ${command.status.tag} pty for: ${command.title}\n${JSON.stringify(data)}`,
+                    );
+                }
+              }
+              return undefined;
+            case "Dashboard":
+              return undefined;
+          }
         },
         onExit: () => {
           // Exit the whole program if all commands have exited.
@@ -2479,6 +2514,7 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
         }
         return undefined;
       },
+      onSynchronizedOutputChange: () => undefined,
       onExit: (exitCode) => {
         const numRunning = commands.filter(
           (command) => "terminal" in command.status,
