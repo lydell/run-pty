@@ -205,16 +205,6 @@ If you want a shell, you could do something like this: `run-pty % bash -c 'npm i
 - [microsoft/node-pty] does all the heavy lifting of running the commands. But it’s actually the fork [@lydell/node-pty] that is used. The only difference is that it has prebuilt binaries.
 - [apiel/run-screen] was the inspiration for this tool.
 
-## iTerm2 flicker
-
-[iTerm2] has a bug where the window flickers when clearing the screen without GPU rendering: <https://gitlab.com/gnachman/iterm2/-/issues/7677>
-
-GPU rendering seems to be enabled by default, as long as your computer is connected to power.
-
-You can enable GPU rendering always by toggling “Preferences > General > Magic > GPU Rendering + Advanced GPU Settings… > Disable GPU rendering when disconnected from power.”
-
-run-pty tries to avoid clearing the screen and only redraw lines that have changed, but there might still be occasional flicker. Hopefully the iTerm2 developers will improve this some time. It does not happen in the standard Terminal app.
-
 ## License
 
 [MIT](LICENSE).
