@@ -1,3 +1,16 @@
+### Version 6.0.1 (2026-01-31)
+
+Version 6.0.0 started using [Synchronized Output](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md). For example, the dashboard is drawn/updated in one synchronous go to avoid a half-finished state being visible.
+
+This version improves support for synchronized output in the commands that you run with run-pty. If a command starts a synchronized output, run-pty now won’t try to draw its keyboard shortcuts below the cursor:
+
+```
+[ctrl+c] kill (pid 12345)
+[ctrl+z] dashboard
+```
+
+run-pty will instead wait for the command to end its synchronized output before doing that. There is no need for run-pty to draw its thing during a synchronized output, because it won’t be visible anyway. And since run-pty uses synchronized output itself, there is no risk that run-pty interrupts the synchronized rendering of the command.
+
 ### Version 6.0.0 (2026-01-17)
 
 - Breaking change: Node.js 20 or newer is now required.
