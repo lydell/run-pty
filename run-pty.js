@@ -1503,7 +1503,7 @@ class Command {
               const clearAll = match[1] !== undefined;
               const clearDown = match[2] !== undefined;
               if (clearAll) {
-                this.history = "";
+                this.history = match.input.slice(match.index + match[0].length);
                 this.isSimpleLog = true;
               } else {
                 this.isSimpleLog = clearDown;
