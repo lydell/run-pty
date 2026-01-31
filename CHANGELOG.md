@@ -1,3 +1,9 @@
+### Version 6.0.2 (2026-01-31)
+
+This version fixes a bug since v2.3.0 which included this improvement: “History is cleared if the command clears the screen including the scrollback buffer.” Turns out it cleared not only the history, but also any text right after the screen clearing escapes which was received at the same time. This resulted in lost output. This was only noticeable if this happened while you were in the dashboard, and then switched to the command. You might have noticed this occasionally when focusing a command, that a line of two seemed missing.
+
+The bug is now fixed, by clearing the history but keeping any text right after the screen clearing escapes.
+
 ### Version 6.0.1 (2026-01-31)
 
 Version 6.0.0 started using [Synchronized Output](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md). For example, the dashboard is drawn/updated in one synchronous go to avoid a half-finished state being visible.
