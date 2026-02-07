@@ -2,7 +2,7 @@
 
 `run-pty` is a command line tool that lets you run several commands _concurrently_ and _interactively._ Show output for one command at a time. Kill all at once.
 
-It’s like [concurrently] but the command outputs aren’t mixed, and you can restart commands individually and interact with them. I bet you can do the same with [tmux] if you – and your team mates – feel like installing and learning it. In `bash` you can use `command1 & command2` together with `fg`, `bg`, `jobs` and <kbd>ctrl+z</kbd> to achieve a similar result, but run-pty tries to be easier to use, and cross-platform.
+It’s like [concurrently] but the command outputs aren’t mixed, colors are preserved, and you can restart commands individually and interact with them. I bet you can do the same with [tmux] if you – and your team mates – feel like installing and learning it. In `bash` you can use `command1 & command2` together with `fg`, `bg`, `jobs` and <kbd>ctrl+z</kbd> to achieve a similar result, but run-pty tries to be easier to use, and cross-platform.
 
 <kbd>ctrl+z</kbd> shows the _dashboard,_ which gives you an overview of all your running commands and lets you switch between them.
 
@@ -104,6 +104,22 @@ $ ▊
 
 `npx run-pty --help`
 
+## The name run-pty
+
+**Run** commands in a [**PTY**](https://unix.stackexchange.com/questions/21147/what-are-pseudo-terminals-pty-tty).
+
+### More on PTYs
+
+If you run `git log` you’ll see colorful output, and if the git history is long enough, the output will be in a pager (letting you show the history piece by piece, interactively, instead of printing it all at once). But if you run `git log | cat`, suddenly all colors are gone and the pager too.
+
+That shows how programs can detect if they are connected to a terminal, or to another program. The idea is that for things like `git log | grep fix` you don’t want the hidden color escape codes, or the pager, from being in the way from your `grep` search.
+
+If you use the default way of starting a child process in most programming languages, like `child_process.spawn("git", ["log"])` in Node.js, the program your are starting is going to detect that it isn’t connected to a terminal, just the same as with piping to `cat`. Usually that makes sense, because you probably wanted the output of the program as a plain string that you then parse. But for a tool like run-pty, that’s not what we want.
+
+Many programs have ways of forcing colors. For example, `git log --color=always | cat` is going to be printed in color. But having to configure that for every program is annoying.
+
+Luckily, there is a solution to this problem: PTY, or pseudoterminal. It’s a way of having the cake and eating it too. You can spawn a child process and get its output, but it’ll think that it’s running in a terminal, so you get all colors and interactivity as if you had run it in a real terminal.
+
 ## Advanced mode
 
 The above example called `run-pty` like so:
@@ -202,7 +218,7 @@ If you want a shell, you could do something like this: `run-pty % bash -c 'npm i
 
 ## Credits
 
-- [microsoft/node-pty] does all the heavy lifting of running the commands. But it’s actually the fork [@lydell/node-pty] that is used. The only difference is that it has prebuilt binaries.
+- [microsoft/node-pty] does all the heavy lifting of running the commands. But it’s actually the fork [@lydell/node-pty] that is used. The only difference is that it has a smaller npm package.
 - [apiel/run-screen] was the inspiration for this tool.
 
 ## License
@@ -211,7 +227,7 @@ If you want a shell, you could do something like this: `run-pty % bash -c 'npm i
 
 [@lydell/node-pty]: https://github.com/lydell/node-pty
 [apiel/run-screen]: https://github.com/apiel/run-screen
-[concurrently]: https://github.com/kimmobrunfeldt/concurrently
+[concurrently]: https://github.com/open-cli-tools/concurrently
 [gnu parallel]: https://www.gnu.org/software/parallel/
 [graphic renditions]: https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
 [iterm2]: https://www.iterm2.com/
