@@ -1426,8 +1426,9 @@ class Command {
   kill(killMode) {
     const { restartAfterKill } = killMode;
     switch (this.status.tag) {
-      case "Running":
-        this.status = {
+      case "Running": {
+        /** @type {Extract<Status, { tag: "Killing" }>} */
+        const killingStatus = {
           tag: "Killing",
           terminal: this.status.terminal,
           slow: false,
@@ -1435,23 +1436,26 @@ class Command {
           sentSignals: [],
           restartAfterKill,
         };
+        this.status = killingStatus;
         setTimeout(() => {
-          if (this.status.tag === "Killing") {
-            this.status.slow = true;
+          // Only if it is still the same kill (not killed again after a restart).
+          if (this.status === killingStatus) {
+            killingStatus.slow = true;
             // Ugly way to redraw:
             this.onData("", false);
           }
         }, SLOW_KILL);
         switch (killMode.tag) {
           case "KillAllSequence":
-            this.status.terminal.write(this.killAllSequence);
+            killingStatus.terminal.write(this.killAllSequence);
             break;
           case "Signal":
-            killGroup(this.status.terminal, killMode.signal);
-            this.status.sentSignals.push(killMode.signal);
+            killGroup(killingStatus.terminal, killMode.signal);
+            killingStatus.sentSignals.push(killMode.signal);
             break;
         }
         return undefined;
+      }
 
       case "Killing": {
         switch (killMode.tag) {
