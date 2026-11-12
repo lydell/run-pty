@@ -1444,11 +1444,7 @@ class Command {
           this.status.lastKillPress !== undefined &&
           now - this.status.lastKillPress <= DOUBLE_PRESS
         ) {
-          if (IS_WINDOWS) {
-            this.status.terminal.kill();
-          } else {
-            this.status.terminal.kill("SIGKILL");
-          }
+          forceKill(this.status.terminal);
         } else {
           this.status.terminal.write(this.killAllSequence);
         }
@@ -2591,6 +2587,27 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
 };
 
 /**
+ * `terminal.kill("SIGKILL")` is usually enough. If the command has started
+ * subprocesses, the kernel is supposed to send SIGHUP to them. However, if a
+ * subprocess is stuck in an infinite loop, it might survive (on macOS at least).
+ * So try to kill the whole process group first (negative PID).
+ *
+ * @param {import("@lydell/node-pty").IPty} terminal
+ * @returns {void}
+ */
+const forceKill = (terminal) => {
+  if (IS_WINDOWS) {
+    terminal.kill();
+    return;
+  }
+  try {
+    process.kill(-terminal.pid, "SIGKILL");
+  } catch {
+    terminal.kill("SIGKILL");
+  }
+};
+
+/**
  * @param {Array<Command>} commands
  * @param {() => void} killAll
  * @returns {void}
@@ -2617,11 +2634,7 @@ const setupSignalHandlers = (commands, killAll) => {
       console.error(error);
       for (const command of commands) {
         if ("terminal" in command.status) {
-          if (IS_WINDOWS) {
-            command.status.terminal.kill();
-          } else {
-            command.status.terminal.kill("SIGKILL");
-          }
+          forceKill(command.status.terminal);
         }
       }
       process.exit(1);
