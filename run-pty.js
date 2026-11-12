@@ -12,9 +12,14 @@ const Codec = require("tiny-decoders");
  * @typedef {
     | { tag: "Waiting" }
     | { tag: "Running", terminal: import("@lydell/node-pty").IPty }
-    | { tag: "Killing", terminal: import("@lydell/node-pty").IPty, slow: boolean, lastKillPress: number | undefined, restartAfterKill: boolean }
+    | { tag: "Killing", terminal: import("@lydell/node-pty").IPty, slow: boolean, lastKillPress: number | undefined, sentSignals: Array<string>, restartAfterKill: boolean }
     | { tag: "Exit", exitCode: number, wasKilled: boolean }
    } Status
+ *
+ * @typedef {
+    | { tag: "KillAllSequence", restartAfterKill: boolean }
+    | { tag: "Signal", signal: string, restartAfterKill: boolean }
+   } KillMode
  *
  * @typedef {
     | { tag: "Command", index: number }
@@ -1415,10 +1420,11 @@ class Command {
   }
 
   /**
-   * @params {{ restartAfterKill?: boolean }} options
+   * @param {KillMode} killMode
    * @returns {undefined}
    */
-  kill({ restartAfterKill = false } = {}) {
+  kill(killMode) {
+    const { restartAfterKill } = killMode;
     switch (this.status.tag) {
       case "Running":
         this.status = {
@@ -1426,6 +1432,7 @@ class Command {
           terminal: this.status.terminal,
           slow: false,
           lastKillPress: undefined,
+          sentSignals: [],
           restartAfterKill,
         };
         setTimeout(() => {
@@ -1435,20 +1442,43 @@ class Command {
             this.onData("", false);
           }
         }, SLOW_KILL);
-        this.status.terminal.write(this.killAllSequence);
+        switch (killMode.tag) {
+          case "KillAllSequence":
+            this.status.terminal.write(this.killAllSequence);
+            break;
+          case "Signal":
+            killGroup(this.status.terminal, killMode.signal);
+            this.status.sentSignals.push(killMode.signal);
+            break;
+        }
         return undefined;
 
       case "Killing": {
-        const now = Date.now();
-        if (
-          this.status.lastKillPress !== undefined &&
-          now - this.status.lastKillPress <= DOUBLE_PRESS
-        ) {
-          forceKill(this.status.terminal);
-        } else {
-          this.status.terminal.write(this.killAllSequence);
+        switch (killMode.tag) {
+          case "KillAllSequence": {
+            const now = Date.now();
+            if (
+              this.status.lastKillPress !== undefined &&
+              now - this.status.lastKillPress <= DOUBLE_PRESS
+            ) {
+              killGroup(this.status.terminal, "SIGKILL");
+            } else {
+              this.status.terminal.write(this.killAllSequence);
+            }
+            this.status.lastKillPress = now;
+            break;
+          }
+          case "Signal":
+            // Receiving the same signal again means that the command did not
+            // exit from it the first time, so force kill.
+            if (this.status.sentSignals.includes(killMode.signal)) {
+              killGroup(this.status.terminal, "SIGKILL");
+            } else {
+              killGroup(this.status.terminal, killMode.signal);
+              this.status.sentSignals.push(killMode.signal);
+            }
+            break;
         }
-        this.status.lastKillPress = now;
         this.status.restartAfterKill = restartAfterKill;
         return undefined;
       }
@@ -1825,9 +1855,10 @@ const runInteractively = (commandDescriptions, autoExit) => {
   };
 
   /**
+   * @param {KillMode} killMode
    * @returns {void}
    */
-  const killAll = () => {
+  const killAll = (killMode) => {
     attemptedKillAll = true;
     hideSelection();
     for (const command of commands) {
@@ -1843,7 +1874,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
       process.exit(autoExit.tag === "AutoExit" ? 1 : 0);
     } else {
       for (const command of notExited) {
-        command.kill();
+        command.kill(killMode);
       }
       // So you can see how killing other commands go:
       switchToDashboard();
@@ -1930,11 +1961,14 @@ const runInteractively = (commandDescriptions, autoExit) => {
         case "Waiting":
           break;
         case "Running":
-          command.kill({ restartAfterKill: true });
+          command.kill({ tag: "KillAllSequence", restartAfterKill: true });
           break;
         case "Killing":
-          command.status.lastKillPress = Date.now(); // Force kill.
-          command.kill({ restartAfterKill: true });
+          command.kill({
+            tag: "Signal",
+            signal: "SIGKILL",
+            restartAfterKill: true,
+          });
           break;
       }
     }
@@ -2150,7 +2184,9 @@ const runInteractively = (commandDescriptions, autoExit) => {
           switchToDashboard,
           switchToCommand,
           setSelection,
-          killAll,
+          () => {
+            killAll({ tag: "KillAllSequence", restartAfterKill: false });
+          },
           restart,
           restartExited,
           restartByIndicator,
@@ -2230,7 +2266,7 @@ const onStdin = (
         case "Killing":
           switch (data) {
             case KEY_CODES.kill:
-              command.kill();
+              command.kill({ tag: "KillAllSequence", restartAfterKill: false });
               return undefined;
 
             case KEY_CODES.dashboard:
@@ -2238,10 +2274,18 @@ const onStdin = (
               return undefined;
 
             default:
-              command.status = {
-                tag: "Running",
-                terminal: command.status.terminal,
-              };
+              // ctrl+c might not exit the command (for example, it clears the
+              // line in REPLs), so typing means it is running again. But if
+              // the command was sent a signal, it is still being killed.
+              if (
+                command.status.tag === "Running" ||
+                command.status.sentSignals.length === 0
+              ) {
+                command.status = {
+                  tag: "Running",
+                  terminal: command.status.terminal,
+                };
+              }
               command.status.terminal.write(rawData);
               return undefined;
           }
@@ -2466,9 +2510,10 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
   let attemptedKillAll = false;
 
   /**
+   * @param {KillMode} killMode
    * @returns {void}
    */
-  const killAll = () => {
+  const killAll = (killMode) => {
     attemptedKillAll = true;
     const notExited = commands.filter(
       (command) => "terminal" in command.status,
@@ -2484,7 +2529,7 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
       process.exit(1);
     } else {
       for (const command of notExited) {
-        command.kill();
+        command.kill(killMode);
         process.stdout.write(
           `${commandTitleOnlyWithIndicator(killingIndicator, command)}\n\n`,
         );
@@ -2587,42 +2632,52 @@ const runNonInteractively = (commandDescriptions, maxParallel) => {
 };
 
 /**
- * `terminal.kill("SIGKILL")` is usually enough. If the command has started
- * subprocesses, the kernel is supposed to send SIGHUP to them. However, if a
- * subprocess is stuck in an infinite loop, it might survive (on macOS at least).
- * So try to kill the whole process group first (negative PID).
+ * Send `signal` to the whole process group (negative PID) of the command, not
+ * just the top process. That reaches subprocesses too, just like ctrl+c in a
+ * terminal does. (For SIGKILL, the kernel is supposed to send SIGHUP to the
+ * subprocesses when the top process dies, but a subprocess stuck in an infinite
+ * loop might survive that – on macOS at least.)
+ *
+ * On Windows, there are no signals, so the command is always killed hard.
  *
  * @param {import("@lydell/node-pty").IPty} terminal
+ * @param {string} signal
  * @returns {void}
  */
-const forceKill = (terminal) => {
+const killGroup = (terminal, signal) => {
   if (IS_WINDOWS) {
     terminal.kill();
     return;
   }
   try {
-    process.kill(-terminal.pid, "SIGKILL");
+    process.kill(-terminal.pid, signal);
   } catch {
-    terminal.kill("SIGKILL");
+    terminal.kill(signal);
   }
 };
 
 /**
  * @param {Array<Command>} commands
- * @param {() => void} killAll
+ * @param {(killMode: KillMode) => void} killAll
  * @returns {void}
  */
 const setupSignalHandlers = (commands, killAll) => {
-  let lastSignalTimestamp = 0;
-
   // Clean up all commands if someone tries to kill run-pty.
   for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+    let lastSignalTimestamp = 0;
     process.on(signal, () => {
       const now = Date.now();
       // When running via `npm run` or `npx`, one often gets two SIGINTs in a row
-      // when pressing ctrl+c. https://stackoverflow.com/a/60273973
+      // when pressing ctrl+c, since npm forwards signals to its child.
+      // https://stackoverflow.com/a/60273973
       if (now - lastSignalTimestamp > 10) {
-        killAll();
+        // On Windows, `killGroup` can only kill hard, so use the kill all
+        // sequence (ctrl+c) to give commands a chance to exit gracefully.
+        killAll(
+          IS_WINDOWS
+            ? { tag: "KillAllSequence", restartAfterKill: false }
+            : { tag: "Signal", signal, restartAfterKill: false },
+        );
       }
       lastSignalTimestamp = now;
     });
@@ -2634,7 +2689,7 @@ const setupSignalHandlers = (commands, killAll) => {
       console.error(error);
       for (const command of commands) {
         if ("terminal" in command.status) {
-          forceKill(command.status.terminal);
+          killGroup(command.status.terminal, "SIGKILL");
         }
       }
       process.exit(1);
