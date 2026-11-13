@@ -9,6 +9,7 @@ import runPty from "../run-pty";
 const {
   __forTests: {
     ALL_LABELS,
+    appendHistory,
     ESCAPES_REQUEST,
     ESCAPES_RESPONSE,
     commandToPresentationName,
@@ -1004,6 +1005,43 @@ describe("summarize labels", () => {
     expect(testLabels(60)).toBe("1-9/a-z/A-Y");
     expect(testLabels(61)).toBe("1-9/a-z/A-Z");
     expect(testLabels(62)).toBe("1-9/a-z/A-Z");
+  });
+});
+
+describe("append history", () => {
+  const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
+
+  test("appends", () => {
+    expect(appendHistory("a\n", "b\n", 100)).toBe("a\nb\n");
+  });
+
+  test("keeps only what comes after the last clear", () => {
+    expect(appendHistory("a\n", `b\n${CLEAR}c\n${CLEAR}d\n`, 100)).toBe("d\n");
+  });
+
+  test("clear split between parts", () => {
+    for (let i = 1; i < CLEAR.length; i++) {
+      const history = appendHistory("a\n", `b\n${CLEAR.slice(0, i)}`, 100);
+      expect(appendHistory(history, `${CLEAR.slice(i)}c\n`, 100)).toBe("c\n");
+    }
+  });
+
+  test("clear at the very end", () => {
+    expect(appendHistory("a\n", `b\n${CLEAR}`, 100)).toBe("");
+  });
+
+  test("trimming does not start in the middle of an escape", () => {
+    const history = "\x1B[38;5;2mgreen\x1B[0m\nnext line\n";
+    // Cut in the middle of the color escape.
+    expect(appendHistory("", history, history.length - 3)).toBe(
+      "\x1B[0m\nnext line\n",
+    );
+  });
+
+  test("trimming does not start in the middle of a line", () => {
+    expect(appendHistory("first line\n", "second line\n", 15)).toBe(
+      "\nsecond line\n",
+    );
   });
 });
 

@@ -131,6 +131,44 @@ const CLEAR_REGEX = (() => {
 
 const CLEAR_REGEX_GLOBAL = RegExp(CLEAR_REGEX.source, "g");
 
+// The longest match of `CLEAR_REGEX` is `\x1B[2J\x1B[3J\x1B[1;1H` (14 chars).
+const CLEAR_MAX_LENGTH = 20;
+
+/**
+ * Append `part` to `history`. If the command cleared the screen (including
+ * the scrollback), there’s no need to keep anything before that. If the history
+ * gets too long, remove the start of it.
+ *
+ * @param {string} history
+ * @param {string} part
+ * @param {number} maxHistory
+ * @returns {string}
+ */
+const appendHistory = (history, part, maxHistory) => {
+  let result = history + part;
+
+  // The escapes for clearing might be split between the previous part and
+  // this one, so look back a bit.
+  const lookBackStart = Math.max(0, history.length - CLEAR_MAX_LENGTH);
+  for (const match of result
+    .slice(lookBackStart)
+    .matchAll(CLEAR_REGEX_GLOBAL)) {
+    result = match.input.slice(match.index + match[0].length);
+  }
+
+  if (result.length > maxHistory) {
+    result = result.slice(-maxHistory);
+    // Don’t start in the middle of an escape (or a line, or a surrogate pair):
+    // Skip to the next newline or escape.
+    const index = result.search(/[\n\x1B]/);
+    if (index !== -1) {
+      result = result.slice(index);
+    }
+  }
+
+  return result;
+};
+
 const waitingIndicator = NO_COLOR
   ? "■"
   : !SUPPORTS_EMOJI
@@ -1514,23 +1552,13 @@ class Command {
         default:
           this.updateStatusFromRules(part);
           if (this.isOnAlternateScreen) {
-            this.historyAlternateScreen += part;
-            if (CLEAR_REGEX.test(this.historyAlternateScreen)) {
-              this.historyAlternateScreen = "";
-            } else {
-              if (this.historyAlternateScreen.length > MAX_HISTORY) {
-                this.historyAlternateScreen =
-                  this.historyAlternateScreen.slice(-MAX_HISTORY);
-              }
-            }
+            this.historyAlternateScreen = appendHistory(
+              this.historyAlternateScreen,
+              part,
+              MAX_HISTORY,
+            );
           } else {
-            this.history += part;
-            for (const match of part.matchAll(CLEAR_REGEX_GLOBAL)) {
-              this.history = match.input.slice(match.index + match[0].length);
-            }
-            if (this.history.length > MAX_HISTORY) {
-              this.history = this.history.slice(-MAX_HISTORY);
-            }
+            this.history = appendHistory(this.history, part, MAX_HISTORY);
           }
       }
     }
@@ -2661,6 +2689,7 @@ module.exports = {
   __internalRun: run,
   __forTests: {
     ALL_LABELS,
+    appendHistory,
     ESCAPES_REQUEST,
     ESCAPES_RESPONSE,
     commandToPresentationName,
