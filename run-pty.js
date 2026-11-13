@@ -2084,6 +2084,24 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   setupSignalHandlers(commands, killAll);
 
+  // When the terminal is closed (such as when closing the terminal window), we
+  // get SIGHUP (see `setupSignalHandlers`), and reading/writing fails with EIO.
+  // Ignore those errors, so that we can finish killing the commands and exit.
+  for (const stream of [process.stdin, process.stdout]) {
+    stream.on("error", (/** @type {NodeJS.ErrnoException} */ error) => {
+      if (error.code !== "EIO") {
+        throw error;
+      }
+    });
+  }
+
+  // `process.stderr` is created lazily on first access. For a TTY, that opens
+  // the terminal device, which hangs forever if the terminal has been closed
+  // (at least on macOS). Node.js accesses `process.stderr` internally when
+  // stdin/stdout is destroyed – which happens when the terminal is closed. So
+  // create it now, while the terminal is still there.
+  void process.stderr;
+
   process.stdin.setRawMode(true);
 
   process.stdin.on("data", (data) => {
@@ -2638,12 +2656,12 @@ const setupSignalHandlers = (commands, killAll) => {
   // Don’t leave running processes behind in case of an unexpected error.
   for (const event of ["uncaughtException", "unhandledRejection"]) {
     process.on(event, (error) => {
-      console.error(error);
       for (const command of commands) {
         if ("terminal" in command.status) {
           killGroup(command.status.terminal, "SIGKILL");
         }
       }
+      console.error(error);
       process.exit(1);
     });
   }
