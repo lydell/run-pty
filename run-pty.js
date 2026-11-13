@@ -751,14 +751,63 @@ const statusText = (
 // https://xfree86.org/current/ctlseqs.html
 //
 // - 6n and ?6n: Report Cursor Position. Reply uses `R` instead of `n`.
-// - t: Report window position, size, title etc.
+// - 11t, 13t, 14t, 15t, 16t, 18t, 19t: Report window state, position, size
+//   etc. Reply is also a `t` escape, but with other numbers (such as 1t or 2t
+//   for 11t). Other `t` escapes, such as 22;2t and 23;2t (save/restore window
+//   title, which Vim does), are not requests – there is no reply.
+// - 20t, 21t: Report icon label and window title. Reply is `]L` and `]l`.
 // - ]10;? and ]11;?: Report foreground/background color. https://unix.stackexchange.com/a/172674
 // - ]4;NUM;?: Report color NUM in the palette.
 // - `ESCAPES_REQUEST` also matches `BEGIN_SYNC_UPDATE` and `END_SYNC_UPDATE` at the end.
+//
+// Note: Terminals might not reply to all requests. For example, many terminals
+// don’t reply to window reports by default. See `REQUEST_TIMEOUT`.
 const ESCAPES_REQUEST =
-  /(\x1B\[(?:\??6n|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);\?(?:\x07|\x1B\\)|\x1B\[\?2026[hl])/g;
+  /(\x1B\[(?:\??6n|(?:1[13-689]|2[01])(?:;\d*)?t)|\x1B\](?:1[01]|4;\d+);\?(?:\x07|\x1B\\)|\x1B\[\?2026[hl])/g;
 const ESCAPES_RESPONSE =
-  /(\x1B\[(?:\??\d+;\d+(?:;\d+)?R|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);[^\x07\x1B]+(?:\x07|\x1B\\))/g;
+  /(\x1B\[(?:\??\d+;\d+(?:;\d+)?R|\d*(?:;\d*){0,2}t)|\x1B\](?:1[01]|4;\d+);[^\x07\x1B]+(?:\x07|\x1B\\)|\x1B\][Ll][^\x07\x1B]*(?:\x07|\x1B\\))/g;
+
+// If the terminal does not reply to a request within this time, give up on it.
+// Otherwise, an unanswered request would block all later requests (from all
+// commands) forever. When giving up, also drop other queued requests of the
+// same kind from the same command, since the terminal most likely won’t reply
+// to those either (some programs ask for all 256 palette colors).
+const REQUEST_TIMEOUT = 1000; // ms
+
+/**
+ * Which kind of request an escape is, or which kind of request a response
+ * escape is a reply to. Used to make sure that a response is for the request
+ * we’re waiting for (and not a late response for a timed out request).
+ *
+ * @param {string} escape
+ * @returns {{ group: "cursor position" | "window" | "color" | "other", id: string }}
+ */
+const requestKind = (escape) => {
+  if (escape.endsWith("n") || escape.endsWith("R")) {
+    return { group: "cursor position", id: "" };
+  }
+  if (escape.endsWith("t") || /^\x1B\][Ll]/.test(escape)) {
+    return { group: "window", id: "" };
+  }
+  const match = /^\x1B\]((?:4;)?\d+);/.exec(escape);
+  return match === null
+    ? { group: "other", id: escape }
+    : { group: "color", id: match[1] };
+};
+
+/**
+ * @param {string} response
+ * @param {string} request
+ * @returns {boolean}
+ */
+const isResponseTo = (response, request) => {
+  const responseKind = requestKind(response);
+  const expectedKind = requestKind(request);
+  return (
+    responseKind.group === expectedKind.group &&
+    responseKind.id === expectedKind.id
+  );
+};
 const CURSOR_POSITION_RESPONSE = /(\x1B\[\??)\d+;\d+R/g;
 const CONPTY_CURSOR_MOVE = /\x1B\[\d+;1H/;
 const CONPTY_CURSOR_MOVE_REPLACEMENT = "\n\n";
@@ -1826,6 +1875,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
   /** @type {Array<{ commandIndex: number, data: string }>} */
   const requests = [];
   let requestInFlight = false;
+  /** @type {NodeJS.Timeout | undefined} */
+  let requestTimeoutId = undefined;
 
   /**
    * @returns {void}
@@ -1837,6 +1888,30 @@ const runInteractively = (commandDescriptions, autoExit) => {
     const request = requests[0];
     process.stdout.write(request.data);
     requestInFlight = true;
+    requestTimeoutId = setTimeout(() => {
+      const { group } = requestKind(request.data);
+      // Keep the first one, so `finishRequest` can remove it.
+      for (let i = requests.length - 1; i >= 1; i--) {
+        const other = requests[i];
+        if (
+          other.commandIndex === request.commandIndex &&
+          requestKind(other.data).group === group
+        ) {
+          requests.splice(i, 1);
+        }
+      }
+      finishRequest();
+    }, REQUEST_TIMEOUT);
+  };
+
+  /**
+   * @returns {void}
+   */
+  const finishRequest = () => {
+    clearTimeout(requestTimeoutId);
+    requests.shift();
+    requestInFlight = false;
+    handleNextRequest();
   };
 
   /** @type {Array<Command>} */
@@ -1984,8 +2059,13 @@ const runInteractively = (commandDescriptions, autoExit) => {
       .toString("utf8")
       .split(ESCAPES_RESPONSE)
       .entries()) {
-      if (index % 2 === 1 && requests.length > 0) {
-        const request = requests[0];
+      const request = requests[0];
+      if (
+        index % 2 === 1 &&
+        requestInFlight &&
+        request !== undefined &&
+        isResponseTo(part, request.data)
+      ) {
         const command = commands[request.commandIndex];
         switch (command.status.tag) {
           case "Running":
@@ -2013,9 +2093,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
           case "Exit":
             break;
         }
-        requests.shift();
-        requestInFlight = false;
-        handleNextRequest();
+        finishRequest();
       } else if (part !== "") {
         onStdin(
           part,
@@ -2583,6 +2661,8 @@ module.exports = {
   __internalRun: run,
   __forTests: {
     ALL_LABELS,
+    ESCAPES_REQUEST,
+    ESCAPES_RESPONSE,
     commandToPresentationName,
     drawDashboard,
     drawSummary,
@@ -2592,6 +2672,7 @@ module.exports = {
     historyStart,
     historyStartRunning,
     parseArgs,
+    isResponseTo,
     runningIndicator,
     summarizeLabels,
     waitingText,

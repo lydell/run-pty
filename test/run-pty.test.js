@@ -9,6 +9,8 @@ import runPty from "../run-pty";
 const {
   __forTests: {
     ALL_LABELS,
+    ESCAPES_REQUEST,
+    ESCAPES_RESPONSE,
     commandToPresentationName,
     drawDashboard,
     drawSummary,
@@ -18,6 +20,7 @@ const {
     historyStart,
     historyStartRunning,
     parseArgs,
+    isResponseTo,
     runningIndicator,
     summarizeLabels,
     waitingText,
@@ -1001,6 +1004,89 @@ describe("summarize labels", () => {
     expect(testLabels(60)).toBe("1-9/a-z/A-Y");
     expect(testLabels(61)).toBe("1-9/a-z/A-Z");
     expect(testLabels(62)).toBe("1-9/a-z/A-Z");
+  });
+});
+
+describe("requests and responses", () => {
+  /**
+   * @param {RegExp} regex
+   * @param {string} string
+   * @returns {Array<string>}
+   */
+  function split(regex, string) {
+    return string.split(regex).filter((_, index) => index % 2 === 1);
+  }
+
+  test("requests", () => {
+    expect(
+      split(
+        ESCAPES_REQUEST,
+        "a\x1B[6nb\x1B[?6nc\x1B[14t\x1B[14;2t\x1B[18t\x1B[21t\x1B]11;?\x07\x1B]4;5;?\x1B\\",
+      ),
+    ).toEqual([
+      "\x1B[6n",
+      "\x1B[?6n",
+      "\x1B[14t",
+      "\x1B[14;2t",
+      "\x1B[18t",
+      "\x1B[21t",
+      "\x1B]11;?\x07",
+      "\x1B]4;5;?\x1B\\",
+    ]);
+  });
+
+  test("window operations without reply are not requests", () => {
+    expect(
+      split(
+        ESCAPES_REQUEST,
+        "\x1B[22;2t\x1B[23;2t\x1B[22;0t\x1B[8;24;80t\x1B[1t\x1B[2t\x1B[t",
+      ),
+    ).toEqual([]);
+  });
+
+  test("responses", () => {
+    expect(
+      split(
+        ESCAPES_RESPONSE,
+        "\x1B[12;1R\x1B[1t\x1B[4;600;800t\x1B]Llabel\x1B\\\x1B]ltitle\x07\x1B]11;rgb:0000/0000/0000\x07",
+      ),
+    ).toEqual([
+      "\x1B[12;1R",
+      "\x1B[1t",
+      "\x1B[4;600;800t",
+      "\x1B]Llabel\x1B\\",
+      "\x1B]ltitle\x07",
+      "\x1B]11;rgb:0000/0000/0000\x07",
+    ]);
+  });
+
+  test("responses match their requests", () => {
+    /** @type {Array<[string, string]>} */
+    const pairs = [
+      ["\x1B[6n", "\x1B[12;1R"],
+      ["\x1B[?6n", "\x1B[?12;1;1R"],
+      ["\x1B[11t", "\x1B[1t"],
+      ["\x1B[14t", "\x1B[4;600;800t"],
+      ["\x1B[20t", "\x1B]Llabel\x1B\\"],
+      ["\x1B[21t", "\x1B]ltitle\x07"],
+      ["\x1B]10;?\x07", "\x1B]10;rgb:ffff/ffff/ffff\x07"],
+      ["\x1B]11;?\x1B\\", "\x1B]11;rgb:0000/0000/0000\x1B\\"],
+      ["\x1B]4;5;?\x07", "\x1B]4;5;rgb:cdcd/0000/cdcd\x07"],
+    ];
+    for (const [request, response] of pairs) {
+      expect(isResponseTo(response, request)).toBe(true);
+    }
+  });
+
+  test("responses don’t match other requests", () => {
+    expect(isResponseTo("\x1B[12;1R", "\x1B[14t")).toBe(false);
+    expect(
+      isResponseTo("\x1B]11;rgb:0000/0000/0000\x07", "\x1B]10;?\x07"),
+    ).toBe(false);
+    expect(
+      isResponseTo("\x1B]4;5;rgb:cdcd/0000/cdcd\x07", "\x1B]4;6;?\x07"),
+    ).toBe(false);
+    expect(isResponseTo("\x1B[4;600;800t", "\x1B]11;?\x07")).toBe(false);
   });
 });
 
