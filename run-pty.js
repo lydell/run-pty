@@ -857,9 +857,13 @@ const respondToRequestFake = (request) =>
 // the cursor up, and then the other half. By buffering the escape code, we can
 // pretend that escape codes always come in full in the rest of the code.
 //
+// Strings (OSC `ESC ]`, DCS `ESC P`, APC `ESC _`, PM `ESC ^` and SOS `ESC X`)
+// are buffered until terminated by BEL or ST (`ESC \`). The ESC of ST can come
+// in one chunk and the backslash in the next.
+//
 // Note: The terminals I’ve tested with seem to wait forever for the end of
 // escape sequences – they don’t have a timeout or anything.
-const UNFINISHED_ESCAPE = /\x1B(?:\[[0-?]*[ -/]*|\][^\x1B\x07]*)?$/;
+const UNFINISHED_ESCAPE = /\x1B(?:\[[0-?]*[ -/]*|[\]P_^X][^\x1B\x07]*\x1B?)?$/;
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
