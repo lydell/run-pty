@@ -896,9 +896,13 @@ const respondToRequestFake = (request) =>
 // are buffered until terminated by BEL or ST (`ESC \`). The ESC of ST can come
 // in one chunk and the backslash in the next.
 //
+// Escapes with intermediate bytes (such as `ESC ( B`) are buffered until the
+// final byte.
+//
 // Note: The terminals I’ve tested with seem to wait forever for the end of
 // escape sequences – they don’t have a timeout or anything.
-const UNFINISHED_ESCAPE = /\x1B(?:\[[0-?]*[ -/]*|[\]P_^X][^\x1B\x07]*\x1B?)?$/;
+const UNFINISHED_ESCAPE =
+  /\x1B(?:\[[0-?]*[ -/]*|[\]P_^X][^\x1B\x07]*\x1B?|[ -/]+)?$/;
 
 const GRAPHIC_RENDITIONS = /(\x1B\[(?:\d+(?:;\d+)*)?m)/g;
 
@@ -2702,6 +2706,7 @@ module.exports = {
     historyStartRunning,
     parseArgs,
     isResponseTo,
+    UNFINISHED_ESCAPE,
     runningIndicator,
     summarizeLabels,
     waitingText,

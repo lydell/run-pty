@@ -22,6 +22,7 @@ const {
     historyStartRunning,
     parseArgs,
     isResponseTo,
+    UNFINISHED_ESCAPE,
     runningIndicator,
     summarizeLabels,
     waitingText,
@@ -1005,6 +1006,42 @@ describe("summarize labels", () => {
     expect(testLabels(60)).toBe("1-9/a-z/A-Y");
     expect(testLabels(61)).toBe("1-9/a-z/A-Z");
     expect(testLabels(62)).toBe("1-9/a-z/A-Z");
+  });
+});
+
+describe("unfinished escape", () => {
+  /**
+   * @param {string} string
+   * @returns {string | undefined}
+   */
+  function unfinished(string) {
+    return UNFINISHED_ESCAPE.exec(string)?.[0];
+  }
+
+  test("unfinished", () => {
+    expect(unfinished("a\x1B")).toBe("\x1B");
+    expect(unfinished("a\x1B[")).toBe("\x1B[");
+    expect(unfinished("a\x1B[38;5")).toBe("\x1B[38;5");
+    expect(unfinished("a\x1B(")).toBe("\x1B(");
+    expect(unfinished("a\x1B]0;title")).toBe("\x1B]0;title");
+    expect(unfinished("a\x1B]8;;https://example.com\x1B")).toBe(
+      "\x1B]8;;https://example.com\x1B",
+    );
+    expect(unfinished("a\x1BP+q544e")).toBe("\x1BP+q544e");
+    expect(unfinished("a\x1B_payload")).toBe("\x1B_payload");
+  });
+
+  test("finished", () => {
+    expect(unfinished("a\x1B[38;5;2m")).toBeUndefined();
+    expect(unfinished("a\x1B(B")).toBeUndefined();
+    expect(unfinished("a\x1B7")).toBeUndefined();
+    expect(unfinished("a\x1B]0;title\x07")).toBeUndefined();
+    expect(unfinished("a\x1B]0;title\x1B\\")).toBeUndefined();
+    expect(unfinished("a\x1BP+q544e\x1B\\b")).toBeUndefined();
+  });
+
+  test("only the last unfinished escape", () => {
+    expect(unfinished("\x1B]0;title\x07a\x1B")).toBe("\x1B");
   });
 });
 
