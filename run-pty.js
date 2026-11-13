@@ -31,9 +31,6 @@ const IS_WINDOWS = process.platform === "win32";
 const IS_WINDOWS_TERMINAL = "WT_SESSION" in process.env; // https://github.com/microsoft/terminal/issues/1040
 const SUPPORTS_EMOJI = !IS_WINDOWS || IS_WINDOWS_TERMINAL;
 
-// https://github.com/sindresorhus/ansi-escapes/blob/2b3b59c56ff77a2afdee946bff96f1779d10d775/index.js#L5
-const IS_TERMINAL_APP = process.env.TERM_PROGRAM === "Apple_Terminal";
-
 const SLOW_KILL = 100; // ms
 
 // This is apparently what Windows uses for double clicks.
@@ -96,15 +93,10 @@ const DISABLE_MOUSE = "\x1B[?1000;1006l";
 // https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md
 const BEGIN_SYNC_UPDATE = "\x1B[?2026h";
 const END_SYNC_UPDATE = "\x1B[?2026l";
-const SYNC_UPDATE_TIMEOUT = 1000;
 const RESET_COLOR = "\x1B[m";
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
-const CLEAR_LEFT = "\x1B[1K";
 const CLEAR_RIGHT = "\x1B[K";
 const CLEAR_DOWN = "\x1B[J";
-// These save/restore cursor position _and graphic renditions._
-const SAVE_CURSOR = IS_TERMINAL_APP ? "\u001B7" : "\x1B[s";
-const RESTORE_CURSOR = IS_TERMINAL_APP ? "\u001B8" : "\x1B[u";
 
 const CLEAR_REGEX = (() => {
   const goToTopLeft = /(?:[01](?:;[01])?)?[fH]/;
@@ -136,6 +128,8 @@ const CLEAR_REGEX = (() => {
 
   return RegExp(`(?:${variants.join("|")})`);
 })();
+
+const CLEAR_REGEX_GLOBAL = RegExp(CLEAR_REGEX.source, "g");
 
 const waitingIndicator = NO_COLOR
   ? "■"
@@ -190,18 +184,6 @@ const folder = NO_COLOR
   : !SUPPORTS_EMOJI
     ? `\x1B[2m⌂${RESET_COLOR}`
     : "📂";
-
-/**
- * @param {number} n
- * @returns {string}
- */
-const cursorUp = (n) => `\x1B[${n}A`;
-
-/**
- * @param {number} n
- * @returns {string}
- */
-const cursorDown = (n) => `\x1B[${n}B`;
 
 /**
  * @param {number} n
@@ -615,6 +597,17 @@ const historyStart = (indicator, command) =>
   `${commandTitleWithIndicator(indicator, command)}\n${cwdText(command)}`;
 
 /**
+ * The keyboard shortcuts are printed once at the start, rather than below the
+ * command output. Printing them in the middle of the command output (and
+ * removing them again) can cause the output to be messed up.
+ *
+ * @param {CommandText} command
+ * @returns {string}
+ */
+const historyStartRunning = (command) =>
+  `${historyStart(runningIndicator, command)}${runningText}\n\n`;
+
+/**
  * Used in interactive mode.
  *
  * @param {string} indicator
@@ -652,23 +645,8 @@ ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
 
-/**
- * @param {number} pid
- * @returns {string}
- */
-const runningText = (pid) =>
-  `
-${shortcut(KEYS.kill)} kill ${dim(`(pid ${pid})`)}
-${shortcut(KEYS.dashboard)} dashboard
-`.trim();
-
-/**
- * @param {number} pid
- * @returns {string}
- */
-const killingText = (pid) =>
-  `
-${shortcut(KEYS.kill)} kill ${dim(`(double-press to force) (pid ${pid})`)}
+const runningText = `
+${shortcut(KEYS.kill)} kill
 ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
 
@@ -748,36 +726,6 @@ const statusText = (
       ];
   }
 };
-
-// If a command moves the cursor to another line it’s not considered a “simple
-// log”. Then it’s not safe to print the keyboard shortcuts.
-//
-// - A, B: Cursor up/down. Moving down should be safe. So is `\n1A` (move to
-//         start of new line, then up one line) – docker-compose does that
-//         to update the previous line. We always print on the next line so it’s safe.
-// - C, D: Cursor left/right. Should be safe! Parcel does this.
-// - E, F: Cursor down/up, and to the start of the line. Moving down should be safe.
-// - G: Cursor absolute position within line. Should be safe! Again, Parcel.
-// - H, f: Cursor absolute position, both x and y. Exception: Moving to the
-//         top-left corner and clearing the screen (ctrl+l).
-// - I, Z: Cursor forward/backward by tab stops. Should be safe.
-// - J: Clear the screen in different ways. Should be safe.
-// - K: Erase in line. Should be safe.
-// - L: Insert lines.
-// - M: Delete lines.
-// - S: Scroll up.
-// - T: Scroll down.
-// - s: Save cursor position.
-// - u: Restore cursor position.
-//
-// This includes the regexes for clearing the screen, since they also affect “is
-// simple log”: They reset it to `true` sometimes.
-const NOT_SIMPLE_LOG_ESCAPE_RAW =
-  /(\x1B\[0?J)|\x1B\[(?:\d*[FLMST]|[su]|(?!(?:[01](?:;[01])?)?[fH]\x1B\[[02]?J)(?:\d+(?:;\d+)?)?[fH])|(?!\n\x1B\[1?A)(?:^|[^])\x1B\[\d*A/;
-const NOT_SIMPLE_LOG_ESCAPE = RegExp(
-  `(${CLEAR_REGEX.source})|${NOT_SIMPLE_LOG_ESCAPE_RAW.source}`,
-  "g",
-);
 
 // These escapes should be printed when they first occur, but not when
 // re-printing history. They result in getting a response on stdin. The
@@ -1292,7 +1240,6 @@ class Command {
     this.onSynchronizedOutputChange = onSynchronizedOutputChange;
     this.onExit = onExit;
     this.addHistoryStart = addHistoryStart;
-    this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     /** @type {Status} */
     this.status = { tag: "Waiting" };
@@ -1327,10 +1274,11 @@ class Command {
     }
 
     this.history = this.addHistoryStart
-      ? historyStart(needsToWait ? waitingIndicator : runningIndicator, this)
+      ? needsToWait
+        ? historyStart(waitingIndicator, this)
+        : historyStartRunning(this)
       : "";
     this.historyAlternateScreen = "";
-    this.isSimpleLog = true;
     this.isOnAlternateScreen = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
     // See the comment for `CONPTY_CURSOR_MOVE`.
@@ -1528,20 +1476,8 @@ class Command {
             }
           } else {
             this.history += part;
-            // Take one extra character so `NOT_SIMPLE_LOG_ESCAPE` can match the
-            // `\n${CURSOR_UP}` pattern.
-            const matches = this.history
-              .slice(-part.length - 1)
-              .matchAll(NOT_SIMPLE_LOG_ESCAPE);
-            for (const match of matches) {
-              const clearAll = match[1] !== undefined;
-              const clearDown = match[2] !== undefined;
-              if (clearAll) {
-                this.history = match.input.slice(match.index + match[0].length);
-                this.isSimpleLog = true;
-              } else {
-                this.isSimpleLog = clearDown;
-              }
+            for (const match of part.matchAll(CLEAR_REGEX_GLOBAL)) {
+              this.history = match.input.slice(match.index + match[0].length);
             }
             if (this.history.length > MAX_HISTORY) {
               this.history = this.history.slice(-MAX_HISTORY);
@@ -1624,110 +1560,16 @@ const runInteractively = (commandDescriptions, autoExit) => {
   let attemptedKillAll = false;
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
-  let extraTextPrinted = false;
-  /** @type {number | undefined} */
-  let inSynchronizedOutputModeSince = undefined;
-
   /**
    * @param {Command} command
    * @param {string} data
-   * @param {{ ignoreAlternateScreen?: boolean }} options
    * @returns {undefined}
    */
-  const printDataWithExtraText = (
-    command,
-    data,
-    { ignoreAlternateScreen = false } = {},
-  ) => {
-    // Note: For a simple log (no complicating cursor movements or anything) we
-    // can _always_ show extra text. Otherwise, it’s better not to print
-    // anything extra in. We don’t want to put something in the middle of the
-    // command’s output.
-
-    if (extraTextPrinted) {
-      // `RESET_COLOR` is needed because `CLEAR_LEFT` and `CLEAR_DOWN` paint the
-      // area they clear with the current background color otherwise. Since we
-      // use `RESET_COLOR`, we also have to use `SAVE_CURSOR` and
-      // `RESTORE_CURSOR` to restore the current colors when done.
-      process.stdout.write(
-        BEGIN_SYNC_UPDATE +
-          SAVE_CURSOR +
-          cursorDown(1) +
-          RESET_COLOR +
-          CLEAR_LEFT +
-          CLEAR_DOWN +
-          RESTORE_CURSOR +
-          END_SYNC_UPDATE,
-      );
-      extraTextPrinted = false;
-    }
-
-    if (command.isOnAlternateScreen && !ignoreAlternateScreen) {
-      process.stdout.write(data);
-      return undefined;
-    }
-
-    /**
-     * @param {string} extraText
-     * @returns {void}
-     */
-    const helper = (extraText) => {
-      const isBadWindows = IS_WINDOWS && !IS_WINDOWS_TERMINAL;
-      if (
-        command.isSimpleLog &&
-        (inSynchronizedOutputModeSince === undefined ||
-          Date.now() - inSynchronizedOutputModeSince > SYNC_UPDATE_TIMEOUT) &&
-        (!isBadWindows ||
-          removeGraphicRenditions(getLastLine(command.history)) === "")
-      ) {
-        const numLines = extraText.split("\n").length;
-        // `\x1BD` (IND) is like `\n` except the cursor column is preserved on
-        // the new line. We print the INDs so that if we’re at the bottom of the
-        // terminal window, empty space is created for `extraText`. However, if
-        // there’s currently a background color, the new lines will be colored.
-        // We can’t solve that with doing `RESET_COLOR` and `SAVE_CURSOR`
-        // earlier, because the INDs might cause scrolling but `SAVE_CURSOR` and
-        // `RESTORE_CURSOR` are relative to the screen, not the content. As a
-        // workaround we let the lines be colored, and later clear that using
-        // `CLEAR_DOWN`. (There’s no text to clear at that point; only color.)
-        // Note: On Linux and macOS (at least in the terminals I’ve tested),
-        // `\f` works the same way as `\x1BD`. However, cmd.exe prints `\f` as
-        // “♀”, and Windows Terminal treats it as `\n`. Linux, macOS and Windows
-        // Terminal do support IND. I have not found any way to do this in cmd.exe
-        // and the old PowerShell app, so there we only print the extra text only if
-        // we’re at the start of a new line.
-        // https://github.com/microsoft/terminal/issues/3189
-        // https://github.com/microsoft/terminal/pull/3271/files#diff-6d7a2ad03ef14def98192607612a235f881368c3828b3b732abdf8f8ecf9b03bR4322
-        process.stdout.write(
-          data +
-            BEGIN_SYNC_UPDATE +
-            (isBadWindows ? "\n" : "\x1BD").repeat(numLines) +
-            cursorUp(numLines) +
-            SAVE_CURSOR +
-            RESET_COLOR +
-            "\n".repeat(1) +
-            CLEAR_DOWN +
-            extraText +
-            RESTORE_CURSOR +
-            END_SYNC_UPDATE,
-        );
-        extraTextPrinted = true;
-      } else {
-        process.stdout.write(data);
-      }
-    };
-
+  const printDataWithExtraText = (command, data) => {
     switch (command.status.tag) {
       case "Running":
-        helper(runningText(command.status.terminal.pid));
-        return undefined;
-
       case "Killing":
-        helper(
-          command.status.slow
-            ? killingText(command.status.terminal.pid)
-            : runningText(command.status.terminal.pid),
-        );
+        process.stdout.write(data);
         return undefined;
 
       case "Waiting":
@@ -1755,8 +1597,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
               : exitText(commands, command, command.status, autoExit)) +
             END_SYNC_UPDATE,
         );
-
-        extraTextPrinted = false;
         return undefined;
       }
     }
@@ -1833,8 +1673,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
         RESET_COLOR +
         CLEAR,
     );
-
-    extraTextPrinted = false;
 
     printDataWithExtraText(command, joinHistory(command));
   };
@@ -2058,8 +1896,6 @@ const runInteractively = (commandDescriptions, autoExit) => {
                 switch (command.status.tag) {
                   case "Running":
                   case "Killing":
-                    inSynchronizedOutputModeSince =
-                      data === BEGIN_SYNC_UPDATE ? Date.now() : undefined;
                     printDataWithExtraText(command, data);
                     return undefined;
                   case "Waiting":
@@ -2101,9 +1937,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
             case "Command":
               if (current.index === index) {
                 const command = commands[index];
-                printDataWithExtraText(command, "", {
-                  ignoreAlternateScreen: true,
-                });
+                printDataWithExtraText(command, "");
               }
               return undefined;
 
@@ -2756,10 +2590,9 @@ module.exports = {
     exitTextAndHistory,
     help,
     historyStart,
-    killingText,
+    historyStartRunning,
     parseArgs,
     runningIndicator,
-    runningText,
     summarizeLabels,
     waitingText,
   },

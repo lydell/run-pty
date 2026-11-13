@@ -16,10 +16,9 @@ const {
     exitTextAndHistory,
     help,
     historyStart,
-    killingText,
+    historyStartRunning,
     parseArgs,
     runningIndicator,
-    runningText,
     summarizeLabels,
     waitingText,
   },
@@ -80,7 +79,6 @@ function fakeCommand(item, index = 0) {
     history: "",
     historyAlternateScreen: "",
     addHistoryStart: false,
-    isSimpleLog: true,
     isOnAlternateScreen: false,
     statusFromRules: item.statusFromRules,
     defaultStatus: undefined,
@@ -738,28 +736,25 @@ describe("focused command", () => {
     `);
   });
 
-  test("running text includes pid", () => {
-    expect(replaceAnsi(runningText(12345))).toMatchInlineSnapshot(`
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(pid 12345)⧘
-      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-    `);
-  });
-
-  test("killing without cwd", () => {
-    expect(render(() => killingText(12345), "frontend: npm start", "./x/.."))
+  test("running header with shortcuts", () => {
+    expect(render(historyStartRunning, "frontend: npm start", "web/frontend"))
       .toMatchInlineSnapshot(`
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
-      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-    `);
+        🟢 frontend: npm start⧘
+        📂 ⧙web/frontend⧘
+        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill
+        ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard␊
+        ␊
+      `);
   });
 
-  test("killing with cwd", () => {
-    expect(
-      render(() => killingText(12345), "frontend: npm start", "web/frontend"),
-    ).toMatchInlineSnapshot(`
-      ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(double-press to force) (pid 12345)⧘
-      ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard
-    `);
+  test("running header with shortcuts, without cwd", () => {
+    expect(render(historyStartRunning, "npm start", "./x/.."))
+      .toMatchInlineSnapshot(`
+        🟢 npm start⧘
+        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill
+        ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard␊
+        ␊
+      `);
   });
 
   test("exit 0 with cwd", () => {

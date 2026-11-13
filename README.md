@@ -46,6 +46,9 @@ $ npm start
 
 ```
 🟢 node --run frontend
+[ctrl+c] kill
+[ctrl+z] dashboard
+
 
   VITE v7.3.0  ready in 53 ms
 
@@ -53,14 +56,15 @@ $ npm start
   ➜  Network: use --host to expose
   ➜  press h + enter to show help
 ▊
-[ctrl+c] kill (pid 36842)
-[ctrl+z] dashboard
 ```
 
 ➡️ <kbd>ctrl+c</kbd> ➡️
 
 ```
 🟢 node --run frontend
+[ctrl+c] kill
+[ctrl+z] dashboard
+
 
   VITE v7.3.0  ready in 53 ms
 
