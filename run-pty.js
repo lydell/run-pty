@@ -23,8 +23,10 @@ const Codec = require("tiny-decoders");
  *
  * @typedef {
     | { tag: "Command", index: number }
-    | { tag: "Dashboard", previousRender: Array<string>, previousWidth: number }
+    | { tag: "Dashboard", previousRender: Array<string>, previousWidth: number, visibleCommands: VisibleCommands }
    } Current
+ *
+ * @typedef {{ start: number, end: number, moreAbove: boolean, moreBelow: boolean }} VisibleCommands
  */
 
 const IS_WINDOWS = process.platform === "win32";
@@ -445,37 +447,189 @@ const drawDashboardCommandLines = (
 };
 
 /**
+ * @param {string} arrow
+ * @param {Array<Command>} hiddenCommands
+ * @param {{ width: number, selectedIndicator: string | undefined, useSeparateKilledIndicator: boolean }} options
+ * @returns {string}
+ */
+const drawMoreCommandsLine = (
+  arrow,
+  hiddenCommands,
+  { width, selectedIndicator, useSeparateKilledIndicator },
+) => {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const command of hiddenCommands) {
+    const [icon] = statusText(command.status, {
+      statusFromRules: command.statusFromRules ?? runningIndicator,
+      useSeparateKilledIndicator,
+    });
+    counts.set(icon, (counts.get(icon) ?? 0) + 1);
+  }
+
+  // As wide as the labels, so that the first icon lines up with the icons of
+  // the commands.
+  const text = ` ${arrow} `;
+  let line = dim(text);
+  let { length } = text;
+  let separator = "  ";
+  for (const [icon, count] of counts) {
+    // Position the count explicitly, since the actual width of the icon may vary.
+    const countColumn = length + 2 + ICON_WIDTH;
+    const countText = ` ${count}`;
+    // One extra column for the highlighted space after a selected count, so
+    // that whether a count fits does not depend on the selection.
+    if (countColumn + countText.length + 1 > width) {
+      break;
+    }
+    const countStart = cursorHorizontalAbsolute(countColumn + 1);
+    if (icon === selectedIndicator) {
+      // Like in `drawDashboardCommandLines`: Highlight one space on either
+      // side, since the actual width of the icon may vary.
+      line += NO_COLOR
+        ? `${separator.slice(0, -1)}→${icon}${countStart}${countText} `
+        : `${separator.slice(0, -1)}${invert(
+            ` ${icon}${" ".repeat(ICON_WIDTH)}`,
+          )}${countStart}${invert(`${countText} `)}`;
+      // The highlighted space after the count is the first space of the next
+      // separator.
+      separator = " ";
+    } else {
+      line += `${separator}${icon}${countStart}${countText}`;
+      separator = "  ";
+    }
+    length = countColumn + countText.length;
+  }
+  return `${line}${RESET_COLOR}`;
+};
+
+// Room needed for a “more” line above, a command and a “more” line below.
+// Below this, the help text is hidden to make room for commands.
+const MIN_COMMAND_ROWS = 3;
+
+/**
+ * Which commands are visible when there are more than fit in `numRows`.
+ * Hidden commands are replaced by a “more” line at the top and/or bottom.
+ * `scrollTop` is the index of the first visible command.
+ *
+ * @param {number} numCommands
+ * @param {number} numRows
+ * @param {number} scrollTop
+ * @returns {VisibleCommands}
+ */
+const getVisibleCommands = (numCommands, numRows, scrollTop) => {
+  if (numCommands <= numRows) {
+    return { start: 0, end: numCommands, moreAbove: false, moreBelow: false };
+  }
+  // Too little room for “more” lines – only show commands.
+  if (numRows < MIN_COMMAND_ROWS) {
+    const start = Math.max(0, Math.min(scrollTop, numCommands - numRows));
+    return {
+      start,
+      end: start + numRows,
+      moreAbove: false,
+      moreBelow: false,
+    };
+  }
+  const clamped = Math.max(0, Math.min(scrollTop, numCommands - numRows + 1));
+  // A “1 more” line above would take the same row as the one command it hides.
+  const start = clamped === 1 ? 0 : clamped;
+  const available = start === 0 ? numRows : numRows - 1;
+  const end =
+    numCommands - start <= available ? numCommands : start + available - 1;
+  return {
+    start,
+    end,
+    moreAbove: start > 0,
+    moreBelow: end < numCommands,
+  };
+};
+
+/**
+ * Scroll as little as possible to make the command at `index` visible.
+ *
+ * @param {number} numCommands
+ * @param {number} numRows
+ * @param {number} scrollTop
+ * @param {number | undefined} index
+ * @returns {number}
+ */
+const scrollToCommand = (numCommands, numRows, scrollTop, index) => {
+  const { start, end } = getVisibleCommands(numCommands, numRows, scrollTop);
+  return index === undefined || (index >= start && index < end)
+    ? start
+    : index < start
+      ? getVisibleCommands(numCommands, numRows, index).start
+      : getVisibleCommands(
+          numCommands,
+          numRows,
+          // Make room for the “more” lines above and below, if any.
+          index - numRows + (numRows < MIN_COMMAND_ROWS ? 1 : 3),
+        ).start;
+};
+
+/**
+ * Prefer a matching command that is already visible, to avoid scrolling.
+ *
+ * @param {Array<Command>} commands
+ * @param {string} indicator
+ * @param {VisibleCommands} visibleCommands
+ * @returns {number}
+ */
+const getFirstIndicatorIndex = (commands, indicator, { start, end }) => {
+  /**
+   * @param {Command} command
+   * @returns {boolean}
+   */
+  const matches = (command) => getIndicatorChoice(command) === indicator;
+  const visibleIndex = commands.slice(start, end).findIndex(matches);
+  return visibleIndex === -1
+    ? commands.findIndex(matches)
+    : start + visibleIndex;
+};
+
+/**
  * @param {{
     commands: Array<Command>,
     width: number,
+    height: number,
+    scrollTop: number,
     attemptedKillAll: boolean,
     autoExit: AutoExit,
     selection: Selection,
    }} options
- * @returns {string}
+ * @returns {{ text: string, scrollTop: number, visibleCommands: VisibleCommands }}
  */
 const drawDashboard = ({
   commands,
   width,
+  height,
+  scrollTop,
   attemptedKillAll,
   autoExit,
   selection,
 }) => {
   const done = isDone({ commands, attemptedKillAll, autoExit });
+  const useSeparateKilledIndicator = autoExit.tag === "AutoExit";
 
-  const finalLines = drawDashboardCommandLines(
+  const commandLines = drawDashboardCommandLines(
     commands,
     done ? { tag: "Invisible", index: 0 } : selection,
-    {
-      width,
-      useSeparateKilledIndicator: autoExit.tag === "AutoExit",
-    },
-  )
-    .map(({ line }) => line)
-    .join("\n");
+    { width, useSeparateKilledIndicator },
+  ).map(({ line }) => line);
 
   if (done) {
-    return `${finalLines}\n`;
+    // This is the final output, which ends up in the scrollback, so show all commands.
+    return {
+      text: `${commandLines.join("\n")}\n`,
+      scrollTop,
+      visibleCommands: {
+        start: 0,
+        end: commands.length,
+        moreAbove: false,
+        moreBelow: false,
+      },
+    };
   }
 
   const label = summarizeLabels(commands.map((command) => command.label));
@@ -511,30 +665,101 @@ const drawDashboard = ({
     autoExit.tag === "AutoExit" ? KEYS.navigateVerticallyOnly : KEYS.navigate;
 
   const sessionEnds = "The session ends automatically once all commands are ";
-  const autoExitText =
-    autoExit.tag === "AutoExit"
-      ? [
-          enter === "" ? undefined : "",
-          `At most ${autoExit.maxParallel} ${
-            autoExit.maxParallel === 1 ? "command runs" : "commands run"
-          } at a time.`,
-          `${sessionEnds}${exitIndicator(0)}${cursorHorizontalAbsolute(
-            sessionEnds.length + ICON_WIDTH + 1,
-          )} ${bold("exit 0")}.`,
-        ]
-          .filter((x) => x !== undefined)
-          .join("\n")
-      : "";
 
-  return `
-${finalLines}
+  /**
+   * @param {string} enterText
+   * @returns {string}
+   */
+  const drawHelp = (enterText) => {
+    const autoExitText =
+      autoExit.tag === "AutoExit"
+        ? [
+            enterText === "" ? undefined : "",
+            `At most ${autoExit.maxParallel} ${
+              autoExit.maxParallel === 1 ? "command runs" : "commands run"
+            } at a time.`,
+            `${sessionEnds}${exitIndicator(0)}${cursorHorizontalAbsolute(
+              sessionEnds.length + ICON_WIDTH + 1,
+            )} ${bold("exit 0")}.`,
+          ]
+            .filter((x) => x !== undefined)
+            .join("\n")
+        : "";
 
+    return `
 ${shortcut(label)} focus command ${dim("(or click)")}
 ${shortcut(KEYS.kill)} ${killAllLabel(commands)}
 ${shortcut(navigationKeys)} move selection
-${enter}
+${enterText}
 ${autoExitText}
 `.trim();
+  };
+
+  const helpText = drawHelp(enter);
+
+  // Reserve room for the tallest help text (which has two enter lines when
+  // something is selected), so that the commands don’t move when the help
+  // text changes. One extra row for the empty line between the commands and
+  // the help.
+  const numHelpRows = drawHelp("enter\nunselect").split("\n").length + 1;
+  const showHelp =
+    commands.length + numHelpRows <= height ||
+    height - numHelpRows >= MIN_COMMAND_ROWS;
+  const numCommandRows = showHelp ? height - numHelpRows : height;
+
+  const selectedIndex =
+    selection.tag === "ByIndicator"
+      ? getFirstIndicatorIndex(
+          commands,
+          selection.indicator,
+          getVisibleCommands(commands.length, numCommandRows, scrollTop),
+        )
+      : selection.tag === "Invisible"
+        ? -1
+        : selection.index;
+  const newScrollTop = scrollToCommand(
+    commands.length,
+    numCommandRows,
+    scrollTop,
+    selectedIndex === -1 ? undefined : selectedIndex,
+  );
+  const visibleCommands = getVisibleCommands(
+    commands.length,
+    numCommandRows,
+    newScrollTop,
+  );
+  const moreOptions = {
+    width,
+    selectedIndicator:
+      selection.tag === "ByIndicator" ? selection.indicator : undefined,
+    useSeparateKilledIndicator,
+  };
+
+  const finalLines = [
+    visibleCommands.moreAbove
+      ? drawMoreCommandsLine(
+          "↑",
+          commands.slice(0, visibleCommands.start),
+          moreOptions,
+        )
+      : undefined,
+    ...commandLines.slice(visibleCommands.start, visibleCommands.end),
+    visibleCommands.moreBelow
+      ? drawMoreCommandsLine(
+          "↓",
+          commands.slice(visibleCommands.end),
+          moreOptions,
+        )
+      : undefined,
+  ]
+    .filter((line) => line !== undefined)
+    .join("\n");
+
+  return {
+    text: showHelp ? `${finalLines}\n\n${helpText}`.trim() : finalLines,
+    scrollTop: newScrollTop,
+    visibleCommands,
+  };
 };
 
 /**
@@ -1649,10 +1874,17 @@ const getLastLine = (string) => {
  */
 const runInteractively = (commandDescriptions, autoExit) => {
   /** @type {Current} */
-  let current = { tag: "Dashboard", previousRender: [], previousWidth: 0 };
+  let current = {
+    tag: "Dashboard",
+    previousRender: [],
+    previousWidth: 0,
+    visibleCommands: { start: 0, end: 0, moreAbove: false, moreBelow: false },
+  };
   let attemptedKillAll = false;
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
+  // Index of the first visible command in the dashboard, when not all fit.
+  let scrollTop = 0;
   /**
    * @param {Command} command
    * @param {string} data
@@ -1708,13 +1940,36 @@ const runInteractively = (commandDescriptions, autoExit) => {
         ? current.previousRender
         : [];
 
-    const currentRender = drawDashboard({
+    const dashboard = drawDashboard({
       commands,
       width: process.stdout.columns,
+      // `rows` is undefined if stdout is not a TTY.
+      height: process.stdout.rows ?? Infinity,
+      scrollTop,
       attemptedKillAll,
       autoExit,
       selection,
-    })
+    });
+    ({ scrollTop } = dashboard);
+
+    if (isDone({ commands, attemptedKillAll, autoExit })) {
+      // The final dashboard can be taller than the terminal, so print it
+      // normally rather than positioning each line.
+      process.stdout.write(
+        BEGIN_SYNC_UPDATE +
+          DISABLE_ALTERNATE_SCREEN +
+          DISABLE_APPLICATION_CURSOR_KEYS +
+          RESET_COLOR +
+          DISABLE_AUTO_WRAP +
+          CLEAR +
+          dashboard.text +
+          ENABLE_AUTO_WRAP +
+          END_SYNC_UPDATE,
+      );
+      return;
+    }
+
+    const currentRender = dashboard.text
       .split("\n")
       .slice(0, process.stdout.rows);
 
@@ -1725,6 +1980,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
       tag: "Dashboard",
       previousRender: currentRender,
       previousWidth: process.stdout.columns,
+      visibleCommands: dashboard.visibleCommands,
     };
     process.stdout.write(
       BEGIN_SYNC_UPDATE +
@@ -1800,6 +2056,27 @@ const runInteractively = (commandDescriptions, autoExit) => {
           ? selection.keyboardIndex
           : selection.index,
     };
+  };
+
+  /**
+   * @param {number} delta Number of commands to scroll (negative is up).
+   * @returns {void}
+   */
+  const scrollDashboard = (delta) => {
+    if (current.tag !== "Dashboard") {
+      return;
+    }
+    const { start, end, moreBelow } = current.visibleCommands;
+    if (delta < 0 ? start === 0 : end === commands.length) {
+      return;
+    }
+    // `drawDashboard` clamps the max. With “more” lines, 1 is treated as 0
+    // (see `getVisibleCommands`), so skip to 2 to avoid getting stuck at the top.
+    scrollTop =
+      start === 0 && delta === 1 && moreBelow ? 2 : Math.max(0, start + delta);
+    // Otherwise the dashboard would scroll right back to the selection.
+    hideSelection();
+    switchToDashboard();
   };
 
   /**
@@ -2189,6 +2466,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
           restart,
           restartExited,
           restartByIndicator,
+          scrollDashboard,
         );
       }
     }
@@ -2226,6 +2504,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
  * @param {(index: number, status: Extract<Status, {tag: "Exit"}>) => void} restart
  * @param {() => void} restartExited
  * @param {(indicator: string) => void} restartByIndicator
+ * @param {(delta: number) => void} scrollDashboard
  * @returns {undefined}
  */
 const onStdin = (
@@ -2241,6 +2520,7 @@ const onStdin = (
   restart,
   restartExited,
   restartByIndicator,
+  scrollDashboard,
 ) => {
   const data = IS_WINDOWS ? convertWin32InputMode(rawData) : rawData;
   switch (current.tag) {
@@ -2413,19 +2693,32 @@ const onStdin = (
             return undefined;
           }
 
+          const wheelDelta = parseMouseWheel(data);
+          if (wheelDelta !== 0) {
+            scrollDashboard(wheelDelta);
+            return undefined;
+          }
+
           const mousePosition = parseMouse(data);
           if (mousePosition === undefined) {
             return undefined;
           }
 
-          const index = getCommandIndexFromMousePosition(
+          const target = getMouseTarget(
             commands,
+            current.visibleCommands,
             mousePosition,
           );
+          const index = target?.tag === "Command" ? target.index : undefined;
 
           switch (mousePosition.type) {
             case "mousedown":
-              if (index !== undefined) {
+              if (target?.tag === "More") {
+                const { start, end } = current.visibleCommands;
+                scrollDashboard(
+                  target.direction === "up" ? start - end : end - start,
+                );
+              } else if (index !== undefined) {
                 setSelection({ tag: "Mousedown", index });
               }
               return undefined;
@@ -2452,6 +2745,19 @@ const onStdin = (
 };
 
 const MOUSE_REGEX = /\x1B\[<0;(\d+);(\d+)([Mm])/;
+const MOUSE_WHEEL_REGEX = /\x1B\[<(64|65);\d+;\d+M/g;
+
+/**
+ * Scrolling fast can result in several wheel events in the same chunk.
+ *
+ * @param {string} string
+ * @returns {number} Net number of steps (negative is up).
+ */
+const parseMouseWheel = (string) =>
+  Array.from(string.matchAll(MOUSE_WHEEL_REGEX)).reduce(
+    (sum, [, button]) => sum + (button === "64" ? -1 : 1),
+    0,
+  );
 
 /**
  * @param {string} string
@@ -2472,9 +2778,30 @@ const parseMouse = (string) => {
 
 /**
  * @param {Array<Command>} commands
+ * @param {VisibleCommands} visibleCommands
  * @param {{ x: number, y: number }} mousePosition
+ * @returns {{ tag: "Command", index: number } | { tag: "More", direction: "up" | "down" } | undefined}
  */
-const getCommandIndexFromMousePosition = (commands, { x, y }) => {
+const getMouseTarget = (
+  commands,
+  { start, end, moreAbove, moreBelow },
+  { x, y },
+) => {
+  const row = moreAbove ? y - 1 : y;
+  const numVisible = end - start;
+
+  if (moreAbove && row === -1) {
+    return { tag: "More", direction: "up" };
+  }
+
+  if (moreBelow && row === numVisible) {
+    return { tag: "More", direction: "down" };
+  }
+
+  if (row < 0 || row >= numVisible) {
+    return undefined;
+  }
+
   const lines = drawDashboardCommandLines(
     commands,
     {
@@ -2487,14 +2814,10 @@ const getCommandIndexFromMousePosition = (commands, { x, y }) => {
     },
   );
 
-  if (y >= 0 && y < lines.length) {
-    const line = lines[y];
-    if (x >= 0 && x < line.length) {
-      return y;
-    }
-  }
-
-  return undefined;
+  const index = start + row;
+  return x >= 0 && x < lines[index].length
+    ? { tag: "Command", index }
+    : undefined;
 };
 
 /**

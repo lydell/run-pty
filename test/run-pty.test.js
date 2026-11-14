@@ -178,26 +178,37 @@ describe("help", () => {
 describe("dashboard", () => {
   /**
    * @param {Array<FakeCommand>} items
-   * @param {{width?: number, attemptedKillAll?: boolean, autoExit?: import("../run-pty").AutoExit}} options
+   * @param {{width?: number, height?: number, scrollTop?: number, attemptedKillAll?: boolean, autoExit?: import("../run-pty").AutoExit, selection?: import("../run-pty").Selection}} options
    * @returns {string}
    */
-  function testDashboard(
+  function testDashboard(items, options = {}) {
+    return replaceAnsi(testDashboardRaw(items, options).text);
+  }
+
+  /**
+   * @param {Array<FakeCommand>} items
+   * @param {{width?: number, height?: number, scrollTop?: number, attemptedKillAll?: boolean, autoExit?: import("../run-pty").AutoExit, selection?: import("../run-pty").Selection}} options
+   */
+  function testDashboardRaw(
     items,
     {
       width = 80,
+      height = Infinity,
+      scrollTop = 0,
       attemptedKillAll = false,
       autoExit = { tag: "NoAutoExit" },
+      selection = { tag: "Invisible", index: 0 },
     } = {},
   ) {
-    return replaceAnsi(
-      drawDashboard({
-        commands: items.map(fakeCommand),
-        width,
-        attemptedKillAll,
-        autoExit,
-        selection: { tag: "Invisible", index: 0 },
-      }),
-    );
+    return drawDashboard({
+      commands: items.map(fakeCommand),
+      width,
+      height,
+      scrollTop,
+      attemptedKillAll,
+      autoExit,
+      selection,
+    });
   }
 
   test("empty", () => {
@@ -601,6 +612,205 @@ describe("dashboard", () => {
       ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
       ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
     `);
+  });
+
+  describe("more commands than fit", () => {
+    /** @type {Array<FakeCommand>} */
+    const items = Array.from({ length: 20 }, (_, i) => ({
+      command: ["echo", String(i)],
+      status:
+        i % 7 === 3
+          ? { tag: "Exit", exitCode: 1, wasKilled: false }
+          : { tag: "Running", terminal: fakeTerminal({ pid: 9980 + i }) },
+    }));
+
+    test("top", () => {
+      expect(testDashboard(items, { height: 10 })).toMatchInlineSnapshot(`
+        ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  echo 0⧘
+        ⧙[⧘⧙2⧘⧙]⧘  🟢⧘  echo 1⧘
+        ⧙[⧘⧙3⧘⧙]⧘  🟢⧘  echo 2⧘
+        ⧙ ↓ ⧘  🔴 3  🟢 14⧘
+
+        ⧙[⧘⧙1-9/a-k⧘⧙]⧘ focus command ⧙(or click)⧘
+        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+        ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
+        ⧙[⧘⧙enter⧘⧙]⧘  restart exited
+      `);
+    });
+
+    test("scrolled to the middle", () => {
+      expect(testDashboard(items, { height: 10, scrollTop: 8 }))
+        .toMatchInlineSnapshot(`
+          ⧙ ↑ ⧘  🟢 7  🔴 1⧘
+          ⧙[⧘⧙9⧘⧙]⧘  🟢⧘  echo 8⧘
+          ⧙[⧘⧙a⧘⧙]⧘  🟢⧘  echo 9⧘
+          ⧙ ↓ ⧘  🔴 2  🟢 8⧘
+
+          ⧙[⧘⧙1-9/a-k⧘⧙]⧘ focus command ⧙(or click)⧘
+          ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+          ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
+          ⧙[⧘⧙enter⧘⧙]⧘  restart exited
+        `);
+    });
+
+    test("scrolled past the end is clamped", () => {
+      const dashboard = testDashboardRaw(items, { height: 10, scrollTop: 100 });
+      expect(dashboard.scrollTop).toBe(17);
+      expect(dashboard.visibleCommands).toEqual({
+        start: 17,
+        end: 20,
+        moreAbove: true,
+        moreBelow: false,
+      });
+      expect(replaceAnsi(dashboard.text)).toMatchInlineSnapshot(`
+        ⧙ ↑ ⧘  🟢 15  🔴 2⧘
+        ⧙[⧘⧙i⧘⧙]⧘  🔴⧘  ⧙exit 1⧘  echo 17⧘
+        ⧙[⧘⧙j⧘⧙]⧘  🟢⧘  echo 18⧘
+        ⧙[⧘⧙k⧘⧙]⧘  🟢⧘  echo 19⧘
+
+        ⧙[⧘⧙1-9/a-k⧘⧙]⧘ focus command ⧙(or click)⧘
+        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+        ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
+        ⧙[⧘⧙enter⧘⧙]⧘  restart exited
+      `);
+    });
+
+    test("no “1 more” line at the top", () => {
+      const dashboard = testDashboardRaw(items, { height: 10, scrollTop: 1 });
+      expect(dashboard.scrollTop).toBe(0);
+      expect(dashboard.visibleCommands).toEqual({
+        start: 0,
+        end: 3,
+        moreAbove: false,
+        moreBelow: true,
+      });
+    });
+
+    test("selection below scrolls just enough", () => {
+      const dashboard = testDashboardRaw(items, {
+        height: 11,
+        selection: { tag: "Keyboard", index: 10 },
+      });
+      expect(dashboard.visibleCommands).toEqual({
+        start: 8,
+        end: 11,
+        moreAbove: true,
+        moreBelow: true,
+      });
+      expect(replaceAnsi(dashboard.text)).toMatchInlineSnapshot(`
+        ⧙ ↑ ⧘  🟢 7  🔴 1⧘
+        ⧙[⧘⧙9⧘⧙]⧘  🟢⧘  echo 8⧘
+        ⧙[⧘⧙a⧘⧙]⧘  🟢⧘  echo 9⧘
+        ⧙[⧘⧙b⧘⧙]⧘  🔴⧘  ⧙⧙exit 1⧘⧙  echo 10⧘⧘
+        ⧙ ↓ ⧘  🟢 8  🔴 1⧘
+
+        ⧙[⧘⧙1-9/a-k⧘⧙]⧘ focus command ⧙(or click)⧘
+        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill all
+        ⧙[⧘⧙↑↓←→⧘⧙]⧘   move selection
+        ⧙[⧘⧙enter⧘⧙]⧘  focus selected
+        ⧙[⧘⧙escape⧘⧙]⧘ unselect
+      `);
+    });
+
+    test("selection above scrolls just enough", () => {
+      const dashboard = testDashboardRaw(items, {
+        height: 11,
+        scrollTop: 8,
+        selection: { tag: "Keyboard", index: 5 },
+      });
+      expect(dashboard.visibleCommands).toEqual({
+        start: 5,
+        end: 8,
+        moreAbove: true,
+        moreBelow: true,
+      });
+    });
+
+    test("visible selection does not scroll", () => {
+      const dashboard = testDashboardRaw(items, {
+        height: 11,
+        scrollTop: 8,
+        selection: { tag: "Keyboard", index: 9 },
+      });
+      expect(dashboard.scrollTop).toBe(8);
+    });
+
+    test("selection by indicator scrolls to the first match", () => {
+      const dashboard = testDashboardRaw(items, {
+        height: 10,
+        scrollTop: 15,
+        selection: { tag: "ByIndicator", indicator: "🔴", keyboardIndex: 0 },
+      });
+      expect(dashboard.visibleCommands.start).toBeLessThanOrEqual(3);
+      expect(dashboard.visibleCommands.end).toBeGreaterThan(3);
+    });
+
+    test("selection by indicator does not scroll if a match is visible", () => {
+      const dashboard = testDashboardRaw(items, {
+        height: 10,
+        scrollTop: 8,
+        selection: { tag: "ByIndicator", indicator: "🟢", keyboardIndex: 0 },
+      });
+      expect(dashboard.scrollTop).toBe(8);
+    });
+
+    test("selection by indicator is highlighted in the “more” lines", () => {
+      expect(
+        testDashboard(items, {
+          height: 10,
+          scrollTop: 8,
+          selection: { tag: "ByIndicator", indicator: "🟢", keyboardIndex: 0 },
+        })
+          .split("\n")
+          .slice(0, 4)
+          .join("\n"),
+      ).toMatchInlineSnapshot(`
+        ⧙ ↑ ⧘ ⧙ 🟢  ⧘⧙ 7 ⧘ 🔴 1⧘
+        ⧙[⧘⧙9⧘⧙]⧘ ⧙ 🟢  ⧘⧘⧙ ⧘ echo 8⧘
+        ⧙[⧘⧙a⧘⧙]⧘ ⧙ 🟢  ⧘⧘⧙ ⧘ echo 9⧘
+        ⧙ ↓ ⧘  🔴 2 ⧙ 🟢  ⧘⧙ 8 ⧘⧘
+      `);
+    });
+
+    test("selecting does not move the commands", () => {
+      const withoutSelection = testDashboardRaw(items, {
+        height: 10,
+        scrollTop: 8,
+      });
+      const withSelection = testDashboardRaw(items, {
+        height: 10,
+        scrollTop: 8,
+        selection: { tag: "Keyboard", index: 8 },
+      });
+      expect(withSelection.visibleCommands).toEqual(
+        withoutSelection.visibleCommands,
+      );
+    });
+
+    test.each([1, 2])(
+      "selection is visible in a terminal with %i rows",
+      (height) => {
+        for (const index of [0, 1, 2, 10, 18, 19]) {
+          const { visibleCommands, text } = testDashboardRaw(items, {
+            height,
+            selection: { tag: "Keyboard", index },
+          });
+          expect(index).toBeGreaterThanOrEqual(visibleCommands.start);
+          expect(index).toBeLessThan(visibleCommands.end);
+          expect(text.split("\n")).toHaveLength(height);
+        }
+      },
+    );
+
+    test("help is hidden when there is too little room", () => {
+      expect(testDashboard(items, { height: 5 })).toMatchInlineSnapshot(`
+        ⧙[⧘⧙1⧘⧙]⧘  🟢⧘  echo 0⧘
+        ⧙[⧘⧙2⧘⧙]⧘  🟢⧘  echo 1⧘
+        ⧙[⧘⧙3⧘⧙]⧘  🟢⧘  echo 2⧘
+        ⧙[⧘⧙4⧘⧙]⧘  🔴⧘  ⧙exit 1⧘  echo 3⧘
+        ⧙ ↓ ⧘  🟢 14  🔴 2⧘
+      `);
+    });
   });
 });
 
