@@ -23,7 +23,7 @@ const Codec = require("tiny-decoders");
  *
  * @typedef {
     | { tag: "Command", index: number }
-    | { tag: "Dashboard", previousRender: Array<string> }
+    | { tag: "Dashboard", previousRender: Array<string>, previousWidth: number }
    } Current
  */
 
@@ -1646,7 +1646,7 @@ const getLastLine = (string) => {
  */
 const runInteractively = (commandDescriptions, autoExit) => {
   /** @type {Current} */
-  let current = { tag: "Dashboard", previousRender: [] };
+  let current = { tag: "Dashboard", previousRender: [], previousWidth: 0 };
   let attemptedKillAll = false;
   /** @type {Selection} */
   let selection = { tag: "Invisible", index: 0 };
@@ -1700,8 +1700,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
     const previousRender =
       current.tag === "Dashboard" &&
       current.previousRender.length <= process.stdout.rows &&
-      Math.max(...current.previousRender.map((line) => line.length)) <=
-        process.stdout.columns &&
+      current.previousWidth <= process.stdout.columns &&
       !forceClearScrollback
         ? current.previousRender
         : [];
@@ -1719,7 +1718,11 @@ const runInteractively = (commandDescriptions, autoExit) => {
     const clear = previousRender.length === 0 ? CLEAR : "";
     const numLinesToClear = previousRender.length - currentRender.length;
 
-    current = { tag: "Dashboard", previousRender: currentRender };
+    current = {
+      tag: "Dashboard",
+      previousRender: currentRender,
+      previousWidth: process.stdout.columns,
+    };
     process.stdout.write(
       BEGIN_SYNC_UPDATE +
         HIDE_CURSOR +
