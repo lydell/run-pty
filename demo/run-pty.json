@@ -14,7 +14,8 @@
     "status": {
       "Restarting": ["⏳", "S"],
       "Failed running": ["🚨", "E"],
-      "Listening on port": null
+      "Listening on port| 2\\d\\d \\d+ms$": null,
+      " 5\\d\\d \\d+ms$": ["🔥", "F"]
     },
     "defaultStatus": ["⏳", "S"]
   }

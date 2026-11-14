@@ -3,11 +3,10 @@
   "scripts": {
     "start": "run-pty % node --run frontend % node --run backend",
     "start-advanced": "run-pty run-pty.json",
-    "frontend": "vite --no-clearScreen",
+    "frontend": "node --watch frontend.js",
     "backend": "node --watch server.js"
   },
   "devDependencies": {
-    "run-pty": "file:..",
-    "vite": "7.3.7"
+    "run-pty": "file:.."
   }
 }
