@@ -2121,8 +2121,12 @@ const runInteractively = (commandDescriptions, autoExit) => {
   process.stdin.setEncoding("utf8");
 
   // Note: Each chunk is parsed on its own. Responses from the terminal are not
-  // buffered across chunks. In practice, terminals write each response in one
-  // go, so a response always arrives in a single chunk.
+  // buffered across chunks. Terminals write each response in one go, so in
+  // practice a response arrives in a single chunk. That isn’t guaranteed
+  // though (for example over a slow connection), and then the response is
+  // treated as regular input instead. That’s an accepted limitation, to avoid
+  // the complexity of buffering (and deciding when to give up on a partial
+  // response, since a lone ESC could also be the user pressing Escape).
   process.stdin.on("data", (/** @type {string} */ data) => {
     for (const [index, part] of data.split(ESCAPES_RESPONSE).entries()) {
       const request = requests[0];
