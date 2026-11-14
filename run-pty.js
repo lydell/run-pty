@@ -1372,6 +1372,7 @@ class Command {
       : "";
     this.historyAlternateScreen = "";
     this.isOnAlternateScreen = false;
+    this.unfinishedEscapeBuffer = "";
     this.statusFromRules = extractStatus(this.defaultStatus);
     // See the comment for `CONPTY_CURSOR_MOVE`.
     this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
