@@ -1080,6 +1080,10 @@ describe("append history", () => {
       "\nsecond line\n",
     );
   });
+
+  test("max history 0", () => {
+    expect(appendHistory("a", "b", 0)).toBe("");
+  });
 });
 
 describe("requests and responses", () => {

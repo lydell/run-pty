@@ -157,7 +157,8 @@ const appendHistory = (history, part, maxHistory) => {
   }
 
   if (result.length > maxHistory) {
-    result = result.slice(-maxHistory);
+    // Note: `.slice(-maxHistory)` would keep everything if `maxHistory` is 0.
+    result = result.slice(result.length - maxHistory);
     // Don’t start in the middle of an escape (or a line, or a surrogate pair):
     // Skip to the next newline or escape.
     const index = result.search(/[\n\x1B]/);
