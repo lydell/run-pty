@@ -1,13 +1,11 @@
 {
   "compilerOptions": {
     "allowJs": true,
-    "allowSyntheticDefaultImports": true,
     "checkJs": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "NodeNext",
     "noEmit": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
@@ -15,6 +13,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ESNext",
+    "types": ["node"],
     "useUnknownInCatchVariables": true
   },
   "exclude": ["node_modules", "**/node_modules/*"]

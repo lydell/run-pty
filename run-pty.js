@@ -1177,7 +1177,6 @@ const convertWin32InputMode = (data) =>
      * @param {string | undefined} unicodeChar
      * @param {string | undefined} keyDown
      */
-    // eslint-disable-next-line @typescript-eslint/no-useless-default-assignment
     (match, keyCode = "0", unicodeChar = "0", keyDown = "0") =>
       // Only process keydown events (keyDown=1), ignore keyup (keyDown=0).
       keyDown === "1"
