@@ -230,6 +230,17 @@ const exitIndicator = (exitCode) =>
         ? `\x1B[91m●${RESET_COLOR}`
         : "🔴";
 
+// Without emoji support, some indicators are the same character in different
+// colors. The tab title can’t have colors, so use the NO_COLOR characters there
+// instead, which are all different.
+const TITLE_INDICATORS =
+  NO_COLOR || SUPPORTS_EMOJI
+    ? /** @type {Map<string, string>} */ (new Map())
+    : new Map([
+        [runningIndicator, "›"],
+        [exitIndicator(1), "×"],
+      ]);
+
 const folder = NO_COLOR
   ? "⌂"
   : !SUPPORTS_EMOJI
@@ -864,7 +875,7 @@ const titleText = (commands, directoryName) => {
   const indicators = commands.map(getIndicatorChoice);
   const counts = getIndicatorChoices(commands).map(
     (indicator) =>
-      `${removeGraphicRenditions(indicator)}${
+      `${removeGraphicRenditions(TITLE_INDICATORS.get(indicator) ?? indicator)}${
         indicators.filter((other) => other === indicator).length
       }`,
   );
