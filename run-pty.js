@@ -88,6 +88,9 @@ const DISABLE_ALTERNATE_SCREEN = "\x1B[?1049l";
 const ALTERNATE_SCREEN_REGEX = /(\x1B\[\?1049[hl])/;
 const DISABLE_BRACKETED_PASTE_MODE = "\x1B[?2004l";
 const DISABLE_APPLICATION_CURSOR_KEYS = "\x1B[?1l"; // https://www.vt100.net/docs/vt510-rm/DECCKM.html
+// https://vt100.net/docs/vt510-rm/DECAWM.html
+const DISABLE_AUTO_WRAP = "\x1B[?7l";
+const ENABLE_AUTO_WRAP = "\x1B[?7h";
 const ENABLE_MOUSE = "\x1B[?1000;1006h";
 const DISABLE_MOUSE = "\x1B[?1000;1006l";
 // https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md
@@ -1730,6 +1733,11 @@ const runInteractively = (commandDescriptions, autoExit) => {
         DISABLE_APPLICATION_CURSOR_KEYS +
         ENABLE_MOUSE +
         RESET_COLOR +
+        // `truncate` counts string length rather than terminal columns, so
+        // lines with wide characters (like emoji) can end up too wide. Without
+        // this, they would wrap onto the next line – which isn’t redrawn if it
+        // hasn’t changed since the previous render.
+        DISABLE_AUTO_WRAP +
         clear +
         currentRender
           .map((line, index) =>
@@ -1743,6 +1751,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
           (_, index) =>
             cursorAbsolute(currentRender.length + index + 1, 1) + CLEAR_RIGHT,
         ).join("") +
+        ENABLE_AUTO_WRAP +
         END_SYNC_UPDATE,
     );
   };
