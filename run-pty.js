@@ -2106,11 +2106,15 @@ const runInteractively = (commandDescriptions, autoExit) => {
 
   process.stdin.setRawMode(true);
 
-  process.stdin.on("data", (data) => {
-    for (const [index, part] of data
-      .toString("utf8")
-      .split(ESCAPES_RESPONSE)
-      .entries()) {
+  // Decode UTF-8 in a streaming fashion, so that multi-byte characters split
+  // between chunks (such as in large pastes) aren’t corrupted.
+  process.stdin.setEncoding("utf8");
+
+  // Note: Each chunk is parsed on its own. Responses from the terminal are not
+  // buffered across chunks. In practice, terminals write each response in one
+  // go, so a response always arrives in a single chunk.
+  process.stdin.on("data", (/** @type {string} */ data) => {
+    for (const [index, part] of data.split(ESCAPES_RESPONSE).entries()) {
       const request = requests[0];
       if (
         index % 2 === 1 &&
