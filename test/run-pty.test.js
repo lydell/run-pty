@@ -25,6 +25,7 @@ const {
     UNFINISHED_ESCAPE,
     runningIndicator,
     summarizeLabels,
+    titleText,
     waitingText,
   },
 } = runPty;
@@ -90,6 +91,7 @@ function fakeCommand(item, index = 0) {
     statusRules: [],
     windowsConptyCursorMoveWorkaround: false,
     unfinishedEscapeBuffer: "",
+    hasSetTitle: false,
     onData: () => notCalled("onData"),
     onRequest: () => notCalled("onRequest"),
     onSynchronizedOutputChange: () => notCalled("onSynchronizedOutputChange"),
@@ -811,6 +813,73 @@ describe("dashboard", () => {
         ⧙ ↓ ⧘  🟢 14  🔴 2⧘
       `);
     });
+  });
+});
+
+describe("title", () => {
+  test("counts per indicator", () => {
+    expect(
+      titleText(
+        /** @type {Array<FakeCommand>} */ ([
+          {
+            command: ["a"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
+          },
+          {
+            command: ["b"],
+            status: { tag: "Exit", exitCode: 1, wasKilled: false },
+          },
+          {
+            command: ["c"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 2 }) },
+          },
+          {
+            command: ["d"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 3 }) },
+            statusFromRules: "\x1B[91m🚨\x1B[m",
+          },
+          { command: ["e"], status: { tag: "Waiting" } },
+        ]).map(fakeCommand),
+        "my-app",
+      ),
+    ).toMatchInlineSnapshot(`my-app 🟢2 🔴1 🚨1 🥱1`);
+  });
+
+  test("no commands", () => {
+    expect(titleText([], "my-app")).toBe("my-app");
+  });
+
+  test("control characters are removed", () => {
+    expect(
+      titleText(
+        [
+          fakeCommand({
+            command: ["a"],
+            status: { tag: "Running", terminal: fakeTerminal({ pid: 1 }) },
+            statusFromRules: "\x1B[91m🚨\x07\x1B]0;evil\x07\x9B",
+          }),
+        ],
+        "my\x07\x1B]0;evil\x07-app\x9D",
+      ),
+    ).toBe("my]0;evil-app 🚨]0;evil1");
+  });
+
+  test("directory with only control characters", () => {
+    expect(
+      titleText(
+        [fakeCommand({ command: ["a"], status: { tag: "Waiting" } })],
+        "\x07\x1B",
+      ),
+    ).toBe("🥱1");
+  });
+
+  test("root directory", () => {
+    expect(
+      titleText(
+        [fakeCommand({ command: ["a"], status: { tag: "Waiting" } })],
+        "",
+      ),
+    ).toBe("🥱1");
   });
 });
 

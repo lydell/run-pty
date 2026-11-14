@@ -98,6 +98,13 @@ const DISABLE_MOUSE = "\x1B[?1000;1006l";
 // https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md
 const BEGIN_SYNC_UPDATE = "\x1B[?2026h";
 const END_SYNC_UPDATE = "\x1B[?2026l";
+// https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Operating-System-Commands
+// OSC 0 sets both the icon name and the window title. Some terminals use the
+// former for tabs (iTerm2), others the latter.
+const SET_TITLE_REGEX = /\x1B\][012];/;
+// XTWINOPS 22;0t and 23;0t push and pop both titles on a stack.
+const PUSH_TITLE = "\x1B[22;0t";
+const POP_TITLE = "\x1B[23;0t";
 const RESET_COLOR = "\x1B[m";
 const CLEAR = "\x1B[2J\x1B[3J\x1B[H";
 const CLEAR_RIGHT = "\x1B[K";
@@ -843,6 +850,41 @@ const getIndicatorChoices = (commands) => [
 ];
 
 /**
+ * The directory name followed by counts per indicator, like `my-app 🟢3 🔴1`,
+ * so you can see what’s going on in the terminal tab title even when focusing
+ * a command (or another tab). The directory name tells several run-pty tabs
+ * apart. (Shells usually show something like that in the title, which we
+ * replace.)
+ *
+ * @param {Array<Command>} commands
+ * @param {string} directoryName
+ * @returns {string}
+ */
+const titleText = (commands, directoryName) => {
+  const indicators = commands.map(getIndicatorChoice);
+  const counts = getIndicatorChoices(commands).map(
+    (indicator) =>
+      `${removeGraphicRenditions(indicator)}${
+        indicators.filter((other) => other === indicator).length
+      }`,
+  );
+  return (
+    [directoryName, ...counts]
+      // Control characters could end the title early (BEL) or start other
+      // escapes (ESC). Directory names and custom indicators can contain them.
+      .map((part) => part.replace(/[\x00-\x1F\x7F-\x9F]/g, ""))
+      .filter((part) => part !== "")
+      .join(" ")
+  );
+};
+
+/**
+ * @param {string} title
+ * @returns {string}
+ */
+const setTitle = (title) => `\x1B]0;${title}\x07`;
+
+/**
  * @typedef {Pick<Command, "formattedCommandWithTitle" | "title" | "titlePossiblyWithGraphicRenditions" | "cwd" | "history">} CommandText
  */
 
@@ -1577,6 +1619,9 @@ class Command {
     this.statusRules = statusRules;
     this.windowsConptyCursorMoveWorkaround = false;
     this.unfinishedEscapeBuffer = "";
+    // Whether the command has set the terminal title itself. If so, the
+    // command’s title wins while it’s focused.
+    this.hasSetTitle = false;
 
     // When adding --auto-exit, I first tried to always set `this.history = ""`
     // and add `historyStart()` in `joinHistory`. However, that doesn’t work
@@ -1607,6 +1652,7 @@ class Command {
     this.historyAlternateScreen = "";
     this.isOnAlternateScreen = false;
     this.unfinishedEscapeBuffer = "";
+    this.hasSetTitle = false;
     this.statusFromRules = extractStatus(this.defaultStatus);
     // See the comment for `CONPTY_CURSOR_MOVE`.
     this.windowsConptyCursorMoveWorkaround = IS_WINDOWS;
@@ -1659,6 +1705,9 @@ class Command {
         }
         if (index % 2 === 0) {
           if (part !== "") {
+            if (SET_TITLE_REGEX.test(part)) {
+              this.hasSetTitle = true;
+            }
             const statusFromRulesChanged = this.pushHistory(part);
             this.onData(part, statusFromRulesChanged);
           }
@@ -1926,6 +1975,29 @@ const runInteractively = (commandDescriptions, autoExit) => {
     }
   };
 
+  const directoryName = path.basename(process.cwd());
+
+  /** @type {string | undefined} */
+  let lastTitle = undefined;
+
+  /**
+   * Set the terminal title, unless the focused command has set it itself.
+   *
+   * @returns {void}
+   */
+  const updateTitle = () => {
+    if (current.tag === "Command" && commands[current.index].hasSetTitle) {
+      // The command owns the title now, so we need to set it again later.
+      lastTitle = undefined;
+      return;
+    }
+    const title = titleText(commands, directoryName);
+    if (title !== lastTitle) {
+      lastTitle = title;
+      process.stdout.write(setTitle(title));
+    }
+  };
+
   /**
    * @param {{ forceClearScrollback?: boolean }} options
    * @returns {void}
@@ -2009,6 +2081,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
         ENABLE_AUTO_WRAP +
         END_SYNC_UPDATE,
     );
+
+    updateTitle();
   };
 
   /**
@@ -2032,6 +2106,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
     );
 
     printDataWithExtraText(command, joinHistory(command));
+    updateTitle();
   };
 
   /**
@@ -2251,6 +2326,7 @@ const runInteractively = (commandDescriptions, autoExit) => {
         addHistoryStart: true,
         commandDescription,
         onData: (data, statusFromRulesChanged) => {
+          updateTitle();
           switch (current.tag) {
             case "Command":
               if (current.index === index) {
@@ -2336,6 +2412,8 @@ const runInteractively = (commandDescriptions, autoExit) => {
               switchToCommand(current.index);
             }
           }
+
+          updateTitle();
 
           switch (current.tag) {
             case "Command":
@@ -2469,11 +2547,22 @@ const runInteractively = (commandDescriptions, autoExit) => {
         );
       }
     }
+    // Keyboard shortcuts can kill and restart commands.
+    updateTitle();
   });
+
+  process.stdout.write(PUSH_TITLE);
 
   process.on("exit", () => {
     process.stdout.write(
-      SHOW_CURSOR + DISABLE_BRACKETED_PASTE_MODE + DISABLE_MOUSE + RESET_COLOR,
+      SHOW_CURSOR +
+        DISABLE_BRACKETED_PASTE_MODE +
+        DISABLE_MOUSE +
+        RESET_COLOR +
+        // Not all terminals support `POP_TITLE` (such as Terminal.app). Setting
+        // an empty title first makes those go back to their default title.
+        setTitle("") +
+        POP_TITLE,
     );
   });
 
@@ -3019,6 +3108,9 @@ const setupSignalHandlers = (commands, killAll) => {
  * @returns {undefined}
  */
 const run = () => {
+  // Show up as “run-pty” rather than “node”, for example in iTerm2’s tab title.
+  process.title = "run-pty";
+
   const parseResult = parseArgs(process.argv.slice(2));
 
   switch (parseResult.tag) {
@@ -3075,6 +3167,7 @@ module.exports = {
     UNFINISHED_ESCAPE,
     runningIndicator,
     summarizeLabels,
+    titleText,
     waitingText,
   },
 };
