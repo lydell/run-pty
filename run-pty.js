@@ -2343,10 +2343,7 @@ const onStdin = (
           if (selection.tag === "ByIndicator") {
             const indicators = getIndicatorChoices(commands);
             const index = indicators.indexOf(selection.indicator);
-            const newIndex =
-              index === undefined || index === indicators.length - 1
-                ? 0
-                : index + 1;
+            const newIndex = index === indicators.length - 1 ? 0 : index + 1;
             setSelection({
               tag: "ByIndicator",
               indicator: indicators[newIndex],
