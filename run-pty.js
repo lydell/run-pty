@@ -818,6 +818,13 @@ const REQUEST_TIMEOUT = 1000; // ms
  * escape is a reply to. Used to make sure that a response is for the request
  * we’re waiting for (and not a late response for a timed out request).
  *
+ * Note: All window reports are treated as the same kind, even though, for
+ * example, `CSI 4 ; height ; width t` is only a response to `CSI 14 t`. So a
+ * late response to one window report could be taken as the response to another.
+ * That requires a terminal that replies after `REQUEST_TIMEOUT`, which is rare
+ * (terminals that don’t support window reports usually don’t reply at all), so
+ * it’s not worth the extra complexity to distinguish them.
+ *
  * @param {string} escape
  * @returns {{ group: "cursor position" | "window" | "color" | "other", id: string }}
  */
