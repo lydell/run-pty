@@ -46,7 +46,7 @@ $ npm start
 
 ```
 🟢 node --run frontend
-[ctrl+c] kill
+[ctrl+c] kill (then double-press to force)
 [ctrl+z] dashboard
 
 
@@ -62,7 +62,7 @@ $ npm start
 
 ```
 🟢 node --run frontend
-[ctrl+c] kill
+[ctrl+c] kill (then double-press to force)
 [ctrl+z] dashboard
 
 

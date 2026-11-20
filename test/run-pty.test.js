@@ -1025,7 +1025,7 @@ describe("focused command", () => {
       .toMatchInlineSnapshot(`
         🟢 frontend: npm start⧘
         📂 ⧙web/frontend⧘
-        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill
+        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(then double-press to force)⧘
         ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard␊
         ␊
       `);
@@ -1035,7 +1035,7 @@ describe("focused command", () => {
     expect(render(historyStartRunning, "npm start", "./x/.."))
       .toMatchInlineSnapshot(`
         🟢 npm start⧘
-        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill
+        ⧙[⧘⧙ctrl+c⧘⧙]⧘ kill ⧙(then double-press to force)⧘
         ⧙[⧘⧙ctrl+z⧘⧙]⧘ dashboard␊
         ␊
       `);

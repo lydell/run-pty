@@ -966,7 +966,7 @@ ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
 
 const runningText = `
-${shortcut(KEYS.kill)} kill
+${shortcut(KEYS.kill)} kill ${dim("(then double-press to force)")}
 ${shortcut(KEYS.dashboard)} dashboard
 `.trim();
 
