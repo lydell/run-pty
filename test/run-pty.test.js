@@ -13,6 +13,7 @@ const {
     ESCAPES_REQUEST,
     ESCAPES_RESPONSE,
     commandToPresentationName,
+    CONPTY_CMD_TITLE,
     convertWin32InputMode,
     drawDashboard,
     drawSummary,
@@ -881,6 +882,27 @@ describe("title", () => {
         "",
       ),
     ).toBe("🥱1");
+  });
+});
+
+describe("conpty cmd.exe title", () => {
+  test("removes the initial title from ConPTY", () => {
+    // Recorded from node-pty on Windows.
+    expect(
+      "\x1B[?9001h\x1B[?1004h\x1B[m\x1B]0;C:\\WINDOWS\\SYSTEM32\\cmd.exe\x07\x1B[?25h".replace(
+        CONPTY_CMD_TITLE,
+        "",
+      ),
+    ).toBe("\x1B[?9001h\x1B[?1004h\x1B[m\x1B[?25h");
+  });
+
+  test("keeps titles set by the command", () => {
+    expect("\x1B]0;custom\x07".replace(CONPTY_CMD_TITLE, "")).toBe(
+      "\x1B]0;custom\x07",
+    );
+    expect("\x1B]0;cmd.exe tips\x07".replace(CONPTY_CMD_TITLE, "")).toBe(
+      "\x1B]0;cmd.exe tips\x07",
+    );
   });
 });
 

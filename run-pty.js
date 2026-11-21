@@ -106,6 +106,10 @@ const END_SYNC_UPDATE = "\x1B[?2026l";
 // OSC 0 sets both the icon name and the window title. Some terminals use the
 // former for tabs (iTerm2), others the latter.
 const SET_TITLE_REGEX = /\x1B\][012];/;
+// On Windows, ConPTY starts by setting the title to the console title, which
+// is the path to cmd.exe (since we run commands via cmd.exe). That is not the
+// command setting the title, so remove it to keep showing our title.
+const CONPTY_CMD_TITLE = /\x1B\][012];[^\x07\x1B]*\\cmd\.exe(?:\x07|\x1B\\)/gi;
 // XTWINOPS 22;0t and 23;0t push and pop both titles on a stack.
 const PUSH_TITLE = "\x1B[22;0t";
 const POP_TITLE = "\x1B[23;0t";
@@ -1722,6 +1726,9 @@ class Command {
           this.windowsConptyCursorMoveWorkaround = false;
         }
         if (index % 2 === 0) {
+          if (IS_WINDOWS) {
+            part = part.replace(CONPTY_CMD_TITLE, "");
+          }
           if (part !== "") {
             if (SET_TITLE_REGEX.test(part)) {
               this.hasSetTitle = true;
@@ -3173,6 +3180,7 @@ module.exports = {
     ESCAPES_REQUEST,
     ESCAPES_RESPONSE,
     commandToPresentationName,
+    CONPTY_CMD_TITLE,
     convertWin32InputMode,
     drawDashboard,
     drawSummary,
