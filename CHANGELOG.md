@@ -1,3 +1,49 @@
+### Version 7.0.0 (2026-11-21)
+
+This version shows a summary in the tab title (`my-app 🟢3 🔴1`), makes the dashboard scrollable in short terminal windows, removes showing keyboard shortcuts while commands run (to not interfere), and fixes a bunch of process and terminal escape code handling bugs, as well as a few command history edge cases.
+
+- Added: run-pty now sets the terminal tab title! It shows the folder name followed by a summary of all status indicators: `my-app 🟢3 🔴1`. This allows you to see the status of your commands without even switching to that terminal tab, just take a glance at the tab bar. If a command also sets the tab title, that wins while that command is focused. run-pty now also sets the “process title” to “run-pty”, so your terminal might show `(run-pty)` instead of `(node)` at the end of the tab title.
+
+- Added: The dashboard now scrolls when the commands don’t fit the terminal height. The dashboard used to be scrollable, but in version 4.0.2 I optimized the rendering of the dashboard in a way that broke it. Now it is scrollable again, and in a nicer way! The keyboard shortcuts are always visible (if they fit). Offscreen commands are summarized, similar to the tab title. You can use the scroll wheel, press the arrow keys, or click the summary lines to scroll. If you use very short terminals, such as in a bottom panel of an editor, you’ll probably have use of this.
+
+- Changed: When focusing a command, run-pty used to show keyboard shortcuts just below the cursor (ctrl+c kill, ctrl+z dashboard). The idea was that you should always see what keys to use for run-pty at all times. However, this feature was a constant source of bugs. It’s much harder to do this than you’d first think due to how terminals work! Over the years, I learned about how a terminal actually works bit by bit, and solved issues with complicated regular expressions. It also relied on saving the cursor position, printing stuff, and then restoring the cursor position, which could clash with commands also saving and restoring cursor position. This release finally bites the bullet and gets rid of the feature for good.
+
+  The keyboard shortcuts are now printed at the top when the command starts. But as soon as they scroll out of view, or the command clears the screen, you won’t see them anymore. The idea is that run-pty users will be familiar with the terminal enough to know that ctrl+c is the usual way of getting out of something. As soon as you press that, the command exits and we can print the keyboard shortcuts again, showing you how to get back to the dashboard. This is trading beginner friendliness for not interfering with the output of your commands.
+
+  Note that run-pty wasn’t able to print the keyboard shortcuts after the cursor for all commands anyway, depending on how they moved the cursor, and not on Windows in all cases.
+
+- Fixed: A bunch of process handling issues:
+
+  - If you closed the terminal window, run-pty could be left running forever in the background. Now run-pty closes properly when its terminal tab closes.
+
+  - If you `kill` run-pty, it needs to shut down all its commands. Previously, run-pty used the same code as when you press ctrl+c to exit all commands, which sends ctrl+c (or the `killAllSequence` option) to each command and waits for them to exit. There is no guarantee that they actually do exit though. A second `kill` call did the same. run-pty now instead forwards kill signals to each command (the whole process group), and when receiving a second, identical `kill` signal, it instead force kills each command process group, which then lets run-pty exit. (Windows does not have signals, so there run-pty still sends ctrl+c to the commands.)
+
+  - If one of your commands got stuck in an infinite loop, run-pty was not able to force kill it properly, leaving it behind in the background. Now, run-pty solves this by killing the entire process group of the command.
+
+  - If you killed a command, it exited quickly, and you then restarted it and killed it again, all within 100 ms, the second kill could wrongly be marked as “slow” right away (instead of after 100 ms). Quite the edge case, but now solved.
+
+- Fixed: A bunch of terminal escape code handling:
+
+  - Programs running in terminals can ask the terminal for information (such as its background color) using escape codes. The terminal then replies with more escape codes. If a command does that while it isn’t focused in run-pty, run-pty has to forward those requests and their responses to the terminal (even though the command isn’t visible) – otherwise the program can get stuck waiting for replies, and not do the stuff you want it to (like watching and compiling files). For this reason, run-pty has a request queue for all commands (focused or not). Previously, run-pty would wait forever for replies to forward. Now there is a timeout, so unanswered requests no longer block all later requests. There are also some requests that don’t have replies by design (save/restore window title, used by Vim). run-pty previously waited for responses to them, but now knows not to wait at all. Finally, late responses can no longer be sent to the wrong command.
+
+  - Escape codes can arrive in multiple chunks. So terminal emulators and run-pty need to buffer escape code data. run-pty already did that a bit, but now it’s more complete. And when restarting a command, the unfinished escape buffer is cleared.
+
+  - run-pty now sets UTF-8 as the encoding for stdin. This avoids corrupting multi-byte characters split between chunks (such as in large pastes). Previously, run-pty decoded stdin data _chunks_ as UTF-8 (which might already have split multi-byte characters).
+
+  - The dashboard now redraws correctly in two edge cases. Lines are truncated to the terminal width if they are too long. Previously, that always resulted in full redraws instead of updating just changed lines. That’s now fixed. Wide characters could wrap onto the next line and leave artifacts when you moved around with the arrow keys. That’s also fixed, by telling the terminal not to wrap lines.
+
+- Fixed: History edge cases. For each command, run-pty keeps all the output from the command and re-prints it when you switch back to it. To save memory, run-pty clears the saved history when the command clears the screen, since it won’t be visible again. (Fun fact: That is not quite correct, since we also lose terminal escape codes the command printed along with the cut text, and terminal escape codes set terminal state, which no longer will be set. In practice it works pretty well, though.) run-pty also has a cap on how much history it stores.
+
+  - Terminals have an “alternate screen.” Vim uses it to draw over the whole screen, without you losing your scrollback when you exit Vim. In run-pty 6.0.2 I fixed a bug where content could be lost due to the mentioned history clearing when the screen is cleared. The alternate screen had a similar bug, which is now fixed.
+
+  - As mentioned, run-pty detects when a command clears the screen. The escape codes for that can arrive in multiple chunks. Previously, they all had to arrive in the _same_ chunk for the detection to work. Now run-pty supports them arriving in multiple chunks.
+
+  - When truncating the history, run-pty no longer cuts in the middle of an unfinished escape code.
+
+  - Finally, this version fixes a bug where `RUN_PTY_MAX_HISTORY=0` resulted in _all_ history being kept rather than none.
+
+**AI disclaimer:** If there’s one thing I’ve learned when building run-pty, it’s that it’s not really possible to run multiple interactive commands in the same _real_ terminal without building a terminal emulator. run-pty is basically a lightweight, hodge-podge terminal emulator at this point, implementing just enough of it (in a pretty hacky way with regex). I asked an LLM about this, and it said an actual escape code parser would be ideal, but actually overkill for run-pty’s case, if I removed the “print keyboard shortcuts after cursor” feature and fixed a bunch of edge cases it saw. So, I let it do that for me. An LLM is always going to be better than me at terminal stuff (unless I spend a few years building my own terminal from scratch, to learn the ins and outs deeply, maybe – but LLMs will get exponentially smarter during those years, so it’s a losing battle). Then, having already swallowed the pill, I couldn’t resist letting it also implement the features I could have done myself (tab title and scrolling), and was amazed at how it one-shotted what would have taken me hours. If you really dislike AI, you can always stay on version 6 – it’s pretty solid, too. I wrote the changelog myself, though, because I wanted to bore you with my own words, and not with AI:isms.
+
 ### Version 6.0.2 (2026-01-31)
 
 This version fixes a bug since v2.3.0 which included this improvement: “History is cleared if the command clears the screen including the scrollback buffer.” Turns out it cleared not only the history, but also any text right after the screen clearing escapes which was received at the same time. This resulted in lost output. This was only noticeable if this happened while you were in the dashboard, and then switched to the command. You might have noticed this occasionally when focusing a command, that a line of two seemed missing.
