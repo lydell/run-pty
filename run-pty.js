@@ -77,6 +77,10 @@ const WIN32_KEY_CODES = {
   40: KEY_CODES.down,
   37: KEY_CODES.left,
   39: KEY_CODES.right,
+  // Shift, ctrl and alt on their own don’t produce any input.
+  16: "",
+  17: "",
+  18: "",
 };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz";
@@ -1218,6 +1222,9 @@ const WIN32_INPUT_MODE_REGEX =
  * > writing PTY output to stdout causes Windows Terminal to enable win32-input-mode for the session
  * This translates some of the win32-input-mode escape sequences back to “normal” so that run-pty’s
  * keyboard shortcuts work.
+ * All records for a key press can arrive in the same chunk (always over SSH),
+ * such as ctrl down, z down, z up, ctrl up. So keyups and lone modifiers are
+ * removed, so that the chunk becomes just `\x1A` (ctrl+z).
  * @param {string} data
  * @returns {string}
  */
@@ -1231,12 +1238,12 @@ const convertWin32InputMode = (data) =>
      * @param {string | undefined} keyDown
      */
     (match, keyCode = "0", unicodeChar = "0", keyDown = "0") =>
-      // Only process keydown events (keyDown=1), ignore keyup (keyDown=0).
+      // Only process keydown events (keyDown=1), remove keyup (keyDown=0).
       keyDown === "1"
         ? unicodeChar === "0"
           ? (WIN32_KEY_CODES[keyCode] ?? match)
           : String.fromCodePoint(Number(unicodeChar))
-        : match,
+        : "",
   );
 
 /**
@@ -3166,6 +3173,7 @@ module.exports = {
     ESCAPES_REQUEST,
     ESCAPES_RESPONSE,
     commandToPresentationName,
+    convertWin32InputMode,
     drawDashboard,
     drawSummary,
     exitText,

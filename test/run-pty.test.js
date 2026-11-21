@@ -13,6 +13,7 @@ const {
     ESCAPES_REQUEST,
     ESCAPES_RESPONSE,
     commandToPresentationName,
+    convertWin32InputMode,
     drawDashboard,
     drawSummary,
     exitText,
@@ -1321,6 +1322,39 @@ describe("unfinished escape", () => {
 
   test("only the last unfinished escape", () => {
     expect(unfinished("\x1B]0;title\x07a\x1B")).toBe("\x1B");
+  });
+});
+
+describe("win32 input mode", () => {
+  test("all records of a key press in one chunk", () => {
+    // Recorded over SSH: ctrl down, z down, z up, ctrl up.
+    expect(
+      convertWin32InputMode(
+        "\x1B[17;29;0;1;8;1_\x1B[90;44;26;1;8;1_\x1B[90;44;26;0;8;1_\x1B[17;29;0;0;0;1_",
+      ),
+    ).toBe("\x1A");
+    // ctrl+c, without separate ctrl records.
+    expect(convertWin32InputMode("\x1B[67;0;3;1;8;1_\x1B[67;0;3;0;8;1_")).toBe(
+      "\x03",
+    );
+  });
+
+  test("arrow keys", () => {
+    expect(
+      convertWin32InputMode("\x1B[40;80;0;1;0;1_\x1B[40;80;0;0;0;1_"),
+    ).toBe("\x1B[B");
+  });
+
+  test("unknown keys without char are kept", () => {
+    // F1 keydown.
+    expect(convertWin32InputMode("\x1B[112;59;0;1;0;1_")).toBe(
+      "\x1B[112;59;0;1;0;1_",
+    );
+  });
+
+  test("plain input is untouched", () => {
+    expect(convertWin32InputMode("1")).toBe("1");
+    expect(convertWin32InputMode("\x1B[B")).toBe("\x1B[B");
   });
 });
 
